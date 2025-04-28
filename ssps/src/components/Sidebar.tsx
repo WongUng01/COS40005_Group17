@@ -15,7 +15,8 @@ import {
 const navItems = [
   { label: 'Dashboard', href: '/dashboard', icon: <FaTachometerAlt /> },
   { label: 'Units', href: '/units', icon: <FaBook /> },
-  { label: 'Study Planner', href: '/study-planner', icon: <FaClipboardList /> },
+  { label: 'Study Planner Upload', href: '/study-planner-upload', icon: <FaClipboardList /> },
+  { label: 'Study Planner', href: '/study-planner', icon: <FaClipboardList /> }
 ];
 
 export default function Sidebar() {

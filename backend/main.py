@@ -1,6 +1,9 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
-from supabaseClient import get_supabase_client  # unchanged
+from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
+import os 
+from supabaseClient import get_supabase_client
 
 app = FastAPI()
 
@@ -14,6 +17,20 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Serve uploaded files
+UPLOAD_FOLDER = "uploads"
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+
+app.mount("/uploads", StaticFiles(directory=UPLOAD_FOLDER), name="uploads")
+
+@app.post("/upload_planner/")
+async def upload_planner(file: UploadFile = File(...)):
+    file_location = f"{UPLOAD_FOLDER}/{file.filename}"
+    with open(file_location, "wb") as f:
+        f.write(await file.read())
+    url = f"/uploads/{file.filename}"  # Relative URL for frontend
+    return JSONResponse(content={"url": url})
 
 # Test endpoints
 @app.get("/ping")
