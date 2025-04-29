@@ -65,6 +65,17 @@ def list_planners(year: str = Query(...)):
     files = os.listdir(folder_path)
     return [f"/uploads/{year}/{file}" for file in files if file.endswith(".pdf")]
 
+@app.delete("/delete_planner/")
+async def delete_planner(year: str, filename: str):
+    try:
+        file_path = f"./uploads/{year}/{filename}"
+        os.remove(file_path)
+        return JSONResponse(content={"message": "File deleted successfully."})
+    except FileNotFoundError:
+        return JSONResponse(status_code=404, content={"message": "File not found."})
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"message": str(e)})
+
 # Test endpoint
 @app.get("/ping")
 def ping():

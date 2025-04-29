@@ -13,11 +13,11 @@ const supabase = createClient(
 // Define semester structure
 const plannerStructure = [
   { id: "year1sem1", label: "Year 1 Sem 1", slots: 5 },
-  { id: "year1sem2", label: "Year 1 Sem 2", slots: 4 },
-  { id: "year2sem1", label: "Year 2 Sem 1", slots: 4 },
-  { id: "year2sem2", label: "Year 2 Sem 2", slots: 4 },
-  { id: "year3sem1", label: "Year 3 Sem 1", slots: 4 },
-  { id: "year3sem2", label: "Year 3 Sem 2", slots: 3 },
+  { id: "year1sem2", label: "Year 1 Sem 2", slots: 5 },
+  { id: "year2sem1", label: "Year 2 Sem 1", slots: 5 },
+  { id: "year2sem2", label: "Year 2 Sem 2", slots: 5 },
+  { id: "year3sem1", label: "Year 3 Sem 1", slots: 5 },
+  { id: "year3sem2", label: "Year 3 Sem 2", slots: 5 },
 ];
 
 export default function StudyPlannerPage() {

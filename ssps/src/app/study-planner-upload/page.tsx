@@ -80,14 +80,29 @@ export default function UploadPlanner() {
     setDragActive(false);
   };
 
-  const handleDelete = (index: number) => {
+  const handleDelete = async (index: number) => {
+    const fileUrl = pdfsByYear[selectedYear][index];
+    const filename = fileUrl.split("/").pop(); // extract filename from URL
+  
+    try {
+      const res = await fetch(
+        `http://localhost:8000/delete_planner/?year=${selectedYear}&filename=${filename}`,
+        { method: "DELETE" }
+      );
+      if (!res.ok) throw new Error("Failed to delete from server");
+    } catch (error) {
+      console.error("Backend deletion failed:", error);
+      return;
+    }
+    console.log(`Deleting: year=${selectedYear}, filename=${filename}`);
+
+    // Update frontend state only if backend deletion is successful
     setPdfsByYear((prev) => {
       const updated = { ...prev };
       updated[selectedYear] = updated[selectedYear].filter((_, i) => i !== index);
       return updated;
     });
-    // Optional: Add backend delete logic here
-  };
+  };  
 
   return (
     <div className="p-4">
