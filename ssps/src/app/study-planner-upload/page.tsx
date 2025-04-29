@@ -4,33 +4,32 @@ import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 
 export default function UploadPlanner() {
-  const [pdfUrls, setPdfUrls] = useState<string[]>([]);
-  const [fileNames, setFileNames] = useState<string[]>([]);
+  const years = ["2024", "2023", "2022", "2021"];
+  const [selectedYear, setSelectedYear] = useState("2024");
+  const [pdfsByYear, setPdfsByYear] = useState<{ [year: string]: string[] }>({});
   const [dragActive, setDragActive] = useState<boolean>(false);
 
   useEffect(() => {
-    const storedUrls = localStorage.getItem("uploadedPdfUrls");
-    if (storedUrls) {
-      setPdfUrls(JSON.parse(storedUrls));
+    const stored = localStorage.getItem("uploadedPdfsByYear");
+    if (stored) {
+      setPdfsByYear(JSON.parse(stored));
     }
   }, []);
 
   useEffect(() => {
-    localStorage.setItem("uploadedPdfUrls", JSON.stringify(pdfUrls));
-  }, [pdfUrls]);
+    localStorage.setItem("uploadedPdfsByYear", JSON.stringify(pdfsByYear));
+  }, [pdfsByYear]);
 
   const handleFileUpload = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
 
     const uploadedUrls: string[] = [];
-    const selectedFileNames: string[] = [];
 
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
-      selectedFileNames.push(file.name);
-
       const formData = new FormData();
       formData.append("file", file);
+      formData.append("year", selectedYear);  // Include the year in the form data
 
       try {
         const response = await fetch("http://localhost:8000/upload_planner/", {
@@ -49,8 +48,10 @@ export default function UploadPlanner() {
       }
     }
 
-    setPdfUrls((prev) => [...prev, ...uploadedUrls]);
-    setFileNames(selectedFileNames);
+    setPdfsByYear((prev) => ({
+      ...prev,
+      [selectedYear]: [...(prev[selectedYear] || []), ...uploadedUrls],
+    }));
   };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -79,16 +80,36 @@ export default function UploadPlanner() {
     setDragActive(false);
   };
 
-  // Delete a PDF by index
   const handleDelete = (index: number) => {
-    const updatedUrls = pdfUrls.filter((_, i) => i !== index);
-    setPdfUrls(updatedUrls);
+    setPdfsByYear((prev) => {
+      const updated = { ...prev };
+      updated[selectedYear] = updated[selectedYear].filter((_, i) => i !== index);
+      return updated;
+    });
   };
 
   return (
     <div className="p-4">
       <h2 className="text-2xl font-bold mb-6">Upload Study Planners</h2>
 
+      {/* Year Tabs */}
+      <div className="flex gap-2 mb-6">
+        {years.map((year) => (
+          <button
+            key={year}
+            className={`px-4 py-2 border-b-2 ${
+              selectedYear === year
+                ? "border-red-600 text-red-600"
+                : "border-transparent text-gray-600 hover:text-black"
+            }`}
+            onClick={() => setSelectedYear(year)}
+          >
+            {year}
+          </button>
+        ))}
+      </div>
+
+      {/* Upload Area */}
       <motion.div
         onDrop={handleDrop}
         onDragOver={handleDragOver}
@@ -108,7 +129,12 @@ export default function UploadPlanner() {
             viewBox="0 0 24 24"
             xmlns="http://www.w3.org/2000/svg"
           >
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 16v-4a4 4 0 014-4h0a4 4 0 014 4v4m1 4H6a2 2 0 01-2-2V7a2 2 0 012-2h6a2 2 0 012 2v3h3a2 2 0 012 2v6a2 2 0 01-2 2z"></path>
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth="2"
+              d="M7 16v-4a4 4 0 014-4h0a4 4 0 014 4v4m1 4H6a2 2 0 01-2-2V7a2 2 0 012-2h6a2 2 0 012 2v3h3a2 2 0 012 2v6a2 2 0 01-2 2z"
+            />
           </svg>
           <p className="text-gray-700 font-medium">Drag and drop your PDFs here</p>
           <p className="text-sm text-gray-500">or click to select files</p>
@@ -123,20 +149,10 @@ export default function UploadPlanner() {
         />
       </motion.div>
 
-      {fileNames.length > 0 && (
-        <motion.div
-          className="mt-4 text-gray-700 text-sm"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ duration: 0.5 }}
-        >
-          {fileNames.length} file{fileNames.length > 1 ? "s" : ""} selected
-        </motion.div>
-      )}
-
+      {/* Previews */}
       <div className="mt-8 space-y-8">
         <AnimatePresence>
-          {pdfUrls.length > 0 && (
+          {pdfsByYear[selectedYear]?.length > 0 && (
             <>
               <motion.h3
                 className="text-xl font-semibold mb-4"
@@ -144,9 +160,9 @@ export default function UploadPlanner() {
                 animate={{ opacity: 1 }}
                 transition={{ duration: 0.5 }}
               >
-                Study Planners Preview:
+                Study Planner {selectedYear}
               </motion.h3>
-              {pdfUrls.map((url, index) => (
+              {pdfsByYear[selectedYear].map((url, index) => (
                 <motion.div
                   key={index}
                   initial={{ opacity: 0, y: 30 }}
