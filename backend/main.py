@@ -1,16 +1,16 @@
-from fastapi import FastAPI, HTTPException, UploadFile, File
+from fastapi import FastAPI, HTTPException, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 import os
-from collections import defaultdict
 from supabaseClient import get_supabase_client
+from fastapi import Query
+from fastapi.responses import FileResponse
 
 app = FastAPI()
 
 # CORS settings
 origins = ["http://localhost:3000"]
-
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
@@ -19,18 +19,21 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Serve uploaded files
 UPLOAD_FOLDER = "uploads"
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
-
 app.mount("/uploads", StaticFiles(directory=UPLOAD_FOLDER), name="uploads")
 
 @app.post("/upload_planner/")
-async def upload_planner(file: UploadFile = File(...)):
-    file_location = f"{UPLOAD_FOLDER}/{file.filename}"
+async def upload_planner(file: UploadFile = File(...), year: str = Form(...)):
+    year_folder = os.path.join(UPLOAD_FOLDER, year)
+    os.makedirs(year_folder, exist_ok=True)
+
+    file_location = os.path.join(year_folder, file.filename)
     with open(file_location, "wb") as f:
         f.write(await file.read())
-    url = f"/uploads/{file.filename}"  # Relative URL for frontend
+
+    # Return relative URL for frontend
+    url = f"/uploads/{year}/{file.filename}"
     return JSONResponse(content={"url": url})
 
 # Endpoint to get uploaded PDFs
@@ -53,6 +56,14 @@ def get_uploaded_pdfs():
     
     # Convert defaultdict to a regular dict for returning as JSON
     return JSONResponse(content=dict(files_by_year))
+
+@app.get("/list_planners/")
+def list_planners(year: str = Query(...)):
+    folder_path = os.path.join(UPLOAD_FOLDER, year)
+    if not os.path.exists(folder_path):
+        return []
+    files = os.listdir(folder_path)
+    return [f"/uploads/{year}/{file}" for file in files if file.endswith(".pdf")]
 
 # Test endpoint
 @app.get("/ping")

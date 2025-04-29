@@ -7,21 +7,29 @@ export default function UploadPlanner() {
   const years = ["2024", "2023", "2022", "2021"];
   const [selectedYear, setSelectedYear] = useState("2024");
   const [pdfsByYear, setPdfsByYear] = useState<{ [year: string]: string[] }>({});
-  const [dragActive, setDragActive] = useState<boolean>(false);
+  const [dragActive, setDragActive] = useState(false);
 
+  // Fetch PDFs from backend when selected year changes
   useEffect(() => {
-    const stored = localStorage.getItem("uploadedPdfsByYear");
-    if (stored) {
-      setPdfsByYear(JSON.parse(stored));
-    }
-  }, []);
+    const fetchPdfs = async () => {
+      try {
+        const res = await fetch(`http://localhost:8000/list_planners/?year=${selectedYear}`);
+        const data: string[] = await res.json();
+        const fullUrls = data.map((path) => `http://localhost:8000${path}`);
+        setPdfsByYear((prev) => ({
+          ...prev,
+          [selectedYear]: fullUrls,
+        }));
+      } catch (err) {
+        console.error("Failed to fetch PDFs:", err);
+      }
+    };
 
-  useEffect(() => {
-    localStorage.setItem("uploadedPdfsByYear", JSON.stringify(pdfsByYear));
-  }, [pdfsByYear]);
+    fetchPdfs();
+  }, [selectedYear]);
 
   const handleFileUpload = async (files: FileList | null) => {
-    if (!files || files.length === 0) return;
+    if (!files) return;
 
     const uploadedUrls: string[] = [];
 
@@ -29,18 +37,14 @@ export default function UploadPlanner() {
       const file = files[i];
       const formData = new FormData();
       formData.append("file", file);
-      formData.append("year", selectedYear);  // Include the year in the form data
+      formData.append("year", selectedYear);
 
       try {
         const response = await fetch("http://localhost:8000/upload_planner/", {
           method: "POST",
           body: formData,
         });
-
-        if (!response.ok) {
-          throw new Error("Failed to upload file");
-        }
-
+        if (!response.ok) throw new Error("Upload failed");
         const data = await response.json();
         uploadedUrls.push(`http://localhost:8000${data.url}`);
       } catch (error) {
@@ -55,13 +59,11 @@ export default function UploadPlanner() {
   };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    e.preventDefault();
     handleFileUpload(e.target.files);
   };
 
   const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
-    e.stopPropagation();
     setDragActive(false);
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
       handleFileUpload(e.dataTransfer.files);
@@ -70,13 +72,11 @@ export default function UploadPlanner() {
 
   const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
-    e.stopPropagation();
     setDragActive(true);
   };
 
   const handleDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
-    e.stopPropagation();
     setDragActive(false);
   };
 
@@ -86,6 +86,7 @@ export default function UploadPlanner() {
       updated[selectedYear] = updated[selectedYear].filter((_, i) => i !== index);
       return updated;
     });
+    // Optional: Add backend delete logic here
   };
 
   return (
@@ -109,7 +110,7 @@ export default function UploadPlanner() {
         ))}
       </div>
 
-      {/* Upload Area */}
+      {/* Upload Dropzone */}
       <motion.div
         onDrop={handleDrop}
         onDragOver={handleDragOver}
@@ -149,7 +150,7 @@ export default function UploadPlanner() {
         />
       </motion.div>
 
-      {/* Previews */}
+      {/* PDF Previews */}
       <div className="mt-8 space-y-8">
         <AnimatePresence>
           {pdfsByYear[selectedYear]?.length > 0 && (
