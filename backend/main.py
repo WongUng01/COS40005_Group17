@@ -2,7 +2,8 @@ from fastapi import FastAPI, HTTPException, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
-import os 
+import os
+from collections import defaultdict
 from supabaseClient import get_supabase_client
 
 app = FastAPI()
@@ -32,7 +33,28 @@ async def upload_planner(file: UploadFile = File(...)):
     url = f"/uploads/{file.filename}"  # Relative URL for frontend
     return JSONResponse(content={"url": url})
 
-# Test endpoints
+# Endpoint to get uploaded PDFs
+@app.get("/get_uploaded_pdfs/")
+def get_uploaded_pdfs():
+    # Organize files by year
+    files_by_year = defaultdict(list)
+    
+    # List all files in the upload folder
+    for filename in os.listdir(UPLOAD_FOLDER):
+        file_path = os.path.join(UPLOAD_FOLDER, filename)
+        
+        if os.path.isfile(file_path) and filename.endswith(".pdf"):
+            # Extract the year from the file name (assuming it's in the format: '2024_filename.pdf')
+            try:
+                year = filename.split("_")[0]  # Extract year from the file name, assuming format is like '2024_filename.pdf'
+                files_by_year[year].append(f"/uploads/{filename}")
+            except Exception as e:
+                print(f"Error extracting year from file name {filename}: {e}")
+    
+    # Convert defaultdict to a regular dict for returning as JSON
+    return JSONResponse(content=dict(files_by_year))
+
+# Test endpoint
 @app.get("/ping")
 def ping():
     return {"message": "Connected to FastAPI"}
