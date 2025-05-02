@@ -6,6 +6,10 @@ import os
 from supabaseClient import get_supabase_client
 from fastapi import Query
 from fastapi.responses import FileResponse
+import shutil
+import openpyxl
+from fastapi import HTTPException
+import time
 
 app = FastAPI()
 
@@ -75,6 +79,80 @@ async def delete_planner(year: str, filename: str):
         return JSONResponse(status_code=404, content={"message": "File not found."})
     except Exception as e:
         return JSONResponse(status_code=500, content={"message": str(e)})
+    
+@app.post("/upload_excel/")
+async def upload_excel(files: list[UploadFile] = File(...), year: str = Form(...)):
+    if not files:
+        return JSONResponse(status_code=400, content={"error": "No files uploaded"})
+
+    save_dir = f"excel_uploads/{year}"
+    os.makedirs(save_dir, exist_ok=True)
+
+    # Store data for each uploaded file
+    all_data = []
+
+    for file in files:
+        if not file.filename.endswith((".xlsx", ".xls")):
+            return JSONResponse(status_code=400, content={"error": "Only Excel files are allowed"})
+
+        # Save the file with a unique filename using timestamp
+        timestamp = int(time.time())
+        filename = f"{timestamp}_{file.filename}"
+        file_path = os.path.join(save_dir, filename)
+
+        with open(file_path, "wb") as f:
+            shutil.copyfileobj(file.file, f)
+
+        # Parse the uploaded file and store its data
+        wb = openpyxl.load_workbook(file_path)
+        ws = wb.active
+        data = [[cell.value for cell in row] for row in ws.iter_rows()]
+
+        # Ensure we append an array (data for one file)
+        all_data.append(data)
+
+    return JSONResponse(content=all_data)
+
+@app.get("/get_excel_data/{year}")
+def get_excel_data(year: str):
+    dir_path = f"excel_uploads/{year}"
+    if not os.path.exists(dir_path):
+        raise HTTPException(status_code=404, detail="No uploads for this year")
+
+    files = os.listdir(dir_path)
+    if not files:
+        raise HTTPException(status_code=404, detail="No Excel file found")
+
+    all_data = []
+
+    for file_name in files:
+        if file_name.endswith((".xlsx", ".xls")):
+            file_path = os.path.join(dir_path, file_name)
+            wb = openpyxl.load_workbook(file_path)
+            ws = wb.active
+
+            # Read data from the Excel file
+            data = [[cell.value for cell in row] for row in ws.iter_rows()]
+            all_data.append(data)
+
+    if not all_data:
+        raise HTTPException(status_code=404, detail="No valid Excel data found")
+
+    return all_data
+
+@app.get("/study_planners/")
+def get_study_planners():
+    supabase = get_supabase_client()
+    response = supabase.table("hod_study_planner").select("*").execute()
+    return response.data
+
+@app.post("/study_planners/")
+def create_study_planner(planner: dict):
+    supabase = get_supabase_client()
+    response = supabase.table("hod_study_planner").insert([planner]).execute()
+    if response.error:
+        raise HTTPException(status_code=500, detail=response.error.message)
+    return response.data[0]
 
 # Test endpoint
 @app.get("/ping")
