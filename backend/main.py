@@ -252,7 +252,12 @@ units = []
 
 @app.get("/units")
 def get_units():
-    return units
+    try:
+        supabase = get_supabase_client()
+        response = supabase.table("units").select("*").execute()
+        return response.data
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error fetching units: {str(e)}")
 
 @app.post("/units")
 def create_unit(unit: dict):
@@ -273,3 +278,18 @@ def delete_unit(unit_id: int):
     global units
     units = [unit for unit in units if unit["id"] != unit_id]
     return {"message": "Deleted"}
+
+@app.get("/debug-units")
+def debug_units():
+    try:
+        supabase = get_supabase_client()
+        response = supabase.table("units").select("*").limit(1).execute()
+
+        # Check if the response has an 'error' key using .__dict__ for safety
+        if hasattr(response, 'error') and response.error:
+            return {"error": str(response.error)}
+        
+        # Safely return the data
+        return {"data": response.data}
+    except Exception as e:
+        return {"exception": str(e)}

@@ -7,9 +7,9 @@ import { Input, Select, Table, Button, Tabs, message } from 'antd';
 const { Option } = Select;
 
 interface Unit {
-  code: string;
-  name: string;
-  prerequisite: string;
+  unit_code: string;
+  unit_name: string;
+  prerequisites: string;
 }
 
 interface PlannerRow {
@@ -42,11 +42,13 @@ const StudyPlannerPage: React.FC = () => {
   const fetchUnits = async () => {
     try {
       const res = await axios.get<Unit[]>('http://localhost:8000/units');
+      console.log('Fetched units:', res.data);  // Debug log to check the data
       setUnitOptions(res.data);
     } catch (err) {
       message.error('Failed to fetch units');
+      console.error(err);  // Log the error to the console for debugging
     }
-  };
+  };  
 
   const fetchPlanners = async () => {
     try {
@@ -62,9 +64,9 @@ const StudyPlannerPage: React.FC = () => {
     updated[index][key] = value;
 
     if (key === 'unitCode') {
-      const selected = unitOptions.find(unit => unit.code === value);
-      updated[index].unitName = selected?.name || '';
-      updated[index].prerequisite = selected?.prerequisite || '';
+      const selected = unitOptions.find(unit => unit.unit_code === value);
+      updated[index].unitName = selected?.unit_name || '';
+      updated[index].prerequisite = selected?.prerequisites || '';
     }
 
     setTableData(updated);
@@ -131,24 +133,34 @@ const StudyPlannerPage: React.FC = () => {
           style={{ width: 150 }}
           value={record.unitCode}
           onChange={val => handleChange(val, index, 'unitCode')}
+          optionFilterProp="children"
         >
-          {unitOptions.map(unit => (
-            <Option key={unit.code} value={unit.code}>
-              {unit.code}
-            </Option>
-          ))}
+          {unitOptions.length > 0 ? (
+            unitOptions.map(unit => (
+              <Option key={unit.unit_code} value={unit.unit_code}>
+                {unit.unit_code}
+              </Option>
+            ))
+          ) : (
+            <Option disabled>No units available</Option>
+          )}
         </Select>
+
       )
     },
     {
       title: 'Unit Name',
       dataIndex: 'unitName',
-      render: (_: any, record: PlannerRow) => <Input value={record.unitName} readOnly />
+      render: (_: any, record: PlannerRow) => (
+        <Input value={record.unitName} readOnly />
+      )
     },
     {
       title: 'Prerequisite',
       dataIndex: 'prerequisite',
-      render: (_: any, record: PlannerRow) => <Input value={record.prerequisite} readOnly />
+      render: (_: any, record: PlannerRow) => (
+        <Input value={record.prerequisite} readOnly />
+      )
     }
   ];
 
@@ -163,9 +175,8 @@ const StudyPlannerPage: React.FC = () => {
   }, []);
 
   const generateRowKey = (record: PlannerRow) => {
-    // Use a combination of properties to create a unique key for each row
     return `${record.year}-${record.semester}-${record.unitCode || 'no-unit-code'}`;
-  };  
+  };
 
   const tabItems = [
     {
