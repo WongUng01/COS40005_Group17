@@ -8,6 +8,7 @@ type Unit = {
   courseName: string;
   creditHours: number;
   faculty: string;
+  prequisites: string;
 };
 
 export default function Units() {
@@ -16,12 +17,14 @@ export default function Units() {
   const [courseName, setCourseName] = useState('');
   const [creditHours, setCreditHours] = useState<number | ''>('');
   const [faculty, setFaculty] = useState('');
+  const [prequisites, setPrequisites] = useState('');
   const [editing, setEditing] = useState<number | null>(null);
   const [newCourseName, setNewCourseName] = useState('');
   const [newCreditHours, setNewCreditHours] = useState<number | ''>('');
   const [newFaculty, setNewFaculty] = useState('');
+  const [newPrequisites, setNewPrequisites] = useState('');
 
-  const API = 'http://localhost:8000'; // Replace with your actual API URL
+  const API = 'http://localhost:8000';
 
   useEffect(() => {
     fetchUnits();
@@ -31,62 +34,80 @@ export default function Units() {
     try {
       const res = await fetch(`${API}/units`);
       const data = await res.json();
-      if (Array.isArray(data)) {
-        setUnits(data);
-      } else {
-        console.error('API did not return an array:', data);
-        setUnits([]);
-      }
+      setUnits(Array.isArray(data) ? data : []);
     } catch (err) {
       console.error('Fetch error:', err);
     }
   };
 
+  const validateUnit = () => {
+    return courseId && courseName && creditHours !== '' && faculty;
+  };
+
   const addUnit = async () => {
-    if (!courseId || !courseName || creditHours === '' || !faculty) return;
+    if (!validateUnit()) return;
 
     await fetch(`${API}/units`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ courseId, courseName, creditHours, faculty }),
+      body: JSON.stringify({
+        courseId,
+        courseName,
+        creditHours,
+        faculty,
+        prequisites
+      }),
     });
 
-    setCourseId('');
-    setCourseName('');
-    setCreditHours('');
-    setFaculty('');
+    resetForm();
     fetchUnits();
   };
 
   const updateUnit = async (id: number) => {
-    if (newCourseName.trim() === '' || newCreditHours === '' || newFaculty.trim() === '') return;
+    if (!newCourseName || newCreditHours === '' || !newFaculty) return;
 
     await fetch(`${API}/units/${id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ courseName: newCourseName, creditHours: newCreditHours, faculty: newFaculty }),
+      body: JSON.stringify({
+        courseName: newCourseName,
+        creditHours: newCreditHours,
+        faculty: newFaculty,
+        prequisites: newPrequisites
+      }),
     });
 
-    setEditing(null);
-    setNewCourseName('');
-    setNewCreditHours('');
-    setNewFaculty('');
+    resetEditForm();
     fetchUnits();
   };
 
   const deleteUnit = async (id: number) => {
-    await fetch(`${API}/units/${id}`, {
-      method: 'DELETE',
-    });
+    await fetch(`${API}/units/${id}`, { method: 'DELETE' });
     fetchUnits();
+  };
+
+  const resetForm = () => {
+    setCourseId('');
+    setCourseName('');
+    setCreditHours('');
+    setFaculty('');
+    setPrequisites('');
+  };
+
+  const resetEditForm = () => {
+    setEditing(null);
+    setNewCourseName('');
+    setNewCreditHours('');
+    setNewFaculty('');
+    setNewPrequisites('');
   };
 
   return (
     <div className="max-w-4xl mx-auto p-6 mt-10 bg-white rounded-lg shadow-md">
       <h1 className="text-3xl font-bold text-center text-blue-700 mb-6">📚 Manage Units</h1>
 
-      {/* Units Form */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+      {/* Add Unit Form */}
+      <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
         <input
           value={courseId}
           onChange={(e) => setCourseId(e.target.value)}
@@ -102,7 +123,7 @@ export default function Units() {
         <input
           type="number"
           value={creditHours}
-          onChange={(e) => setCreditHours(e.target.value === '' ? '' : Number(e.target.value))}
+          onChange={(e) => setCreditHours(Number(e.target.value) || '')}
           placeholder="Credit Hours"
           className="px-4 py-2 border rounded-md"
         />
@@ -112,11 +133,19 @@ export default function Units() {
           placeholder="Faculty"
           className="px-4 py-2 border rounded-md"
         />
+        <input
+          value={prequisites}
+          onChange={(e) => setPrequisites(e.target.value)}
+          placeholder="Prerequisites (comma separated)"
+          className="px-4 py-2 border rounded-md"
+        />
       </div>
 
       <button
         onClick={addUnit}
-        className="px-6 py-2 bg-blue-600 text-white font-semibold rounded-md hover:bg-blue-700 mb-6"
+        className={`px-6 py-2 text-white font-semibold rounded-md mb-6 ${
+          validateUnit() ? 'bg-blue-600 hover:bg-blue-700' : 'bg-gray-400 cursor-not-allowed'
+        }`}
       >
         Add Unit
       </button>
@@ -128,75 +157,89 @@ export default function Units() {
             <tr className="bg-blue-100">
               <th className="px-4 py-2 text-left">Course ID</th>
               <th className="px-4 py-2 text-left">Course Name</th>
-              <th className="px-4 py-2 text-left">Credit Hours</th>
+              <th className="px-4 py-2 text-left">Credits</th>
               <th className="px-4 py-2 text-left">Faculty</th>
+              <th className="px-4 py-2 text-left">Prerequisites</th>
               <th className="px-4 py-2 text-left">Actions</th>
             </tr>
           </thead>
           <tbody>
-            {units.length > 0 ? (
-              units.map((unit) => (
-                <tr key={unit.id} className="border-b">
-                  <td className="px-4 py-2">{unit.courseId}</td>
-                  <td className="px-4 py-2">{unit.courseName}</td>
-                  <td className="px-4 py-2">{unit.creditHours}</td>
-                  <td className="px-4 py-2">{unit.faculty}</td>
-                  <td className="px-4 py-2">
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => {
-                          setEditing(unit.id);
-                          setNewCourseName(unit.courseName);
-                          setNewCreditHours(unit.creditHours);
-                          setNewFaculty(unit.faculty);
-                        }}
-                        className="text-blue-600 hover:text-blue-800"
-                      >
-                        ✏️ Edit
-                      </button>
-                      <button
-                        onClick={() => deleteUnit(unit.id)}
-                        className="text-red-600 hover:text-red-800"
-                      >
-                        🗑️ Delete
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))
-            ) : (
-              <tr>
-                <td colSpan={5} className="text-center text-gray-500 py-4">
-                  No units available.
+            {units.map((unit) => (
+              <tr key={unit.id} className="border-b">
+                <td className="px-4 py-2">{unit.courseId}</td>
+                <td className="px-4 py-2">{unit.courseName}</td>
+                <td className="px-4 py-2">{unit.creditHours}</td>
+                <td className="px-4 py-2">{unit.faculty}</td>
+                <td className="px-4 py-2">
+                  {unit.prequisites ? (
+                    unit.prequisites
+                      .split(',')
+                      .filter(Boolean)
+                      .map((preq, i) => (
+                        <span key={i} className="bg-gray-100 px-2 py-1 rounded mr-1 mb-1">
+                          {preq.trim()}
+                        </span>
+                      ))
+                    ) : (
+                      <span className="text-gray-400">No prerequisites</span>
+                  )}
+                </td>
+                <td className="px-4 py-2">
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => {
+                        setEditing(unit.id);
+                        setNewCourseName(unit.courseName);
+                        setNewCreditHours(unit.creditHours);
+                        setNewFaculty(unit.faculty);
+                        setNewPrequisites(unit.prequisites);
+                      }}
+                      className="text-blue-600 hover:text-blue-800"
+                    >
+                      ✏️ Edit
+                    </button>
+                    <button
+                      onClick={() => deleteUnit(unit.id)}
+                      className="text-red-600 hover:text-red-800"
+                    >
+                      🗑️ Delete
+                    </button>
+                  </div>
                 </td>
               </tr>
-            )}
+            ))}
           </tbody>
         </table>
       </div>
 
-      {/* Editing Form (appears when editing a unit) */}
+      {/* Edit Unit Form */}
       {editing !== null && (
         <div className="mt-6 p-4 bg-gray-50 border rounded-md">
           <h3 className="text-xl font-semibold text-blue-700">Edit Unit</h3>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mt-4">
+          <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mt-4">
             <input
               value={newCourseName}
               onChange={(e) => setNewCourseName(e.target.value)}
-              placeholder="New Course Name"
+              placeholder="Course Name"
               className="px-4 py-2 border rounded-md"
             />
             <input
               type="number"
               value={newCreditHours}
-              onChange={(e) => setNewCreditHours(e.target.value === '' ? '' : Number(e.target.value))}
-              placeholder="New Credit Hours"
+              onChange={(e) => setNewCreditHours(Number(e.target.value) || '')}
+              placeholder="Credit Hours"
               className="px-4 py-2 border rounded-md"
             />
             <input
               value={newFaculty}
               onChange={(e) => setNewFaculty(e.target.value)}
-              placeholder="New Faculty"
+              placeholder="Faculty"
+              className="px-4 py-2 border rounded-md"
+            />
+            <input
+              value={newPrequisites}
+              onChange={(e) => setNewPrequisites(e.target.value)}
+              placeholder="Prerequisites (comma separated)"
               className="px-4 py-2 border rounded-md"
             />
           </div>
@@ -208,7 +251,7 @@ export default function Units() {
               Save Changes
             </button>
             <button
-              onClick={() => setEditing(null)}
+              onClick={resetEditForm}
               className="px-4 py-2 bg-gray-300 text-gray-800 rounded-md hover:bg-gray-400"
             >
               Cancel
