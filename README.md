@@ -1,15 +1,12 @@
 
 # Student Study Planner System
 
-A Swinburne University Project for unit COS40005 Computing Technology Project A 2025. This project is by Group 16's members
+A Swinburne University Project for unit COS40005 Computing Technology Project A 2025. This project is by Group 17's members
 
 
 ## Group Members
 
-- [(L)Muhammad Zareefe - 102764298]
 - [Wong Zing Ung - 102770004]
-- [Azzeriah Adam - 101209620]
-- [Gordon Lee - 102762409]
 - [Chow Xian Chung @ Charles - 101227237 ]
 
 
@@ -82,15 +79,13 @@ To uninstall Project Tools:
 
 All documentations can be found in the following link.
 
-- [Documentation Folder](https://swinburnesarawak-my.sharepoint.com/:f:/r/personal/101209620_students_swinburne_edu_my/Documents/COS40005%20CTP?csf=1&web=1&e=VovAmK)
-- [Figma](https://www.figma.com/design/TFSdriPOEfFPhT8A7qM5Bx/Student-Study-Planner-System-Wireframe-16?node-id=0-1&t=c7fFnSfJMDczuPEy-1)
-- [Meeting Minute](https://swinburnesarawak-my.sharepoint.com/:w:/r/personal/102770004_students_swinburne_edu_my/Documents/Meeting%20Minute.docx?d=w3fa74f83151c4a14bbb9ef0145b97b2c&csf=1&web=1&e=AMyWem)
-- [Software Requirement Specification (SRS)](https://swinburnesarawak-my.sharepoint.com/:w:/r/personal/102770004_students_swinburne_edu_my/Documents/Software%20Requirement%20Specification.docx?d=w18535109f9f64c51b16764b40e1a1387&csf=1&web=1&e=VrQb3w)
-- [System Design Document](https://swinburnesarawak-my.sharepoint.com/:w:/r/personal/102770004_students_swinburne_edu_my/Documents/System%20Design%20Document.docx?d=w3f6eb685210e4b8189a48ed5fea3c3a1&csf=1&web=1&e=MdmQhL)
+- [Software Requirement Specification (SRS)](https://swinburnesarawak-my.sharepoint.com/:w:/r/personal/102770004_students_swinburne_edu_my/Documents/Student%20Study%20Planner%20System%20Software%20Requirement%20Specification.docx?d=we3ca16fa8420466eb1cf97d703f4b166&csf=1&web=1&e=0Jmz4p)
+- [System Design Document](https://swinburnesarawak-my.sharepoint.com/:w:/r/personal/102770004_students_swinburne_edu_my/Documents/System%20Design%20Document%20Study%20Planner.docx?d=w6d89270c74c048a08d18ce1751e3a0ec&csf=1&web=1&e=K3ogzT)
 - [Sprint 1 Report](https://swinburnesarawak-my.sharepoint.com/:w:/r/personal/102770004_students_swinburne_edu_my/Documents/COS40005%20Sprint%20Report.docx?d=w072a4a3c187b44f8bd5d662e9a294ceb&csf=1&web=1&e=V76lWn)
 - [Sprint 2 Report](https://swinburnesarawak-my.sharepoint.com/:w:/r/personal/102770004_students_swinburne_edu_my/Documents/Sprint%202%20Report.docx?d=we14ffab6861147e4b8e062b314718188&csf=1&web=1&e=ECLOQH)
+- [Sprint 3 Report](https://swinburnesarawak-my.sharepoint.com/:w:/r/personal/102770004_students_swinburne_edu_my/Documents/COS40005%20Sprint%20Report3.docx?d=w14ff615268fc47ed90ba90a34d527086&csf=1&web=1&e=JpISPp)
 - [Team and Project Plan](https://swinburnesarawak-my.sharepoint.com/:w:/r/personal/102770004_students_swinburne_edu_my/Documents/COS40005%20Team%20and%20Project%20Plan.docx?d=wa30c228ec5d74161b51336bbe59f4eb1&csf=1&web=1&e=Z8NYwM)
-- [Trello](https://trello.com/b/XecgXfIJ)
+- [Trello](https://trello.com/b/h92ETyLP/study-planner-status-check-system)
 - [Slides](https://www.canva.com/design/DAGkNX4cArw/DW5ad2s4cVAqIA-6K6cYhg/edit)
 
 ## Demo
