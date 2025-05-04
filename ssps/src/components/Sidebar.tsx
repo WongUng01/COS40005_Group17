@@ -18,7 +18,7 @@ const navItems = [
   { label: 'PDF Study Planner', href: '/study-planner-upload', icon: <FaClipboardList /> },
   { label: 'Excel Study Planner', href: '/study-planner-excel', icon: <FaClipboardList /> },
   { label: 'Custom Study Planner', href: '/study-planner', icon: <FaClipboardList /> },
-  { label: 'Student Details', href: '/student-details', icon: <FaClipboardList /> }
+  { label: 'Student', href: '/student', icon: <FaClipboardList /> }
 ];
 
 export default function Sidebar() {

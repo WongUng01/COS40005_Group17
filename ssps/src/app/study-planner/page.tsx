@@ -1,238 +1,230 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
-import { createClient } from "@supabase/supabase-js";
-import { toast } from "react-hot-toast";
+import React, { useEffect, useMemo, useState } from 'react';
+import axios from 'axios';
+import { Input, Select, Table, Button, Tabs, message } from 'antd';
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
+const { Option } = Select;
 
-export default function StudyPlannerPage() {
-  const [units, setUnits] = useState<any[]>([]);
-  const [savedPlanners, setSavedPlanners] = useState<any[]>([]);
-  const [activeTab, setActiveTab] = useState<"create" | "view">("create");
+interface Unit {
+  code: string;
+  name: string;
+  prerequisite: string;
+}
 
-  const [templateName, setTemplateName] = useState("");
-  const [form, setForm] = useState({
-    year: "1",
-    semester: "1",
-    unitId: "",
-    unitName: "",
-    prerequisite: "",
-  });
+interface PlannerRow {
+  year: number;
+  semester: number;
+  unitCode: string;
+  unitName: string;
+  prerequisite: string;
+}
+
+interface StudyPlanner {
+  name: string;
+  units: PlannerRow[];
+}
+
+const StudyPlannerPage: React.FC = () => {
+  const [activeTab, setActiveTab] = useState('create');
+  const [unitOptions, setUnitOptions] = useState<Unit[]>([]);
+  const [planners, setPlanners] = useState<StudyPlanner[]>([]);
+  const [templateName, setTemplateName] = useState('');
+  const [tableData, setTableData] = useState<PlannerRow[]>([
+    { year: 1, semester: 1, unitCode: '', unitName: '', prerequisite: '' }
+  ]);
 
   useEffect(() => {
-    async function fetchUnits() {
-      const { data, error } = await supabase
-        .from("units")
-        .select("id, unit_code, unit_name, prerequisites");
-
-      if (error) {
-        console.error("Error fetching units:", error.message);
-        toast.error("Failed to load units");
-      } else {
-        setUnits(data || []);
-      }
-    }
-
-    async function fetchSavedPlanners() {
-      const { data, error } = await supabase
-        .from("hod_study_planner")
-        .select("*")
-        .order("created_at", { ascending: false });
-
-      if (error) {
-        console.error("Error fetching saved planners:", error.message);
-      } else {
-        setSavedPlanners(data || []);
-      }
-    }
-
     fetchUnits();
-    fetchSavedPlanners();
+    fetchPlanners();
   }, []);
 
-  async function handleSimpleSavePlanner() {
-    if (!templateName || !form.unitId) {
-      toast.error("Please enter a template name and select a unit.");
+  const fetchUnits = async () => {
+    try {
+      const res = await axios.get<Unit[]>('http://localhost:8000/units');
+      setUnitOptions(res.data);
+    } catch (err) {
+      message.error('Failed to fetch units');
+    }
+  };
+
+  const fetchPlanners = async () => {
+    try {
+      const res = await axios.get<StudyPlanner[]>('http://localhost:8000/study_planners/');
+      setPlanners(res.data);
+    } catch (err) {
+      message.error('Failed to fetch planners');
+    }
+  };
+
+  const handleChange = (value: any, index: number, key: keyof PlannerRow) => {
+    const updated = [...tableData];
+    updated[index][key] = value;
+
+    if (key === 'unitCode') {
+      const selected = unitOptions.find(unit => unit.code === value);
+      updated[index].unitName = selected?.name || '';
+      updated[index].prerequisite = selected?.prerequisite || '';
+    }
+
+    setTableData(updated);
+  };
+
+  const addRow = () => {
+    setTableData([
+      ...tableData,
+      { year: 1, semester: 1, unitCode: '', unitName: '', prerequisite: '' }
+    ]);
+  };
+
+  const savePlanner = async () => {
+    if (!templateName) {
+      message.warning('Please enter a template name');
       return;
     }
 
-    const payload = {
-      template_name: templateName,
-      created_at: new Date(),
-      planner_data: [
-        {
-          year: form.year,
-          semester: form.semester,
-          unitId: form.unitId,
-          unitName: form.unitName,
-          prerequisite: form.prerequisite,
-        },
-      ],
+    const planner: StudyPlanner = {
+      name: templateName,
+      units: tableData
     };
 
-    const { error } = await supabase.from("hod_study_planner").insert([payload]);
-
-    if (error) {
-      console.error("Error saving planner:", error.message);
-      toast.error("Failed to save planner.");
-    } else {
-      toast.success("Planner saved successfully!");
-      setForm({ year: "1", semester: "1", unitId: "", unitName: "", prerequisite: "" });
-      setTemplateName("");
+    try {
+      await axios.post('http://localhost:8000/study_planners/', planner);
+      message.success('Planner saved');
+      setTemplateName('');
+      setTableData([{ year: 1, semester: 1, unitCode: '', unitName: '', prerequisite: '' }]);
+      fetchPlanners();
+    } catch (err) {
+      message.error('Failed to save planner');
     }
-  }
+  };
 
-  async function handleRemoveSavedPlanner(id: string) {
-    const { error } = await supabase
-      .from("hod_study_planner")
-      .delete()
-      .eq("id", id);
-
-    if (error) {
-      console.error("Error removing saved planner:", error.message);
-      toast.error("❌ Failed to remove saved planner");
-    } else {
-      setSavedPlanners((prev) => prev.filter((planner) => planner.id !== id));
-      toast.success("✅ Saved planner removed!");
+  const inputColumns = [
+    {
+      title: 'Year',
+      dataIndex: 'year',
+      render: (_: any, record: PlannerRow, index: number) => (
+        <Input
+          type="number"
+          value={record.year}
+          onChange={e => handleChange(Number(e.target.value), index, 'year')}
+        />
+      )
+    },
+    {
+      title: 'Semester',
+      dataIndex: 'semester',
+      render: (_: any, record: PlannerRow, index: number) => (
+        <Input
+          type="number"
+          value={record.semester}
+          onChange={e => handleChange(Number(e.target.value), index, 'semester')}
+        />
+      )
+    },
+    {
+      title: 'Unit Code',
+      dataIndex: 'unitCode',
+      render: (_: any, record: PlannerRow, index: number) => (
+        <Select
+          showSearch
+          style={{ width: 150 }}
+          value={record.unitCode}
+          onChange={val => handleChange(val, index, 'unitCode')}
+        >
+          {unitOptions.map(unit => (
+            <Option key={unit.code} value={unit.code}>
+              {unit.code}
+            </Option>
+          ))}
+        </Select>
+      )
+    },
+    {
+      title: 'Unit Name',
+      dataIndex: 'unitName',
+      render: (_: any, record: PlannerRow) => <Input value={record.unitName} readOnly />
+    },
+    {
+      title: 'Prerequisite',
+      dataIndex: 'prerequisite',
+      render: (_: any, record: PlannerRow) => <Input value={record.prerequisite} readOnly />
     }
-  }
+  ];
 
-  return (
-    <div className="p-8 max-w-5xl mx-auto">
-      <h1 className="text-4xl font-bold mb-6 text-center text-blue-700">Study Planner</h1>
+  const displayColumns = useMemo(() => {
+    return [
+      { title: 'Year', dataIndex: 'year' },
+      { title: 'Semester', dataIndex: 'semester' },
+      { title: 'Unit Code', dataIndex: 'unitCode' },
+      { title: 'Unit Name', dataIndex: 'unitName' },
+      { title: 'Prerequisite', dataIndex: 'prerequisite' }
+    ];
+  }, []);
 
-      <div className="flex justify-center mb-6 space-x-4">
-        <button
-          onClick={() => setActiveTab("create")}
-          className={`px-6 py-2 rounded ${activeTab === "create" ? "bg-blue-600 text-white" : "bg-gray-200 text-gray-700"}`}
-        >
-          Create Planner
-        </button>
-        <button
-          onClick={() => setActiveTab("view")}
-          className={`px-6 py-2 rounded ${activeTab === "view" ? "bg-blue-600 text-white" : "bg-gray-200 text-gray-700"}`}
-        >
-          Saved Planners
-        </button>
-      </div>
+  const generateRowKey = (record: PlannerRow) => {
+    // Use a combination of properties to create a unique key for each row
+    return `${record.year}-${record.semester}-${record.unitCode || 'no-unit-code'}`;
+  };  
 
-      {activeTab === "create" && (
+  const tabItems = [
+    {
+      key: 'create',
+      label: 'Create Planner',
+      children: (
         <>
-          <div className="mb-4">
-            <label className="block font-semibold mb-1">Template Name</label>
-            <input
-              type="text"
-              value={templateName}
-              onChange={(e) => setTemplateName(e.target.value)}
-              className="w-full border rounded px-3 py-2"
-              placeholder="Enter template name"
+          <Input
+            placeholder="Template Name"
+            value={templateName}
+            onChange={e => setTemplateName(e.target.value)}
+            style={{ width: 300, marginBottom: 20 }}
+          />
+
+          <Table
+            dataSource={tableData}
+            columns={inputColumns}
+            rowKey={generateRowKey}
+            pagination={false}
+          />
+
+          <Button type="dashed" onClick={addRow} style={{ marginTop: 16 }}>
+            Add Row
+          </Button>
+
+          <Button type="primary" onClick={savePlanner} style={{ marginLeft: 16 }}>
+            Save Planner
+          </Button>
+        </>
+      )
+    },
+    {
+      key: 'saved',
+      label: 'Saved Planners',
+      children: planners.length === 0 ? (
+        <p>No saved planners found.</p>
+      ) : (
+        planners.map((planner, idx) => (
+          <div key={planner.name + idx} style={{ marginBottom: '2rem' }}>
+            <h4>{planner.name}</h4>
+            <Table
+              dataSource={planner.units}
+              columns={displayColumns}
+              rowKey={generateRowKey}
+              pagination={false}
+              size="small"
             />
           </div>
+        ))
+      )
+    }
+  ];
 
-          <div className="grid grid-cols-5 gap-4 mb-6">
-            <div>
-              <label className="block mb-1 font-semibold">Year</label>
-              <input
-                type="number"
-                min={1}
-                value={form.year}
-                onChange={(e) => setForm({ ...form, year: e.target.value })}
-                className="w-full border px-2 py-1 rounded"
-              />
-            </div>
-
-            <div>
-              <label className="block mb-1 font-semibold">Semester</label>
-              <input
-                type="number"
-                min={1}
-                max={2}
-                value={form.semester}
-                onChange={(e) => setForm({ ...form, semester: e.target.value })}
-                className="w-full border px-2 py-1 rounded"
-              />
-            </div>
-
-            <div>
-              <label className="block mb-1 font-semibold">Unit Code</label>
-              <select
-                value={form.unitId}
-                onChange={(e) => {
-                  const selectedUnit = units.find((u) => u.id === e.target.value);
-                  setForm({
-                    ...form,
-                    unitId: e.target.value,
-                    unitName: selectedUnit?.unit_name || "",
-                    prerequisite: selectedUnit?.prerequisites || "",
-                  });
-                }}
-                className="w-full border px-2 py-1 rounded"
-              >
-                <option value="">Select Unit</option>
-                {units.map((unit) => (
-                  <option key={unit.id} value={unit.id}>
-                    {unit.unit_code}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="block mb-1 font-semibold">Unit Name</label>
-              <input
-                type="text"
-                value={form.unitName}
-                readOnly
-                className="w-full border px-2 py-1 rounded bg-gray-100"
-              />
-            </div>
-
-            <div>
-              <label className="block mb-1 font-semibold">Prerequisite</label>
-              <input
-                type="text"
-                value={form.prerequisite}
-                readOnly
-                className="w-full border px-2 py-1 rounded bg-gray-100"
-              />
-            </div>
-          </div>
-
-          <button
-            onClick={handleSimpleSavePlanner}
-            className="bg-blue-600 text-white font-bold px-6 py-2 rounded hover:bg-blue-700"
-          >
-            Save Planner
-          </button>
-        </>
-      )}
-
-      {activeTab === "view" && (
-        <div>
-          {savedPlanners.length === 0 ? (
-            <p className="text-gray-600 text-center mt-10">No planners saved yet.</p>
-          ) : (
-            savedPlanners.map((planner) => (
-              <div key={planner.id} className="mb-6 border p-4 rounded shadow-md">
-                <h3 className="text-2xl font-bold text-blue-700">{planner.template_name}</h3>
-                <pre className="bg-gray-100 p-2 rounded mt-2 text-sm overflow-x-auto">
-                  {JSON.stringify(planner.planner_data, null, 2)}
-                </pre>
-                <button
-                  onClick={() => handleRemoveSavedPlanner(planner.id)}
-                  className="mt-2 bg-red-500 hover:bg-red-600 text-white font-bold py-1 px-4 rounded"
-                >
-                  Delete
-                </button>
-              </div>
-            ))
-          )}
-        </div>
-      )}
+  return (
+    <div style={{ padding: '2rem' }}>
+      <h2>Study Planner</h2>
+      <Tabs activeKey={activeTab} onChange={setActiveTab} items={tabItems} />
     </div>
   );
-}
+};
+
+export default StudyPlannerPage;

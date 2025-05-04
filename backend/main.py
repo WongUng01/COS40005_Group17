@@ -10,6 +10,8 @@ import shutil
 import openpyxl
 from fastapi import HTTPException
 import time
+from pydantic import BaseModel
+from typing import List, Optional
 
 app = FastAPI()
 
@@ -22,6 +24,23 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+class StudentBase(BaseModel):
+    student_id: str
+    name: str
+    graduation_status: Optional[bool] = False
+
+class StudentCreate(StudentBase):
+    pass
+
+class Student(StudentBase):
+    id: str
+
+class StudentUnit(BaseModel):
+    unit_code: str
+    unit_name: str
+    grade: Optional[str] = None
+    completed: Optional[bool] = False
 
 UPLOAD_FOLDER = "uploads"
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
@@ -153,6 +172,64 @@ def create_study_planner(planner: dict):
     if response.error:
         raise HTTPException(status_code=500, detail=response.error.message)
     return response.data[0]
+
+@app.get("/students")
+def get_all_students():
+    students_data = supabase.table("students").select("*").execute().data
+    units_data = supabase.table("units").select("code", "is_required").execute().data
+    student_units_data = supabase.table("student_units").select("*").execute().data
+
+    required_units = {u['code'] for u in units_data if u['is_required']}
+
+    # Construct graduation status
+    student_graduation_status = []
+    for student in students_data:
+        sid = student["id"]
+        units_taken = [u for u in student_units_data if u["student_id"] == sid and u["grade"] == "Pass"]
+        passed_units = {u["unit_code"] for u in units_taken}
+        is_graduated = required_units.issubset(passed_units)
+        student_graduation_status.append({
+            "id": sid,
+            "name": student["name"],
+            "graduated": is_graduated
+        })
+
+    return student_graduation_status
+
+@app.get("/students/{student_id}")
+def get_student_details(student_id: str):
+    student = supabase.table("students").select("*").eq("id", student_id).single().execute().data
+    if not student:
+        raise HTTPException(status_code=404, detail="Student not found")
+
+    units_data = supabase.table("units").select("*").execute().data
+    student_units_data = supabase.table("student_units").select("*").eq("student_id", student_id).execute().data
+
+    unit_lookup = {u['code']: u for u in units_data}
+    details = []
+
+    for su in student_units_data:
+        code = su['unit_code']
+        unit = unit_lookup.get(code, {})
+        details.append({
+            "unit_code": code,
+            "unit_name": unit.get("name", ""),
+            "grade": su["grade"],
+            "is_required": unit.get("is_required", False),
+            "passed": su["grade"] == "Pass"
+        })
+
+    # Graduation logic
+    required_units = {u['code'] for u in units_data if u['is_required']}
+    passed_units = {su["unit_code"] for su in student_units_data if su["grade"] == "Pass"}
+    graduated = required_units.issubset(passed_units)
+
+    return {
+        "id": student["id"],
+        "name": student["name"],
+        "graduated": graduated,
+        "units": details
+    }
 
 # Test endpoint
 @app.get("/ping")
