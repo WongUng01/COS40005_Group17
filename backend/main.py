@@ -1,295 +1,128 @@
-from fastapi import FastAPI, HTTPException, UploadFile, File, Form
+from fastapi import FastAPI, File, UploadFile, Form, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
-from fastapi.staticfiles import StaticFiles
-import os
-from supabaseClient import get_supabase_client
+import pandas as pd
+import uuid
+import supabase
 from fastapi import Query
-from fastapi.responses import FileResponse
-import shutil
-import openpyxl
-from fastapi import HTTPException
-import time
-from pydantic import BaseModel
-from typing import List, Optional
 
 app = FastAPI()
 
-# CORS settings
-origins = ["http://localhost:3000"]
+# CORS config
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-class StudentBase(BaseModel):
-    student_id: str
-    name: str
-    graduation_status: Optional[bool] = False
+# Supabase setup
+SUPABASE_URL = "https://rfvcutixkmawyzrlrarp.supabase.co"
+SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJmdmN1dGl4a21hd3l6cmxyYXJwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDU4Mzk2MzgsImV4cCI6MjA2MTQxNTYzOH0.NKToyHvzFd_ACs_QzRH99m-AkFYBtZmV5OLgoXU7Cuc"
+supabase_client = supabase.create_client(SUPABASE_URL, SUPABASE_KEY)
 
-class StudentCreate(StudentBase):
-    pass
-
-class Student(StudentBase):
-    id: str
-
-class StudentUnit(BaseModel):
-    unit_code: str
-    unit_name: str
-    grade: Optional[str] = None
-    completed: Optional[bool] = False
-
-UPLOAD_FOLDER = "uploads"
-os.makedirs(UPLOAD_FOLDER, exist_ok=True)
-app.mount("/uploads", StaticFiles(directory=UPLOAD_FOLDER), name="uploads")
-
-@app.post("/upload_planner/")
-async def upload_planner(file: UploadFile = File(...), year: str = Form(...)):
-    year_folder = os.path.join(UPLOAD_FOLDER, year)
-    os.makedirs(year_folder, exist_ok=True)
-
-    file_location = os.path.join(year_folder, file.filename)
-    with open(file_location, "wb") as f:
-        f.write(await file.read())
-
-    # Return relative URL for frontend
-    url = f"/uploads/{year}/{file.filename}"
-    return JSONResponse(content={"url": url})
-
-# Endpoint to get uploaded PDFs
-@app.get("/get_uploaded_pdfs/")
-def get_uploaded_pdfs():
-    # Organize files by year
-    files_by_year = defaultdict(list)
-    
-    # List all files in the upload folder
-    for filename in os.listdir(UPLOAD_FOLDER):
-        file_path = os.path.join(UPLOAD_FOLDER, filename)
-        
-        if os.path.isfile(file_path) and filename.endswith(".pdf"):
-            # Extract the year from the file name (assuming it's in the format: '2024_filename.pdf')
-            try:
-                year = filename.split("_")[0]  # Extract year from the file name, assuming format is like '2024_filename.pdf'
-                files_by_year[year].append(f"/uploads/{filename}")
-            except Exception as e:
-                print(f"Error extracting year from file name {filename}: {e}")
-    
-    # Convert defaultdict to a regular dict for returning as JSON
-    return JSONResponse(content=dict(files_by_year))
-
-@app.get("/list_planners/")
-def list_planners(year: str = Query(...)):
-    folder_path = os.path.join(UPLOAD_FOLDER, year)
-    if not os.path.exists(folder_path):
-        return []
-    files = os.listdir(folder_path)
-    return [f"/uploads/{year}/{file}" for file in files if file.endswith(".pdf")]
-
-@app.delete("/delete_planner/")
-async def delete_planner(year: str, filename: str):
+@app.post("/api/upload-study-planner")
+async def upload_study_planner(
+    file: UploadFile = File(...),
+    program: str = Form(...),
+    major: str = Form(...),
+    intake_year: int = Form(...),
+    intake_semester: str = Form(...)
+):
     try:
-        file_path = f"./uploads/{year}/{filename}"
-        os.remove(file_path)
-        return JSONResponse(content={"message": "File deleted successfully."})
-    except FileNotFoundError:
-        return JSONResponse(status_code=404, content={"message": "File not found."})
+        df = pd.read_excel(file.file)
+
+        # Normalize columns
+        df.columns = [col.strip().title() for col in df.columns]
+        print("Normalized Excel columns:", df.columns.tolist())
+
+        # Validate required columns
+        expected_cols = {"Year", "Semester", "Unit Code", "Unit Name", "Prerequisites"}
+        if not expected_cols.issubset(set(df.columns)):
+            missing = expected_cols - set(df.columns)
+            raise HTTPException(
+                status_code=400,
+                detail=f"Excel format incorrect. Missing columns: {', '.join(missing)}"
+            )
+
+        # Insert into study_planners table
+        planner_id = str(uuid.uuid4())
+        planner_data = {
+            "id": planner_id,
+            "program": program,
+            "major": major,
+            "intake_year": intake_year,
+            "intake_semester": intake_semester
+        }
+        supabase_client.table("study_planners").insert(planner_data).execute()
+
+        # Insert units
+        for _, row in df.iterrows():
+            unit = {
+                "id": str(uuid.uuid4()),
+                "planner_id": planner_id,
+                "year": int(row["Year"]),
+                "semester": str(row["Semester"]),
+                "unit_code": str(row["Unit Code"]),
+                "unit_name": str(row["Unit Name"]),
+                "prerequisites": str(row["Prerequisites"]),
+            }
+            supabase_client.table("study_planner_units").insert(unit).execute()
+
+        return {"message": "Study planner uploaded successfully."}
+
+    except HTTPException as http_err:
+        raise http_err
     except Exception as e:
-        return JSONResponse(status_code=500, content={"message": str(e)})
-    
-@app.post("/upload_excel/")
-async def upload_excel(files: list[UploadFile] = File(...), year: str = Form(...)):
-    if not files:
-        return JSONResponse(status_code=400, content={"error": "No files uploaded"})
+        print("Internal Error:", str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
-    save_dir = f"excel_uploads/{year}"
-    os.makedirs(save_dir, exist_ok=True)
-
-    # Store data for each uploaded file
-    all_data = []
-
-    for file in files:
-        if not file.filename.endswith((".xlsx", ".xls")):
-            return JSONResponse(status_code=400, content={"error": "Only Excel files are allowed"})
-
-        # Save the file with a unique filename using timestamp
-        timestamp = int(time.time())
-        filename = f"{timestamp}_{file.filename}"
-        file_path = os.path.join(save_dir, filename)
-
-        with open(file_path, "wb") as f:
-            shutil.copyfileobj(file.file, f)
-
-        # Parse the uploaded file and store its data
-        wb = openpyxl.load_workbook(file_path)
-        ws = wb.active
-        data = [[cell.value for cell in row] for row in ws.iter_rows()]
-
-        # Ensure we append an array (data for one file)
-        all_data.append(data)
-
-    return JSONResponse(content=all_data)
-
-@app.get("/get_excel_data/{year}")
-def get_excel_data(year: str):
-    dir_path = f"excel_uploads/{year}"
-    if not os.path.exists(dir_path):
-        raise HTTPException(status_code=404, detail="No uploads for this year")
-
-    files = os.listdir(dir_path)
-    if not files:
-        raise HTTPException(status_code=404, detail="No Excel file found")
-
-    all_data = []
-
-    for file_name in files:
-        if file_name.endswith((".xlsx", ".xls")):
-            file_path = os.path.join(dir_path, file_name)
-            wb = openpyxl.load_workbook(file_path)
-            ws = wb.active
-
-            # Read data from the Excel file
-            data = [[cell.value for cell in row] for row in ws.iter_rows()]
-            all_data.append(data)
-
-    if not all_data:
-        raise HTTPException(status_code=404, detail="No valid Excel data found")
-
-    return all_data
-
-@app.get("/study_planners/")
-def get_study_planners():
-    supabase = get_supabase_client()
-    response = supabase.table("hod_study_planner").select("*").execute()
-    return response.data
-
-@app.post("/study_planners/")
-def create_study_planner(planner: dict):
-    supabase = get_supabase_client()
-    response = supabase.table("hod_study_planner").insert([planner]).execute()
-    if response.error:
-        raise HTTPException(status_code=500, detail=response.error.message)
-    return response.data[0]
-
-@app.get("/students")
-def get_all_students():
-    students_data = supabase.table("students").select("*").execute().data
-    units_data = supabase.table("units").select("code", "is_required").execute().data
-    student_units_data = supabase.table("student_units").select("*").execute().data
-
-    required_units = {u['code'] for u in units_data if u['is_required']}
-
-    # Construct graduation status
-    student_graduation_status = []
-    for student in students_data:
-        sid = student["id"]
-        units_taken = [u for u in student_units_data if u["student_id"] == sid and u["grade"] == "Pass"]
-        passed_units = {u["unit_code"] for u in units_taken}
-        is_graduated = required_units.issubset(passed_units)
-        student_graduation_status.append({
-            "id": sid,
-            "name": student["name"],
-            "graduated": is_graduated
-        })
-
-    return student_graduation_status
-
-@app.get("/students/{student_id}")
-def get_student_details(student_id: str):
-    student = supabase.table("students").select("*").eq("id", student_id).single().execute().data
-    if not student:
-        raise HTTPException(status_code=404, detail="Student not found")
-
-    units_data = supabase.table("units").select("*").execute().data
-    student_units_data = supabase.table("student_units").select("*").eq("student_id", student_id).execute().data
-
-    unit_lookup = {u['code']: u for u in units_data}
-    details = []
-
-    for su in student_units_data:
-        code = su['unit_code']
-        unit = unit_lookup.get(code, {})
-        details.append({
-            "unit_code": code,
-            "unit_name": unit.get("name", ""),
-            "grade": su["grade"],
-            "is_required": unit.get("is_required", False),
-            "passed": su["grade"] == "Pass"
-        })
-
-    # Graduation logic
-    required_units = {u['code'] for u in units_data if u['is_required']}
-    passed_units = {su["unit_code"] for su in student_units_data if su["grade"] == "Pass"}
-    graduated = required_units.issubset(passed_units)
-
-    return {
-        "id": student["id"],
-        "name": student["name"],
-        "graduated": graduated,
-        "units": details
-    }
-
-# Test endpoint
-@app.get("/ping")
-def ping():
-    return {"message": "Connected to FastAPI"}
-
-@app.get("/test-connection")
-def test_connection():
+@app.get("/api/view-study-planner")
+def view_study_planner(
+    program: str = Query(...),
+    major: str = Query(...),
+    intake_year: int = Query(...),
+    intake_semester: str = Query(...)
+):
     try:
-        client = get_supabase_client()
-        if client:
-            return {"message": "Connection to Supabase is successful!"}
-        else:
-            raise HTTPException(status_code=500, detail="Failed to initialize Supabase client.")
+        # Fetch the matching planner
+        planner_res = supabase_client.table("study_planners").select("*").match({
+            "program": program,
+            "major": major,
+            "intake_year": intake_year,
+            "intake_semester": intake_semester
+        }).execute()
+
+        if not planner_res.data:
+            print(f"No planners found for {program}, {major}, {intake_year}, {intake_semester}")  # Debugging log
+            raise HTTPException(status_code=404, detail="No matching study planner found.")
+
+        planner = planner_res.data[0]
+        print(f"Planner found: {planner}")  # Debugging log
+
+        # Fetch the related units
+        units_res = supabase_client.table("study_planner_units").select("*").eq("planner_id", planner["id"]).execute()
+        units = units_res.data
+
+        if not units:
+            print(f"No units found for planner {planner['id']}")  # Debugging log
+
+        return {
+            "planner": planner,
+            "units": units
+        }
+
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error connecting to Supabase: {str(e)}")
+        print("Error:", str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
-# In-memory storage for units
-units = []
-
-@app.get("/units")
-def get_units():
+@app.get("/api/study-planner-tabs")
+def get_study_planner_tabs():
     try:
-        supabase = get_supabase_client()
-        response = supabase.table("units").select("*").execute()
-        return response.data
+        res = supabase_client.table("study_planners").select("id, program, major, intake_year, intake_semester").execute()
+        planners = res.data
+
+        return planners
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error fetching units: {str(e)}")
-
-@app.post("/units")
-def create_unit(unit: dict):
-    unit["id"] = len(units) + 1
-    units.append(unit)
-    return unit
-
-@app.put("/units/{unit_id}")
-def update_unit(unit_id: int, updated: dict):
-    for i in range(len(units)):
-        if units[i]["id"] == unit_id:
-            units[i].update(updated)
-            return units[i]
-    raise HTTPException(status_code=404, detail="Unit not found")
-
-@app.delete("/units/{unit_id}")
-def delete_unit(unit_id: int):
-    global units
-    units = [unit for unit in units if unit["id"] != unit_id]
-    return {"message": "Deleted"}
-
-@app.get("/debug-units")
-def debug_units():
-    try:
-        supabase = get_supabase_client()
-        response = supabase.table("units").select("*").limit(1).execute()
-
-        # Check if the response has an 'error' key using .__dict__ for safety
-        if hasattr(response, 'error') and response.error:
-            return {"error": str(response.error)}
-        
-        # Safely return the data
-        return {"data": response.data}
-    except Exception as e:
-        return {"exception": str(e)}
+        print("Error fetching planner tabs:", str(e))
+        raise HTTPException(status_code=500, detail="Failed to fetch planner tabs")

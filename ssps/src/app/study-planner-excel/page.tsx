@@ -1,173 +1,119 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { motion } from "framer-motion";
+import React, { useEffect, useState } from "react";
+import axios from "axios";
+import classNames from "classnames";
 
-export default function UploadExcel() {
-  const [selectedYear, setSelectedYear] = useState("2024");
-  const [excelData, setExcelData] = useState<{ [year: string]: any[][][] }>({}); // Store data for multiple files
-  const [dragActive, setDragActive] = useState(false);
-
-  const years = ["2024", "2023", "2022", "2021"];
+const ViewStudyPlannerTabs = () => {
+  const [tabs, setTabs] = useState<any[]>([]);
+  const [selectedPlanner, setSelectedPlanner] = useState<any>(null);
+  const [units, setUnits] = useState<any[]>([]);
+  const [message, setMessage] = useState("");
 
   useEffect(() => {
-    const fetchExcelData = async () => {
+    const fetchTabs = async () => {
       try {
-        const res = await fetch(`http://localhost:8000/get_excel_data/${selectedYear}`);
-        if (res.status === 404) {
-          console.log(`No Excel file found for year ${selectedYear}`);
-          setExcelData((prev) => ({ ...prev, [selectedYear]: [] }));
-          return;
+        const res = await axios.get("http://localhost:8000/api/study-planner-tabs");
+        setTabs(res.data);
+        if (res.data.length > 0) {
+          fetchPlanner(res.data[0]);
         }
-        if (!res.ok) throw new Error("Failed to fetch data");
-
-        const parsedData: any[][][] = await res.json(); // Expecting an array of arrays (for each file)
-        setExcelData((prev) => ({ ...prev, [selectedYear]: parsedData }));
       } catch (err) {
-        console.error(`Failed to fetch Excel data for ${selectedYear}:`, err);
+        console.error("Error fetching tabs", err);
+        setMessage("Could not load planner tabs.");
       }
     };
+    fetchTabs();
+  }, []);
 
-    if (!excelData[selectedYear]) {
-      fetchExcelData();
-    }
-  }, [selectedYear]);
-
-  const handleExcelUpload = async (files: FileList | null) => {
-    if (!files) return;
-    
-    // Handle multiple file uploads
-    const formData = new FormData();
-    Array.from(files).forEach((file) => {
-      formData.append("files", file); // Append each file to formData
-    });
-    formData.append("year", selectedYear);
-
+  const fetchPlanner = async (planner: any) => {
     try {
-      const res = await fetch("http://localhost:8000/upload_excel/", {
-        method: "POST",
-        body: formData,
+      setSelectedPlanner(planner);
+      const res = await axios.get("http://localhost:8000/api/view-study-planner", {
+        params: {
+          program: planner.program,
+          major: planner.major,
+          intake_year: planner.intake_year,
+          intake_semester: planner.intake_semester,
+        },
       });
-
-      if (!res.ok) throw new Error("Upload failed");
-      const parsedData: any[][][] = await res.json(); // Backend returns table-like 2D array for each file
-      setExcelData((prev) => ({ ...prev, [selectedYear]: parsedData }));
-    } catch (err) {
-      console.error("Excel upload failed:", err);
+  
+      console.log('Planner Data:', res.data);  // Debugging log to check the returned data
+      setUnits(res.data.units);
+      setMessage("");
+    } catch (err: any) {
+      console.error(err);
+      setMessage("Failed to load planner data.");
+      setUnits([]);
     }
-  };
+  };  
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    handleExcelUpload(e.target.files);
-  };
-
-  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    setDragActive(false);
-    if (e.dataTransfer.files?.length) {
-      handleExcelUpload(e.dataTransfer.files);
-    }
-  };
-
-  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    setDragActive(true);
-  };
-
-  const handleDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    setDragActive(false);
-  };
+  const formatLabel = (tab: any) =>
+    `${tab.intake_year} - ${tab.program} - ${tab.major} (${tab.intake_semester})`;
 
   return (
-    <div className="p-4">
-      <h2 className="text-2xl font-bold mb-6">Upload Excel Study Planner</h2>
+    <div className="p-6">
+      <h2 className="text-xl font-bold mb-4">Study Planners</h2>
 
-      {/* Year Tabs */}
-      <div className="flex gap-2 mb-6">
-        {years.map((year) => (
+      <div className="flex flex-wrap gap-2 mb-6">
+        {tabs.map((tab) => (
           <button
-            key={year}
-            className={`px-4 py-2 border-b-2 ${
-              selectedYear === year
-                ? "border-green-600 text-green-600"
-                : "border-transparent text-gray-600 hover:text-black"
-            }`}
-            onClick={() => setSelectedYear(year)}
+            key={tab.id}
+            onClick={() => fetchPlanner(tab)}
+            className={classNames(
+              "px-4 py-2 rounded border",
+              selectedPlanner?.id === tab.id
+                ? "bg-blue-600 text-white"
+                : "bg-white hover:bg-gray-100"
+            )}
           >
-            {year}
+            {formatLabel(tab)}
           </button>
         ))}
       </div>
 
-      {/* Upload Dropzone */}
-      <motion.div
-        onDrop={handleDrop}
-        onDragOver={handleDragOver}
-        onDragLeave={handleDragLeave}
-        className={`border-2 border-dashed rounded-md p-8 flex flex-col items-center justify-center transition-all ${
-          dragActive ? "border-green-500 bg-green-50" : "border-gray-300"
-        }`}
-        initial={{ opacity: 0, y: -10 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.4 }}
-      >
-        <label htmlFor="excel-upload" className="cursor-pointer flex flex-col items-center space-y-2">
-          📄
-          <p className="text-gray-700 font-medium">Drag and drop your Excel files here</p>
-          <p className="text-sm text-gray-500">or click to select (.xlsx)</p>
-        </label>
-        <input
-          id="excel-upload"
-          type="file"
-          onChange={handleChange}
-          accept=".xlsx"
-          multiple
-          className="hidden"
-        />
-      </motion.div>
+      {message && <p className="text-red-500">{message}</p>}
 
-      {/* Table Preview */}
-      <div className="mt-8 overflow-x-auto">
-        {excelData[selectedYear]?.length > 0 && (
-          <div>
-            {excelData[selectedYear].map((fileData, index) => {
-              // Check if fileData is an array before trying to map over it
-              if (Array.isArray(fileData) && Array.isArray(fileData[0])) {
-                return (
-                  <div key={index}>
-                    <h3 className="font-semibold text-lg">File {index + 1}</h3>
-                    <table className="min-w-full border rounded shadow text-sm">
-                      <thead className="bg-gray-100 font-semibold">
-                        <tr>
-                          {fileData[0].map((cell, i) => (
-                            <th key={i} className="border px-4 py-2 text-left">
-                              {cell}
-                            </th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {fileData.slice(1).map((row, rowIndex) => (
-                          <tr key={rowIndex} className="hover:bg-gray-50">
-                            {row.map((cell, colIndex) => (
-                              <td key={colIndex} className="border px-4 py-1">
-                                {cell}
-                              </td>
-                            ))}
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                );
-              } else {
-                return <p key={index}>Invalid data format for file {index + 1}</p>;
-              }
-            })}
-          </div>
-        )}
-      </div>
+      {selectedPlanner && (
+        <div className="mb-4">
+          <h3 className="font-semibold text-lg">Planner Details</h3>
+          <p><strong>Program:</strong> {selectedPlanner.program}</p>
+          <p><strong>Major:</strong> {selectedPlanner.major}</p>
+          <p><strong>Intake:</strong> {selectedPlanner.intake_semester} {selectedPlanner.intake_year}</p>
+        </div>
+      )}
+
+      {units.length > 0 ? (
+        <div>
+          <h3 className="font-semibold text-lg mb-2">Units</h3>
+          <table className="w-full border">
+            <thead className="bg-gray-100">
+              <tr>
+                <th className="border p-2">Year</th>
+                <th className="border p-2">Semester</th>
+                <th className="border p-2">Unit Code</th>
+                <th className="border p-2">Unit Name</th>
+                <th className="border p-2">Prerequisites</th>
+              </tr>
+            </thead>
+            <tbody>
+              {units.map((unit, i) => (
+                <tr key={i} className="hover:bg-gray-50">
+                  <td className="border p-2">{unit.year || "N/A"}</td>
+                  <td className="border p-2">{unit.semester || "N/A"}</td>
+                  <td className="border p-2">{unit.unit_code || "N/A"}</td>
+                  <td className="border p-2">{unit.unit_name || "N/A"}</td>
+                  <td className="border p-2">{unit.prerequisites || "N/A"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <p>No units found for this planner.</p>
+      )}
     </div>
   );
-}
+};
+
+export default ViewStudyPlannerTabs;
