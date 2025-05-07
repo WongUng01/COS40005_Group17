@@ -2,6 +2,7 @@
 
 import Sidebar from '../../components/Sidebar';
 import Footer from '../../components/Footer';
+import { Toaster } from 'react-hot-toast';
 
 export default function AuthenticatedLayout({
   children,
@@ -15,9 +16,14 @@ export default function AuthenticatedLayout({
 
       {/* Main Content */}
       <div className="flex flex-col flex-1">
-        <main className="flex-1 p-6 w-full max-w-6xl mx-auto">{children}</main>
+        <main className="flex-1 p-6 w-full max-w-6xl mx-auto">
+          {children}
+        </main>
         <Footer />
       </div>
+
+      {/* Toast Notifications */}
+      <Toaster position="top-center" />
     </div>
   );
 }

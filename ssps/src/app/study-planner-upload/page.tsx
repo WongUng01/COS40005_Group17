@@ -1,7 +1,8 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useRef } from "react";
 import axios from "axios";
+import toast from "react-hot-toast";
 
 const UploadStudyPlanner = () => {
   const [file, setFile] = useState<File | null>(null);
@@ -9,82 +10,174 @@ const UploadStudyPlanner = () => {
   const [major, setMajor] = useState("");
   const [intakeYear, setIntakeYear] = useState("");
   const [intakeSemester, setIntakeSemester] = useState("");
-  const [message, setMessage] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  const programs = [
+    "Bachelor of Computer Science",
+    "Bachelor of Information and Communication Technology",
+  ];
+
+  const majors = {
+    "Bachelor of Computer Science": [
+      "Artificial Intelligence",
+      "Cybersecurity",
+      "Data Science",
+      "Internet of Things",
+      "Software Development",
+    ],
+    "Bachelor of Information and Communication Technology": [
+      "Network Technology",
+      "Software Technology",
+    ],
+  };
+
+  const years = ["2026", "2025", "2024", "2023", "2022", "2021"];
+  const semesters = ["Feb/Mar", "Aug/Sep"];
 
   const handleUpload = async () => {
     if (!file) {
-      setMessage("Please select a file.");
+      toast.error("Please select a file.");
       return;
     }
 
     const formData = new FormData();
-    formData.append("file", file);
+    formData.append("file", file as Blob);
     formData.append("program", program);
     formData.append("major", major);
     formData.append("intake_year", intakeYear);
     formData.append("intake_semester", intakeSemester);
 
     try {
+      setLoading(true);
       const response = await axios.post("http://localhost:8000/api/upload-study-planner", formData, {
         headers: {
           "Content-Type": "multipart/form-data",
         },
       });
-      setMessage(response.data.message);
+      toast.success("Upload successful!");
+
+      // Reset the form
+      setFile(null);
+      setProgram("");
+      setMajor("");
+      setIntakeYear("");
+      setIntakeSemester("");
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
     } catch (err: any) {
       const status = err.response?.status;
       const detail = err.response?.data?.detail || err.message || "Unknown error";
-      console.error("Console Error", err);
-      setMessage(`Upload failed: ${status}: ${detail}`);
+      console.error("Upload error", err);
+      toast.error(`Upload failed: ${status || "Error"} - ${detail}`);
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
-    <div className="p-6 space-y-4">
-      <h2 className="text-xl font-bold">Upload Study Planner</h2>
-
-      <input type="file" accept=".xlsx" onChange={(e) => setFile(e.target.files?.[0] || null)} />
+    <div className="p-6 max-w-xl mx-auto space-y-4 bg-white shadow-md rounded-xl">
+      <h2 className="text-2xl font-bold text-center mb-4">Upload Study Planner</h2>
 
       <input
-        type="text"
-        placeholder="Program"
-        value={program}
-        onChange={(e) => setProgram(e.target.value)}
-        className="border p-2 block w-full"
+        ref={fileInputRef}
+        type="file"
+        accept=".xlsx"
+        onChange={(e) => setFile(e.target.files?.[0] || null)}
+        className="block w-full text-sm text-gray-700 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
       />
 
-      <input
-        type="text"
-        placeholder="Major"
+      <select
+        value={program}
+        onChange={(e) => {
+          setProgram(e.target.value);
+          setMajor(""); // reset major when program changes
+        }}
+        className="border p-2 w-full rounded"
+      >
+        <option value="">Select Program</option>
+        {programs.map((prog) => (
+          <option key={prog} value={prog}>
+            {prog}
+          </option>
+        ))}
+      </select>
+
+      <select
         value={major}
         onChange={(e) => setMajor(e.target.value)}
-        className="border p-2 block w-full"
-      />
+        className="border p-2 w-full rounded"
+        disabled={majors[program]?.length === 0}
+      >
+        <option value="">Select Major</option>
+        {majors[program]?.map((m) => (
+          <option key={m} value={m}>
+            {m}
+          </option>
+        ))}
+      </select>
 
-      <input
-        type="number"
-        placeholder="Intake Year"
+      <select
         value={intakeYear}
         onChange={(e) => setIntakeYear(e.target.value)}
-        className="border p-2 block w-full"
-      />
+        className="border p-2 w-full rounded"
+      >
+        <option value="">Select Intake Year</option>
+        {years.map((year) => (
+          <option key={year} value={year}>
+            {year}
+          </option>
+        ))}
+      </select>
 
-      <input
-        type="text"
-        placeholder="Intake Semester (e.g., March)"
+      <select
         value={intakeSemester}
         onChange={(e) => setIntakeSemester(e.target.value)}
-        className="border p-2 block w-full"
-      />
+        className="border p-2 w-full rounded"
+      >
+        <option value="">Select Intake Semester</option>
+        {semesters.map((sem) => (
+          <option key={sem} value={sem}>
+            {sem}
+          </option>
+        ))}
+      </select>
 
       <button
         onClick={handleUpload}
-        className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+        className={`w-full py-2 rounded flex items-center justify-center transition duration-200 ${
+          loading
+            ? "bg-gray-300 text-gray-500 cursor-not-allowed"
+            : "bg-blue-600 text-white hover:bg-blue-700"
+        }`}
+        disabled={loading}
       >
-        Upload
+        {loading && (
+          <svg
+            className="animate-spin h-5 w-5 text-white mr-2"
+            xmlns="http://www.w3.org/2000/svg"
+            fill="none"
+            viewBox="0 0 24 24"
+          >
+            <circle
+              className="opacity-25"
+              cx="12"
+              cy="12"
+              r="10"
+              stroke="currentColor"
+              strokeWidth="4"
+            />
+            <path
+              className="opacity-75"
+              fill="currentColor"
+              d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"
+            />
+          </svg>
+        )}
+        {loading ? "Uploading..." : "Upload"}
       </button>
-
-      {message && <p className="text-sm mt-4">{message}</p>}
     </div>
   );
 };

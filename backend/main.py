@@ -4,6 +4,7 @@ import pandas as pd
 import uuid
 import supabase
 from fastapi import Query
+from supabaseClient import get_supabase_client
 
 app = FastAPI()
 
@@ -126,3 +127,19 @@ def get_study_planner_tabs():
     except Exception as e:
         print("Error fetching planner tabs:", str(e))
         raise HTTPException(status_code=500, detail="Failed to fetch planner tabs")
+
+# Test endpoint
+@app.get("/ping")
+def ping():
+    return {"message": "Connected to FastAPI"}
+
+@app.get("/test-connection")
+def test_connection():
+    try:
+        client = get_supabase_client()
+        if client:
+            return {"message": "Connection to Supabase is successful!"}
+        else:
+            raise HTTPException(status_code=500, detail="Failed to initialize Supabase client.")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error connecting to Supabase: {str(e)}")
