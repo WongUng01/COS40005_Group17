@@ -15,6 +15,10 @@ const ViewStudyPlannerTabs = () => {
   const [selectedMajor, setSelectedMajor] = useState<string | null>(null);
   const [selectedSemester, setSelectedSemester] = useState<string | null>(null);
 
+  // Utility to avoid showing "NaN" or null-like values
+  const displayValue = (value: any) =>
+    value && value.toString().toLowerCase() !== "nan" ? value : "";
+
   // Unique values for filters
   const years = Array.from(new Set(tabs.map(t => t.intake_year))).sort((a, b) => b - a);
   const programs = Array.from(new Set(tabs.filter(t => (!selectedYear || t.intake_year === selectedYear)).map(t => t.program)));
@@ -137,11 +141,11 @@ const ViewStudyPlannerTabs = () => {
               <tbody>
                 {(unitsMap[planner.id] || []).map((unit, i) => (
                   <tr key={i} className="hover:bg-gray-50">
-                    <td className="border p-2">{unit.year || "N/A"}</td>
-                    <td className="border p-2">{unit.semester || "N/A"}</td>
-                    <td className="border p-2">{unit.unit_code || "N/A"}</td>
-                    <td className="border p-2">{unit.unit_name || "N/A"}</td>
-                    <td className="border p-2">{unit.prerequisites || "N/A"}</td>
+                    <td className="border p-2">{displayValue(unit.year)}</td>
+                    <td className="border p-2">{displayValue(unit.semester)}</td>
+                    <td className="border p-2">{displayValue(unit.unit_code)}</td>
+                    <td className="border p-2">{displayValue(unit.unit_name)}</td>
+                    <td className="border p-2">{displayValue(unit.prerequisites)}</td>
                   </tr>
                 ))}
               </tbody>
