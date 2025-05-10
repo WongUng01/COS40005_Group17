@@ -5,6 +5,15 @@ import uuid
 import supabase
 from fastapi import Query
 from supabaseClient import get_supabase_client
+from pydantic import BaseModel
+from typing import List
+
+class PlannerRequest(BaseModel):
+    id: int
+    program: str
+    major: str
+    intake_year: int
+    intake_semester: str
 
 app = FastAPI()
 
@@ -38,7 +47,7 @@ async def upload_study_planner(
         print("Normalized Excel columns:", df.columns.tolist())
 
         # Validate required columns
-        expected_cols = {"Year", "Semester", "Unit Code", "Unit Name", "Prerequisites"}
+        expected_cols = {"Year", "Semester", "Unit Code", "Unit Name", "Prerequisites", "Unit Type"}
         if not expected_cols.issubset(set(df.columns)):
             missing = expected_cols - set(df.columns)
             raise HTTPException(
@@ -67,6 +76,8 @@ async def upload_study_planner(
                 "unit_code": str(row["Unit Code"]),
                 "unit_name": str(row["Unit Name"]),
                 "prerequisites": str(row["Prerequisites"]),
+                "unit_type": str(row["Unit Type"]),
+
             }
             supabase_client.table("study_planner_units").insert(unit).execute()
 
@@ -127,6 +138,22 @@ def get_study_planner_tabs():
     except Exception as e:
         print("Error fetching planner tabs:", str(e))
         raise HTTPException(status_code=500, detail="Failed to fetch planner tabs")
+    
+@app.post("/api/view-study-planner-batch")
+async def view_study_planner_batch(planners: List[PlannerRequest]):
+    response = {}
+    for planner in planners:
+        try:
+            units = get_units_for_planner(
+                planner.program,
+                planner.major,
+                planner.intake_year,
+                planner.intake_semester
+            )
+            response[planner.id] = units
+        except Exception as e:
+            response[planner.id] = []  # Or add error info if needed
+    return {"units_map": response}
 
 # Test endpoint
 @app.get("/ping")

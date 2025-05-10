@@ -14,16 +14,32 @@ const ViewStudyPlannerTabs = () => {
   const [selectedProgram, setSelectedProgram] = useState<string | null>(null);
   const [selectedMajor, setSelectedMajor] = useState<string | null>(null);
   const [selectedSemester, setSelectedSemester] = useState<string | null>(null);
+  
 
-  // Utility to avoid showing "NaN" or null-like values
+  // Color mapping based on unit type
+  const unitTypeColors: Record<string, string> = {
+    Core: "bg-blue-200",
+    Major: "bg-orange-200",
+    Elective: "bg-green-200",
+    MPU: "bg-red-200",
+    WIL: "bg-purple-200",
+  };
+
   const displayValue = (value: any) =>
     value && value.toString().toLowerCase() !== "nan" ? value : "";
 
-  // Unique values for filters
   const years = Array.from(new Set(tabs.map(t => t.intake_year))).sort((a, b) => b - a);
   const programs = Array.from(new Set(tabs.filter(t => (!selectedYear || t.intake_year === selectedYear)).map(t => t.program)));
   const majors = Array.from(new Set(tabs.filter(t => (!selectedProgram || t.program === selectedProgram)).map(t => t.major)));
-  const semesters = Array.from(new Set(tabs.filter(t => (!selectedMajor || t.major === selectedMajor)).map(t => t.intake_semester)));
+  const semesterOrder = ["Feb/Mar", "Aug/Sep"];
+
+  const semesters = Array.from(
+    new Set(tabs.filter(t => (!selectedMajor || t.major === selectedMajor)).map(t => t.intake_semester))
+  ).sort((a, b) => {
+    const indexA = semesterOrder.indexOf(a);
+    const indexB = semesterOrder.indexOf(b);
+    return indexA - indexB;
+  });
 
   useEffect(() => {
     const fetchTabs = async () => {
@@ -43,33 +59,42 @@ const ViewStudyPlannerTabs = () => {
   }, []);
 
   useEffect(() => {
-    // Apply filters
-    let result = [...tabs];
-    if (selectedYear) result = result.filter(t => t.intake_year === selectedYear);
-    if (selectedProgram) result = result.filter(t => t.program === selectedProgram);
-    if (selectedMajor) result = result.filter(t => t.major === selectedMajor);
-    if (selectedSemester) result = result.filter(t => t.intake_semester === selectedSemester);
+    const fetchPlannerUnits = async () => {
+      let result = [...tabs];
+      if (selectedYear) result = result.filter(t => t.intake_year === selectedYear);
+      if (selectedProgram) result = result.filter(t => t.program === selectedProgram);
+      if (selectedMajor) result = result.filter(t => t.major === selectedMajor);
+      if (selectedSemester) result = result.filter(t => t.intake_semester === selectedSemester);
 
-    setFilteredPlanners(result);
+      setFilteredPlanners(result);
 
-    // Fetch units for each planner
-    result.forEach(async (planner) => {
-      if (!unitsMap[planner.id]) {
-        try {
-          const res = await axios.get("http://localhost:8000/api/view-study-planner", {
-            params: {
-              program: planner.program,
-              major: planner.major,
-              intake_year: planner.intake_year,
-              intake_semester: planner.intake_semester,
-            },
-          });
-          setUnitsMap(prev => ({ ...prev, [planner.id]: res.data.units }));
-        } catch (err) {
-          console.error(`Failed to fetch units for planner ${planner.id}`, err);
+      const delay = (ms: number) => new Promise(res => setTimeout(res, ms));
+
+      const fetchInSequence = async () => {
+        for (const planner of result) {
+          if (!unitsMap[planner.id]) {
+            try {
+              const res = await axios.get("http://localhost:8000/api/view-study-planner", {
+                params: {
+                  program: planner.program,
+                  major: planner.major,
+                  intake_year: planner.intake_year,
+                  intake_semester: planner.intake_semester,
+                },
+              });
+              setUnitsMap(prev => ({ ...prev, [planner.id]: res.data.units }));
+            } catch (err) {
+              console.error(`Failed to fetch units for planner ${planner.id}`, err);
+            }
+            await delay(200);
+          }
         }
-      }
-    });
+      };
+
+      fetchInSequence();
+    };
+
+    fetchPlannerUnits();
   }, [selectedYear, selectedProgram, selectedMajor, selectedSemester, tabs]);
 
   const FilterRow = ({ title, options, selected, onSelect }: any) => (
@@ -98,7 +123,6 @@ const ViewStudyPlannerTabs = () => {
 
       {message && <p className="text-red-500">{message}</p>}
 
-      {/* Filter Rows */}
       <FilterRow title="Year" options={years} selected={selectedYear} onSelect={setSelectedYear} />
       <FilterRow
         title="Program"
@@ -106,10 +130,9 @@ const ViewStudyPlannerTabs = () => {
         selected={selectedProgram}
         onSelect={(program: string | null) => {
           setSelectedProgram(program);
-          setSelectedMajor(null); // Reset major if program changes
+          setSelectedMajor(null);
         }}
       />
-
       {selectedProgram && (
         <FilterRow
           title="Major"
@@ -120,7 +143,16 @@ const ViewStudyPlannerTabs = () => {
       )}
       <FilterRow title="Semester" options={semesters} selected={selectedSemester} onSelect={setSelectedSemester} />
 
-      {/* Planners Display */}
+      {/* Legend */}
+      <div className="flex flex-wrap gap-4 mb-6">
+        {Object.entries(unitTypeColors).map(([type, color]) => (
+          <div key={type} className="flex items-center space-x-2">
+            <div className={`w-4 h-4 rounded ${color}`} />
+            <span className="text-sm">{type}</span>
+          </div>
+        ))}
+      </div>
+
       {filteredPlanners.length > 0 ? (
         filteredPlanners.map(planner => (
           <div key={planner.id} className="mb-10 border rounded shadow-sm p-4">
@@ -139,8 +171,41 @@ const ViewStudyPlannerTabs = () => {
                 </tr>
               </thead>
               <tbody>
-                {(unitsMap[planner.id] || []).map((unit, i) => (
-                  <tr key={i} className="hover:bg-gray-50">
+                {(unitsMap[planner.id] || [])
+                  .sort((a, b) => {
+                    // Sort by year first
+                    if (a.year !== b.year) return a.year - b.year;
+
+                    // Define a custom semester order
+                    const semesterOrder = ["1", "2", "Summer", "Winter"];
+                    const semesterA = semesterOrder.indexOf(a.semester);
+                    const semesterB = semesterOrder.indexOf(b.semester);
+                    if (semesterA !== semesterB) return semesterA - semesterB;
+
+                    // Define unit type priority
+                    const typePriority: Record<string, number> = {
+                      Major: 0,
+                      Core: 1,
+                      Elective: 2,
+                      MPU: 3,
+                    };
+
+                    const priorityA = typePriority[a.unit_type as keyof typeof typePriority] ?? 99;
+                    const priorityB = typePriority[b.unit_type as keyof typeof typePriority] ?? 99;
+
+                    if (priorityA !== priorityB) return priorityA - priorityB;
+
+                    // Optional: sort by unit code or name
+                    return a.unit_code.localeCompare(b.unit_code);
+                  })
+                  .map((unit, i) => (
+                  <tr
+                    key={i}
+                    className={classNames(
+                      "hover:bg-opacity-80",
+                      unitTypeColors[unit.unit_type] || "bg-gray-100"
+                    )}
+                  >
                     <td className="border p-2">{displayValue(unit.year)}</td>
                     <td className="border p-2">{displayValue(unit.semester)}</td>
                     <td className="border p-2">{displayValue(unit.unit_code)}</td>
