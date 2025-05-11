@@ -170,3 +170,12 @@ def test_connection():
             raise HTTPException(status_code=500, detail="Failed to initialize Supabase client.")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error connecting to Supabase: {str(e)}")
+    
+@app.post("/create-user")
+def create_user(data: dict):
+    supabase = get_supabase_client()
+    response = supabase.table("users").insert(data).execute()
+
+    if response.error:
+        return {"status": "error", "message": response.error.message}
+    return {"status": "success", "data": response.data}

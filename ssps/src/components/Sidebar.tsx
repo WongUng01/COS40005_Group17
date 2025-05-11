@@ -16,8 +16,8 @@ const navItems = [
   { label: 'Dashboard', href: '/dashboard', icon: <FaTachometerAlt /> },
   { label: 'Units', href: '/units', icon: <FaBook /> },
   { label: 'Upload Study Planner', href: '/study-planner-upload', icon: <FaClipboardList /> },
-  { label: 'View Study Planner', href: '/study-planner-excel', icon: <FaClipboardList /> },
-  { label: 'Custom Study Planner', href: '/study-planner', icon: <FaClipboardList /> },
+  { label: 'View Study Planner', href: '/study-planner', icon: <FaClipboardList /> },
+  // { label: 'Custom Study Planner', href: '/study-planner', icon: <FaClipboardList /> },
   { label: 'Student', href: '/student', icon: <FaClipboardList /> }
 ];
 

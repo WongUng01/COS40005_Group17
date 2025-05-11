@@ -5,40 +5,58 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { supabase } from '../supabaseClient';
 
-const LoginPage = () => {
+const RegisterPage = () => {
   const router = useRouter();
 
   const [email, setEmail] = useState('');
+  const [fullName, setFullName] = useState('');
   const [password, setPassword] = useState('');
-  const [rememberMe, setRememberMe] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
+    setError('');
 
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    const { data, error: signUpError } = await supabase.auth.signUp({
+      email,
+      password,
+    });
 
-    if (error) {
-      alert('Login failed: ' + error.message);
-    } else {
-      router.push('/dashboard'); // Change this to your post-login page
+    if (signUpError) {
+      setError(signUpError.message);
+      setLoading(false);
+      return;
     }
 
-    setLoading(false);
+    const userId = data.user?.id;
+    if (userId) {
+      const { error: insertError } = await supabase
+        .from('users')
+        .insert([{ id: userId, email, full_name: fullName }]);
+
+      if (insertError) {
+        setError(insertError.message);
+        setLoading(false);
+        return;
+      }
+    }
+
+    router.push('/login'); // Redirect to login page after successful registration
   };
 
   return (
     <div className="flex flex-1 items-center justify-center min-h-screen bg-gray-100">
       <div className="bg-white shadow-lg rounded-lg max-w-md w-full p-8">
-        {/* Logo / Brand */}
         <div className="mb-6 text-center">
           <h1 className="text-3xl font-bold text-blue-700">Student Study Planner</h1>
-          <p className="text-gray-500 text-sm mt-1">Welcome back! Please login to continue.</p>
+          <p className="text-gray-500 text-sm mt-1">Create an account to get started.</p>
         </div>
 
-        {/* Login Form */}
-        <form onSubmit={handleSubmit} className="space-y-5">
+        <form onSubmit={handleRegister} className="space-y-5">
+          {error && <p className="text-red-600 mb-3 text-sm">{error}</p>}
+
           <div>
             <label htmlFor="email" className="block text-sm font-medium text-gray-700">
               Email address
@@ -51,6 +69,21 @@ const LoginPage = () => {
               onChange={(e) => setEmail(e.target.value)}
               required
               placeholder="you@example.com"
+            />
+          </div>
+
+          <div>
+            <label htmlFor="fullName" className="block text-sm font-medium text-gray-700">
+              Full Name
+            </label>
+            <input
+              type="text"
+              id="fullName"
+              className="mt-1 w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              value={fullName}
+              onChange={(e) => setFullName(e.target.value)}
+              required
+              placeholder="John Doe"
             />
           </div>
 
@@ -69,35 +102,19 @@ const LoginPage = () => {
             />
           </div>
 
-          <div className="flex items-center justify-between text-sm">
-            <label className="flex items-center">
-              <input
-                type="checkbox"
-                checked={rememberMe}
-                onChange={() => setRememberMe(!rememberMe)}
-                className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-              />
-              <span className="ml-2 text-gray-700">Remember me</span>
-            </label>
-            <Link href="/forgot-password" className="text-blue-600 hover:underline">
-              Forgot password?
-            </Link>
-          </div>
-
           <button
             type="submit"
-            disabled={loading}
             className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-md transition duration-300"
+            disabled={loading}
           >
-            {loading ? 'Signing in...' : 'Sign In'}
+            {loading ? 'Registering...' : 'Register'}
           </button>
         </form>
 
-        {/* Footer */}
         <p className="text-center text-sm text-gray-500 mt-6">
-          Don't have an account?{' '}
-          <Link href="/register" className="text-blue-600 hover:underline font-medium">
-            Register
+          Already have an account?{' '}
+          <Link href="/login" className="text-blue-600 hover:underline font-medium">
+            Login
           </Link>
         </p>
       </div>
@@ -105,4 +122,4 @@ const LoginPage = () => {
   );
 };
 
-export default LoginPage;
+export default RegisterPage;

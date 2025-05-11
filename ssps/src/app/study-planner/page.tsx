@@ -1,241 +1,227 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from 'react';
-import axios from 'axios';
-import { Input, Select, Table, Button, Tabs, message } from 'antd';
+import React, { useEffect, useState } from "react";
+import axios from "axios";
+import classNames from "classnames";
 
-const { Option } = Select;
+const ViewStudyPlannerTabs = () => {
+  const [tabs, setTabs] = useState<any[]>([]);
+  const [filteredPlanners, setFilteredPlanners] = useState<any[]>([]);
+  const [unitsMap, setUnitsMap] = useState<Record<number, any[]>>({});
+  const [message, setMessage] = useState("");
 
-interface Unit {
-  unit_code: string;
-  unit_name: string;
-  prerequisites: string;
-}
+  const [selectedYear, setSelectedYear] = useState<string | null>(null);
+  const [selectedProgram, setSelectedProgram] = useState<string | null>(null);
+  const [selectedMajor, setSelectedMajor] = useState<string | null>(null);
+  const [selectedSemester, setSelectedSemester] = useState<string | null>(null);
+  
 
-interface PlannerRow {
-  year: number;
-  semester: number;
-  unitCode: string;
-  unitName: string;
-  prerequisite: string;
-}
+  // Color mapping based on unit type
+  const unitTypeColors: Record<string, string> = {
+    Core: "bg-blue-200",
+    Major: "bg-orange-200",
+    Elective: "bg-green-200",
+    MPU: "bg-red-200",
+    WIL: "bg-purple-200",
+  };
 
-interface StudyPlanner {
-  name: string;
-  units: PlannerRow[];
-}
+  const displayValue = (value: any) =>
+    value && value.toString().toLowerCase() !== "nan" ? value : "";
 
-const StudyPlannerPage: React.FC = () => {
-  const [activeTab, setActiveTab] = useState('create');
-  const [unitOptions, setUnitOptions] = useState<Unit[]>([]);
-  const [planners, setPlanners] = useState<StudyPlanner[]>([]);
-  const [templateName, setTemplateName] = useState('');
-  const [tableData, setTableData] = useState<PlannerRow[]>([
-    { year: 1, semester: 1, unitCode: '', unitName: '', prerequisite: '' }
-  ]);
+  const years = Array.from(new Set(tabs.map(t => t.intake_year))).sort((a, b) => b - a);
+  const programs = Array.from(new Set(tabs.filter(t => (!selectedYear || t.intake_year === selectedYear)).map(t => t.program)));
+  const majors = Array.from(new Set(tabs.filter(t => (!selectedProgram || t.program === selectedProgram)).map(t => t.major)));
+  const semesterOrder = ["Feb/Mar", "Aug/Sep"];
+
+  const semesters = Array.from(
+    new Set(tabs.filter(t => (!selectedMajor || t.major === selectedMajor)).map(t => t.intake_semester))
+  ).sort((a, b) => {
+    const indexA = semesterOrder.indexOf(a);
+    const indexB = semesterOrder.indexOf(b);
+    return indexA - indexB;
+  });
 
   useEffect(() => {
-    fetchUnits();
-    fetchPlanners();
+    const fetchTabs = async () => {
+      try {
+        const res = await axios.get("http://localhost:8000/api/study-planner-tabs");
+        setTabs(res.data);
+        if (res.data.length > 0) {
+          const latestYear = res.data.sort((a: any, b: any) => b.intake_year - a.intake_year)[0].intake_year;
+          setSelectedYear(latestYear);
+        }
+      } catch (err) {
+        console.error("Error fetching tabs", err);
+        setMessage("Could not load planner tabs.");
+      }
+    };
+    fetchTabs();
   }, []);
 
-  const fetchUnits = async () => {
-    try {
-      const res = await axios.get<Unit[]>('http://localhost:8000/units');
-      console.log('Fetched units:', res.data);  // Debug log to check the data
-      setUnitOptions(res.data);
-    } catch (err) {
-      message.error('Failed to fetch units');
-      console.error(err);  // Log the error to the console for debugging
-    }
-  };  
+  useEffect(() => {
+    const fetchPlannerUnits = async () => {
+      let result = [...tabs];
+      if (selectedYear) result = result.filter(t => t.intake_year === selectedYear);
+      if (selectedProgram) result = result.filter(t => t.program === selectedProgram);
+      if (selectedMajor) result = result.filter(t => t.major === selectedMajor);
+      if (selectedSemester) result = result.filter(t => t.intake_semester === selectedSemester);
 
-  const fetchPlanners = async () => {
-    try {
-      const res = await axios.get<StudyPlanner[]>('http://localhost:8000/study_planners/');
-      setPlanners(res.data);
-    } catch (err) {
-      message.error('Failed to fetch planners');
-    }
-  };
+      setFilteredPlanners(result);
 
-  const handleChange = (value: any, index: number, key: keyof PlannerRow) => {
-    const updated = [...tableData];
-    updated[index][key] = value;
+      const delay = (ms: number) => new Promise(res => setTimeout(res, ms));
 
-    if (key === 'unitCode') {
-      const selected = unitOptions.find(unit => unit.unit_code === value);
-      updated[index].unitName = selected?.unit_name || '';
-      updated[index].prerequisite = selected?.prerequisites || '';
-    }
+      const fetchInSequence = async () => {
+        for (const planner of result) {
+          if (!unitsMap[planner.id]) {
+            try {
+              const res = await axios.get("http://localhost:8000/api/view-study-planner", {
+                params: {
+                  program: planner.program,
+                  major: planner.major,
+                  intake_year: planner.intake_year,
+                  intake_semester: planner.intake_semester,
+                },
+              });
+              setUnitsMap(prev => ({ ...prev, [planner.id]: res.data.units }));
+            } catch (err) {
+              console.error(`Failed to fetch units for planner ${planner.id}`, err);
+            }
+            await delay(200);
+          }
+        }
+      };
 
-    setTableData(updated);
-  };
-
-  const addRow = () => {
-    setTableData([
-      ...tableData,
-      { year: 1, semester: 1, unitCode: '', unitName: '', prerequisite: '' }
-    ]);
-  };
-
-  const savePlanner = async () => {
-    if (!templateName) {
-      message.warning('Please enter a template name');
-      return;
-    }
-
-    const planner: StudyPlanner = {
-      name: templateName,
-      units: tableData
+      fetchInSequence();
     };
 
-    try {
-      await axios.post('http://localhost:8000/study_planners/', planner);
-      message.success('Planner saved');
-      setTemplateName('');
-      setTableData([{ year: 1, semester: 1, unitCode: '', unitName: '', prerequisite: '' }]);
-      fetchPlanners();
-    } catch (err) {
-      message.error('Failed to save planner');
-    }
-  };
+    fetchPlannerUnits();
+  }, [selectedYear, selectedProgram, selectedMajor, selectedSemester, tabs]);
 
-  const inputColumns = [
-    {
-      title: 'Year',
-      dataIndex: 'year',
-      render: (_: any, record: PlannerRow, index: number) => (
-        <Input
-          type="number"
-          value={record.year}
-          onChange={e => handleChange(Number(e.target.value), index, 'year')}
-        />
-      )
-    },
-    {
-      title: 'Semester',
-      dataIndex: 'semester',
-      render: (_: any, record: PlannerRow, index: number) => (
-        <Input
-          type="number"
-          value={record.semester}
-          onChange={e => handleChange(Number(e.target.value), index, 'semester')}
-        />
-      )
-    },
-    {
-      title: 'Unit Code',
-      dataIndex: 'unitCode',
-      render: (_: any, record: PlannerRow, index: number) => (
-        <Select
-          showSearch
-          style={{ width: 150 }}
-          value={record.unitCode}
-          onChange={val => handleChange(val, index, 'unitCode')}
-          optionFilterProp="children"
-        >
-          {unitOptions.length > 0 ? (
-            unitOptions.map(unit => (
-              <Option key={unit.unit_code} value={unit.unit_code}>
-                {unit.unit_code}
-              </Option>
-            ))
-          ) : (
-            <Option disabled>No units available</Option>
+  const FilterRow = ({ title, options, selected, onSelect }: any) => (
+    <div className="flex flex-wrap gap-2 mb-4 items-center">
+      <span className="font-medium w-24">{title}:</span>
+      {options.map((opt: any) => (
+        <button
+          key={opt}
+          onClick={() => onSelect(selected === opt ? null : opt)}
+          className={classNames(
+            "px-3 py-1 rounded border",
+            selected === opt
+              ? "bg-blue-600 text-white border-blue-600"
+              : "bg-gray-100 text-blue-600 hover:bg-gray-200"
           )}
-        </Select>
-
-      )
-    },
-    {
-      title: 'Unit Name',
-      dataIndex: 'unitName',
-      render: (_: any, record: PlannerRow) => (
-        <Input value={record.unitName} readOnly />
-      )
-    },
-    {
-      title: 'Prerequisite',
-      dataIndex: 'prerequisite',
-      render: (_: any, record: PlannerRow) => (
-        <Input value={record.prerequisite} readOnly />
-      )
-    }
-  ];
-
-  const displayColumns = useMemo(() => {
-    return [
-      { title: 'Year', dataIndex: 'year' },
-      { title: 'Semester', dataIndex: 'semester' },
-      { title: 'Unit Code', dataIndex: 'unitCode' },
-      { title: 'Unit Name', dataIndex: 'unitName' },
-      { title: 'Prerequisite', dataIndex: 'prerequisite' }
-    ];
-  }, []);
-
-  const generateRowKey = (record: PlannerRow) => {
-    return `${record.year}-${record.semester}-${record.unitCode || 'no-unit-code'}`;
-  };
-
-  const tabItems = [
-    {
-      key: 'create',
-      label: 'Create Planner',
-      children: (
-        <>
-          <Input
-            placeholder="Template Name"
-            value={templateName}
-            onChange={e => setTemplateName(e.target.value)}
-            style={{ width: 300, marginBottom: 20 }}
-          />
-
-          <Table
-            dataSource={tableData}
-            columns={inputColumns}
-            rowKey={generateRowKey}
-            pagination={false}
-          />
-
-          <Button type="dashed" onClick={addRow} style={{ marginTop: 16 }}>
-            Add Row
-          </Button>
-
-          <Button type="primary" onClick={savePlanner} style={{ marginLeft: 16 }}>
-            Save Planner
-          </Button>
-        </>
-      )
-    },
-    {
-      key: 'saved',
-      label: 'Saved Planners',
-      children: planners.length === 0 ? (
-        <p>No saved planners found.</p>
-      ) : (
-        planners.map((planner, idx) => (
-          <div key={planner.name + idx} style={{ marginBottom: '2rem' }}>
-            <h4>{planner.name}</h4>
-            <Table
-              dataSource={planner.units}
-              columns={displayColumns}
-              rowKey={generateRowKey}
-              pagination={false}
-              size="small"
-            />
-          </div>
-        ))
-      )
-    }
-  ];
+        >
+          {opt}
+        </button>
+      ))}
+    </div>
+  );
 
   return (
-    <div style={{ padding: '2rem' }}>
-      <h2>Study Planner</h2>
-      <Tabs activeKey={activeTab} onChange={setActiveTab} items={tabItems} />
+    <div className="p-6">
+      <h2 className="text-xl font-bold mb-6">Study Planners</h2>
+
+      {message && <p className="text-red-500">{message}</p>}
+
+      <FilterRow title="Year" options={years} selected={selectedYear} onSelect={setSelectedYear} />
+      <FilterRow
+        title="Program"
+        options={programs}
+        selected={selectedProgram}
+        onSelect={(program: string | null) => {
+          setSelectedProgram(program);
+          setSelectedMajor(null);
+        }}
+      />
+      {selectedProgram && (
+        <FilterRow
+          title="Major"
+          options={majors}
+          selected={selectedMajor}
+          onSelect={setSelectedMajor}
+        />
+      )}
+      <FilterRow title="Semester" options={semesters} selected={selectedSemester} onSelect={setSelectedSemester} />
+
+      {/* Legend */}
+      <div className="flex flex-wrap gap-4 mb-6">
+        {Object.entries(unitTypeColors).map(([type, color]) => (
+          <div key={type} className="flex items-center space-x-2">
+            <div className={`w-4 h-4 rounded ${color}`} />
+            <span className="text-sm">{type}</span>
+          </div>
+        ))}
+      </div>
+
+      {filteredPlanners.length > 0 ? (
+        filteredPlanners.map(planner => (
+          <div key={planner.id} className="mb-10 border rounded shadow-sm p-4">
+            <h3 className="font-semibold text-lg mb-1">
+              {planner.program} - {planner.major} ({planner.intake_semester} {planner.intake_year})
+            </h3>
+
+            <table className="w-full border mt-2">
+              <thead className="bg-gray-100">
+                <tr>
+                  <th className="border p-2">Year</th>
+                  <th className="border p-2">Semester</th>
+                  <th className="border p-2">Unit Code</th>
+                  <th className="border p-2">Unit Name</th>
+                  <th className="border p-2">Prerequisites</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(unitsMap[planner.id] || [])
+                  .sort((a, b) => {
+                    // Sort by year first
+                    if (a.year !== b.year) return a.year - b.year;
+
+                    // Define a custom semester order
+                    const semesterOrder = ["1", "2", "Summer", "Winter"];
+                    const semesterA = semesterOrder.indexOf(a.semester);
+                    const semesterB = semesterOrder.indexOf(b.semester);
+                    if (semesterA !== semesterB) return semesterA - semesterB;
+
+                    // Define unit type priority
+                    const typePriority: Record<string, number> = {
+                      Major: 0,
+                      Core: 1,
+                      Elective: 2,
+                      MPU: 3,
+                    };
+
+                    const priorityA = typePriority[a.unit_type as keyof typeof typePriority] ?? 99;
+                    const priorityB = typePriority[b.unit_type as keyof typeof typePriority] ?? 99;
+
+                    if (priorityA !== priorityB) return priorityA - priorityB;
+
+                    // Optional: sort by unit code or name
+                    return a.unit_code.localeCompare(b.unit_code);
+                  })
+                  .map((unit, i) => (
+                  <tr
+                    key={i}
+                    className={classNames(
+                      "hover:bg-opacity-80",
+                      unitTypeColors[unit.unit_type] || "bg-gray-100"
+                    )}
+                  >
+                    <td className="border p-2">{displayValue(unit.year)}</td>
+                    <td className="border p-2">{displayValue(unit.semester)}</td>
+                    <td className="border p-2">{displayValue(unit.unit_code)}</td>
+                    <td className="border p-2">{displayValue(unit.unit_name)}</td>
+                    <td className="border p-2">{displayValue(unit.prerequisites)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ))
+      ) : (
+        <p className="text-gray-600">No planners match the selected filters.</p>
+      )}
     </div>
   );
 };
 
-export default StudyPlannerPage;
+export default ViewStudyPlannerTabs;
