@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { supabase } from '../supabaseClient';
+import { supabase } from '../../lib/supabaseClient';
 
 const UpdatePasswordPage = () => {
   const router = useRouter();

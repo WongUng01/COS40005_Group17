@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
+import { supabase } from '../lib/supabaseClient';
 import { useState } from 'react';
 import {
   FaTachometerAlt,
@@ -10,15 +11,18 @@ import {
   FaUserCircle,
   FaSignOutAlt,
   FaCog,
+  FaUserGraduate, 
+  FaFileUpload, 
+  FaEye,
 } from 'react-icons/fa';
 
 const navItems = [
   { label: 'Dashboard', href: '/dashboard', icon: <FaTachometerAlt /> },
   { label: 'Units', href: '/units', icon: <FaBook /> },
-  { label: 'Upload Study Planner', href: '/study-planner-upload', icon: <FaClipboardList /> },
-  { label: 'View Study Planner', href: '/study-planner', icon: <FaClipboardList /> },
+  { label: 'Upload Study Planner', href: '/study-planner-upload', icon: <FaFileUpload /> },
+  { label: 'View Study Planner', href: '/study-planner', icon: <FaEye /> },
   // { label: 'Custom Study Planner', href: '/study-planner', icon: <FaClipboardList /> },
-  { label: 'Student', href: '/student', icon: <FaClipboardList /> }
+  { label: 'Student', href: '/student', icon: <FaUserGraduate /> }
 ];
 
 export default function Sidebar() {
@@ -26,14 +30,17 @@ export default function Sidebar() {
   const router = useRouter();
   const [showProfileMenu, setShowProfileMenu] = useState(false);
 
-  const handleLogout = () => {
-    // Replace with real logout logic
-    console.log('Logging out...');
+  const handleLogout = async () => {
+  const { error } = await supabase.auth.signOut();
+  if (error) {
+    console.error('Logout error:', error.message);
+  } else {
     router.push('/');
-  };
+  }
+};
 
   return (
-    <aside className="w-20 min-h-screen bg-white border-r border-gray-200 flex flex-col p-4 shadow-md relative">
+    <aside className="fixed left-0 top-0 h-screen w-20 bg-white border-r border-gray-200 flex flex-col p-4 shadow-md z-50">
       {/* Top Section: Profile + Nav */}
       <div className="flex flex-col gap-6">
         {/* Profile */}
