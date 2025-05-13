@@ -43,7 +43,7 @@ const RegisterPage = () => {
       }
     }
 
-    router.push('/login'); // Redirect to login page after successful registration
+    router.push('/'); // Redirect to login page after successful registration
   };
 
   return (
@@ -113,7 +113,7 @@ const RegisterPage = () => {
 
         <p className="text-center text-sm text-gray-500 mt-6">
           Already have an account?{' '}
-          <Link href="/login" className="text-blue-600 hover:underline font-medium">
+          <Link href="/" className="text-blue-600 hover:underline font-medium">
             Login
           </Link>
         </p>
