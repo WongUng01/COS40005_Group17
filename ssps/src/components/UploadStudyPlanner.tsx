@@ -14,6 +14,8 @@ const UploadStudyPlanner = () => {
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
+  const isFormValid = file && program && major && intakeYear && intakeSemester;
+
   const programs = [
     "Bachelor of Computer Science",
     "Bachelor of Information and Communication Technology",
@@ -36,46 +38,61 @@ const UploadStudyPlanner = () => {
   const years = ["2026", "2025", "2024", "2023", "2022", "2021"];
   const semesters = ["Feb/Mar", "Aug/Sep"];
 
-  const handleUpload = async () => {
-    if (!file) {
-      toast.error("Please select a file.");
+  const handleUpload = async (overwrite = false) => {
+    if (!file || !program || !major || !intakeYear || !intakeSemester) {
+      toast.error("Please fill in all fields.");
       return;
     }
 
     const formData = new FormData();
-    formData.append("file", file as Blob);
+    formData.append("file", file);
     formData.append("program", program);
     formData.append("major", major);
     formData.append("intake_year", intakeYear);
     formData.append("intake_semester", intakeSemester);
+    formData.append("overwrite", String(overwrite));
 
     try {
       setLoading(true);
-      const response = await axios.post("http://localhost:8000/api/upload-study-planner", formData, {
-        headers: {
-          "Content-Type": "multipart/form-data",
-        },
+      await axios.post("http://localhost:8000/api/upload-study-planner", formData, {
+        headers: { "Content-Type": "multipart/form-data" },
       });
-      toast.success("Upload successful!");
 
-      // Reset the form
+      toast.success("Upload successful!");
       setFile(null);
       setProgram("");
       setMajor("");
       setIntakeYear("");
       setIntakeSemester("");
-      if (fileInputRef.current) {
-        fileInputRef.current.value = "";
-      }
+      if (fileInputRef.current) fileInputRef.current.value = "";
+
     } catch (err: any) {
-      const status = err.response?.status;
-      const detail = err.response?.data?.detail || err.message || "Unknown error";
-      console.error("Upload error", err);
-      toast.error(`Upload failed: ${status || "Error"} - ${detail}`);
+      if (err.response?.status === 409 && err.response.data?.detail?.existing) {
+        const confirm = window.confirm("A planner for this intake already exists. Do you want to overwrite it?");
+        if (confirm) {
+          await handleUpload(true); // retry
+          return;
+        } else {
+          toast("Upload canceled.");
+          return;
+        }
+      }
+
+      const detail = err.response?.data?.detail;
+      const errorMessage =
+        typeof detail === "string"
+          ? detail
+          : typeof detail === "object"
+          ? detail.message || JSON.stringify(detail)
+          : err.message;
+
+      toast.error(`Upload failed: ${errorMessage}`);
+
     } finally {
       setLoading(false);
     }
   };
+
 
   return (
     <div className="p-6 max-w-xl mx-auto space-y-4 bg-white shadow-md rounded-xl">
@@ -148,11 +165,11 @@ const UploadStudyPlanner = () => {
       <button
         onClick={handleUpload}
         className={`w-full py-2 rounded flex items-center justify-center transition duration-200 ${
-          loading
+          loading || !isFormValid
             ? "bg-gray-300 text-gray-500 cursor-not-allowed"
             : "bg-blue-600 text-white hover:bg-blue-700"
         }`}
-        disabled={loading}
+        disabled={loading || !isFormValid}
       >
         {loading && (
           <svg

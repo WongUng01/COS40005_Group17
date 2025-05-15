@@ -1,4 +1,3 @@
-// app/upload-study-planner/page.tsx or any protected page
 "use client";
 
 import ProtectedRoute from "../../components/ProtectedRoute";
