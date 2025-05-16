@@ -7,7 +7,11 @@ import supabase
 from fastapi import Query
 from supabaseClient import get_supabase_client
 from pydantic import BaseModel
-from typing import List
+from typing import List, Dict
+
+app = FastAPI()
+
+planners_db: Dict[str, List[dict]] = {}
 
 class PlannerRequest(BaseModel):
     id: int
@@ -21,7 +25,21 @@ class UpdateUnitRequest(BaseModel):
     field: str
     value: str
 
-app = FastAPI()
+class PlannerUnit(BaseModel):
+    year: int
+    semester: str
+    unit_code: str
+    unit_name: str
+    prerequisites: str
+    unit_type: str
+
+class PlannerPayload(BaseModel):
+    program: str
+    major: str
+    intake_year: int
+    intake_semester: str
+    planner: List[PlannerUnit]
+    overwrite: bool = False
 
 # CORS config
 app.add_middleware(
@@ -264,3 +282,61 @@ def get_units():
     except Exception as e:
         print("Error fetching units:", str(e))
         raise HTTPException(status_code=500, detail="Failed to fetch units")
+
+@app.post("/api/create-study-planner")
+def create_study_planner(data: PlannerPayload = Body(...)):
+    try:
+        # Check if planner exists for intake
+        existing = supabase_client.table("study_planners") \
+            .select("id") \
+            .eq("program", data.program) \
+            .eq("major", data.major) \
+            .eq("intake_year", data.intake_year) \
+            .eq("intake_semester", data.intake_semester) \
+            .execute()
+
+        if existing.data:
+            if not data.overwrite:
+                raise HTTPException(
+                    status_code=409,
+                    detail={"message": "A planner for this intake already exists.", "existing": True}
+                )
+            else:
+                existing_id = existing.data[0]["id"]
+                # Delete existing planner units first (due to FK constraints)
+                supabase_client.table("study_planner_units").delete().eq("planner_id", existing_id).execute()
+                # Delete existing planner
+                supabase_client.table("study_planners").delete().eq("id", existing_id).execute()
+
+        # Insert new planner metadata
+        planner_id = str(uuid.uuid4())
+        planner_data = {
+            "id": planner_id,
+            "program": data.program,
+            "major": data.major,
+            "intake_year": data.intake_year,
+            "intake_semester": data.intake_semester
+        }
+        supabase_client.table("study_planners").insert(planner_data).execute()
+
+        # Insert each planner row
+        for row in data.planner:
+            unit = {
+                "id": str(uuid.uuid4()),
+                "planner_id": planner_id,
+                "year": row.year,
+                "semester": row.semester,
+                "unit_code": row.unit_code,
+                "unit_name": row.unit_name,
+                "prerequisites": row.prerequisites,
+                "unit_type": row.unit_type,
+            }
+            supabase_client.table("study_planner_units").insert(unit).execute()
+
+        return {"message": "Study planner created successfully."}
+
+    except HTTPException as http_err:
+        raise http_err
+    except Exception as e:
+        print("Internal Server Error:", str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
