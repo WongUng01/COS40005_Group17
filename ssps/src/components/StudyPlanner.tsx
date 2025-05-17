@@ -97,6 +97,7 @@ const ViewStudyPlannerTabs = () => {
                   intake_semester: planner.intake_semester,
                 },
               });
+
               const sortedUnits = [...res.data.units].sort((a, b) => {
                 if (a.year !== b.year) return a.year - b.year;
                 const semA = semesterOrderMap[a.semester] || 99;
@@ -104,6 +105,7 @@ const ViewStudyPlannerTabs = () => {
                 if (semA !== semB) return semA - semB;
                 return a.unit_code.localeCompare(b.unit_code);
               });
+
               setUnitsMap(prev => ({ ...prev, [planner.id]: sortedUnits }));
             } catch (err) {
               console.error(`Failed to fetch units for planner ${planner.id}`, err);
@@ -203,207 +205,173 @@ const ViewStudyPlannerTabs = () => {
               <tbody>
                 {[...(unitsMap[planner.id] || [])]
                   .sort((a, b) => {
-                    // Sort by year
                     if (a.year !== b.year) return a.year - b.year;
-
-                    // Sort by semester
                     const semesterOrder = ['1', '2', 'Summer', 'Winter'];
                     const semesterIndexA = semesterOrder.indexOf(a.semester);
                     const semesterIndexB = semesterOrder.indexOf(b.semester);
                     if (semesterIndexA !== semesterIndexB) return semesterIndexA - semesterIndexB;
-
-                    // Sort by unit type
                     const typeOrder = ['Major', 'Core', 'Elective', 'MPU', 'WIL'];
                     const typeIndexA = typeOrder.indexOf(a.unit_type);
                     const typeIndexB = typeOrder.indexOf(b.unit_type);
                     return typeIndexA - typeIndexB;
                   })
-                  .map((unit, i) => (
-                    <tr
-                      key={i}
-                      className={classNames(
-                        "hover:bg-opacity-80",
-                        unitTypeColors[unit.unit_type] || "bg-gray-100"
-                      )}
-                    >
-                      <td className="border p-2">
-                        {editPlannerId === planner.id ? (
-                          <select
-                            value={unit.year}
-                            onChange={async (e) => {
-                              const newValue = e.target.value;
-                              // Optimistically update the UI
-                              const updatedUnit = { ...unit, year: newValue };
-                              const newUnits = [...(unitsMap[planner.id] || [])];
-                              newUnits[i] = updatedUnit;
-                              setUnitsMap((prev) => ({ ...prev, [planner.id]: newUnits }));
+                  .map(unit => {
+                    const unitIndex = (unitsMap[planner.id] || []).findIndex(u => u.id === unit.id);
 
-                              try {
-                                // Send the update request to the backend
-                                const response = await axios.put("http://localhost:8000/api/update-study-planner-unit", {
-                                  unit_id: unit.id,
-                                  field: "year",  // Send 'year' as the field to be updated
-                                  value: newValue,  // Send the new year value
-                                });
-
-                                // Check the response status to ensure it's successful
-                                if (response.status < 200 || response.status >= 300) {
-                                  throw new Error("Failed to update year on backend");
-                                }
-
-                                console.log("Year updated successfully");
-                              } catch (err) {
-                                console.error("Failed to update year", err);
-
-                                // Revert to the previous state if backend update fails
-                                newUnits[i] = { ...unit, year: unit.year };  // Revert to original value
-                                setUnitsMap((prev) => ({ ...prev, [planner.id]: newUnits }));
-                              }
-                            }}
-                            className="w-full px-2 py-1 border rounded"
-                          >
-                            {["1", "2", "3", "4"].map((year) => (
-                              <option key={year} value={year}>
-                                Year {year}
-                              </option>
-                            ))}
-                          </select>
-                        ) : (
-                          unit.year
-                        )}
-                      </td>
-
-                      <td className="border p-2">
-                        {editPlannerId === planner.id ? (
-                          <select
-                            value={unit.semester}
-                            onChange={e => {
-                              const newUnits = [...(unitsMap[planner.id] || [])];
-                              newUnits[i] = { ...unit, semester: e.target.value };
-                              setUnitsMap(prev => ({ ...prev, [planner.id]: newUnits }));
-
-                              axios.put("http://localhost:8000/api/update-study-planner-unit", {
-                                unit_id: unit.id,
-                                field: "semester",
-                                value: e.target.value,
-                              }).catch(err => {
-                                console.error("Failed to update semester", err);
-                              });
-                            }}
-                            className="w-full px-2 py-1 border rounded"
-                          >
-                            {["1", "2", "Summer", "Winter"].map(sem => (
-                              <option key={sem} value={sem}>{sem}</option>
-                            ))}
-                          </select>
-                        ) : (
-                          unit.semester
-                        )}
-                      </td>
-
-                      <td className="border p-2">
-                        {editPlannerId === planner.id ? (
-                          <select
-                            value={unit.unit_code}
-                            onChange={async e => {
-                              const selected = allUnits.find(u => u.unit_code === e.target.value);
-
-                              if (!selected) return; // Optional: prevent crash if unit not found
-
-                              const newUnits = [...(unitsMap[planner.id] || [])];
-
-                              const updatedUnit = {
-                                ...unit,
-                                unit_code: selected.unit_code,
-                                unit_name: selected.unit_name,
-                                prerequisites: selected.prerequisites ?? "", // handle null/undefined safely
-                              };
-
-                              newUnits[i] = updatedUnit;
-
-                              setUnitsMap(prev => ({
-                                ...prev,
-                                [planner.id]: newUnits,
-                              }));
-
-                              try {
-                                const response = await axios.put("http://localhost:8000/api/update-study-planner-unit", {
-                                  unit_id: unit.id,
-                                  field: "unit_code",
-                                  value: selected.unit_code,
-                                });
-
-                                if (response.status < 200 || response.status >= 300) {
-                                  throw new Error("Failed to update unit code on backend");
-                                }
-
-                                console.log("Unit code updated successfully");
-                              } catch (err) {
-                                console.error("Failed to update unit code", err);
-
-                                // Revert on failure
-                                newUnits[i] = unit;
-                                setUnitsMap(prev => ({ ...prev, [planner.id]: newUnits }));
-                              }
-                            }}
-                            className="w-full px-2 py-1 border rounded"
-                          >
-                            {allUnits.map(u => (
-                              <option key={u.unit_code} value={u.unit_code}>{u.unit_code}</option>
-                            ))}
-                          </select>
-                        ) : (
-                          displayValue(unit.unit_code)
-                        )}
-                      </td>
-                      <td className="border p-2">{displayValue(unit.unit_name)}</td>
-                      <td className="border p-2">{displayValue(unit.prerequisites)}</td>
-                      {editPlannerId === planner.id && (
+                    return (
+                      <tr
+                        key={unit.id}
+                        className={classNames("hover:bg-opacity-80", unitTypeColors[unit.unit_type] || "bg-gray-100")}
+                      >
                         <td className="border p-2">
-                          <select
-                            value={unit.unit_type}
-                            onChange={async e => {
-                              const newValue = e.target.value;
-
-                              const updatedUnit = { ...unit, unit_type: newValue };
-                              const newUnits = [...(unitsMap[planner.id] || [])];
-                              newUnits[i] = updatedUnit;
-                              setUnitsMap(prev => ({ ...prev, [planner.id]: newUnits }));
-
-                              try {
-                                const response = await axios.put("http://localhost:8000/api/update-study-planner-unit", {
-                                  unit_id: unit.id,
-                                  field: "unit_type",
-                                  value: newValue,
-                                });
-
-                                if (response.status < 200 || response.status >= 300) {
-                                  throw new Error('Failed to update unit type on backend');
+                          {editPlannerId === planner.id ? (
+                            <select
+                              value={unit.year}
+                              onChange={async (e) => {
+                                const newValue = e.target.value;
+                                const updatedUnit = { ...unit, year: newValue };
+                                const newUnits = [...(unitsMap[planner.id] || [])];
+                                newUnits[unitIndex] = updatedUnit;
+                                setUnitsMap((prev) => ({ ...prev, [planner.id]: newUnits }));
+                                try {
+                                  await axios.put("http://localhost:8000/api/update-study-planner-unit", {
+                                    unit_id: unit.id,
+                                    field: "year",
+                                    value: newValue,
+                                  });
+                                } catch (err) {
+                                  console.error("Failed to update year", err);
                                 }
-
-                                console.log('Unit type updated successfully');
-                              } catch (err) {
-                                console.error("Failed to update unit_type", err);
-                                newUnits[i] = { ...unit, unit_type: unit.unit_type };
-                                setUnitsMap(prev => ({ ...prev, [planner.id]: newUnits }));
-                              }
-                            }}
-                            className="w-full px-2 py-1 border rounded"
-                          >
-                            {Object.keys(unitTypeColors).map(type => (
-                              <option key={type} value={type}>{type}</option>
-                            ))}
-                          </select>
+                              }}
+                              className="w-full px-2 py-1 border rounded"
+                            >
+                              {["1", "2", "3", "4"].map((year) => (
+                                <option key={year} value={year}>
+                                  Year {year}
+                                </option>
+                              ))}
+                            </select>
+                          ) : (
+                            unit.year
+                          )}
                         </td>
-                      )}
-                    </tr>
-                  ))}
+
+                        <td className="border p-2">
+                          {editPlannerId === planner.id ? (
+                            <select
+                              value={unit.semester}
+                              onChange={async (e) => {
+                                const newValue = e.target.value;
+                                const updatedUnit = { ...unit, semester: newValue };
+                                const newUnits = [...(unitsMap[planner.id] || [])];
+                                newUnits[unitIndex] = updatedUnit;
+                                setUnitsMap((prev) => ({ ...prev, [planner.id]: newUnits }));
+                                try {
+                                  await axios.put("http://localhost:8000/api/update-study-planner-unit", {
+                                    unit_id: unit.id,
+                                    field: "semester",
+                                    value: newValue,
+                                  });
+                                } catch (err) {
+                                  console.error("Failed to update semester", err);
+                                }
+                              }}
+                              className="w-full px-2 py-1 border rounded"
+                            >
+                              {["1", "2", "Summer", "Winter"].map((sem) => (
+                                <option key={sem} value={sem}>
+                                  {sem}
+                                </option>
+                              ))}
+                            </select>
+                          ) : (
+                            unit.semester
+                          )}
+                        </td>
+
+                        <td className="border p-2">
+                          {editPlannerId === planner.id ? (
+                            <select
+                              value={unit.unit_code}
+                              onChange={async (e) => {
+                                const newCode = e.target.value;
+                                const selectedUnit = allUnits.find(u => u.unit_code === newCode);
+                                const updatedUnit = {
+                                  ...unit,
+                                  unit_code: selectedUnit?.unit_code || newCode,
+                                  unit_name: selectedUnit?.unit_name || "",
+                                  prerequisites: selectedUnit?.prerequisites || "",
+                                  unit_type: selectedUnit?.unit_type || "Elective",
+                                };
+                                const newUnits = [...(unitsMap[planner.id] || [])];
+                                newUnits[unitIndex] = updatedUnit;
+                                setUnitsMap((prev) => ({ ...prev, [planner.id]: newUnits }));
+
+                                try {
+                                  await axios.put("http://localhost:8000/api/update-study-planner-unit", {
+                                    unit_id: unit.id,
+                                    field: "unit_code",
+                                    value: newCode,
+                                  });
+                                } catch (err) {
+                                  console.error("Failed to update unit code", err);
+                                }
+                              }}
+                              className="w-full px-2 py-1 border rounded"
+                            >
+                              {allUnits.map((u) => (
+                                <option key={u.unit_code} value={u.unit_code}>
+                                  {u.unit_code}
+                                </option>
+                              ))}
+                            </select>
+                          ) : (
+                            unit.unit_code
+                          )}
+                        </td>
+
+                        <td className="border p-2">{displayValue(unit.unit_name)}</td>
+                        <td className="border p-2">{displayValue(unit.prerequisites)}</td>
+
+                        {editPlannerId === planner.id && (
+                          <td className="border p-2">
+                            <select
+                              value={unit.unit_type}
+                              onChange={async (e) => {
+                                const newValue = e.target.value;
+                                const updatedUnit = { ...unit, unit_type: newValue };
+                                const newUnits = [...(unitsMap[planner.id] || [])];
+                                newUnits[unitIndex] = updatedUnit;
+                                setUnitsMap((prev) => ({ ...prev, [planner.id]: newUnits }));
+                                try {
+                                  await axios.put("http://localhost:8000/api/update-study-planner-unit", {
+                                    unit_id: unit.id,
+                                    field: "unit_type",
+                                    value: newValue,
+                                  });
+                                } catch (err) {
+                                  console.error("Failed to update unit type", err);
+                                }
+                              }}
+                              className="w-full px-2 py-1 border rounded"
+                            >
+                              {["Major", "Core", "Elective", "MPU", "WIL"].map((type) => (
+                                <option key={type} value={type}>
+                                  {type}
+                                </option>
+                              ))}
+                            </select>
+                          </td>
+                        )}
+                      </tr>
+                    );
+                  })}
               </tbody>
             </table>
           </div>
         ))
       ) : (
-        <p className="text-gray-600">No planners match the selected filters.</p>
+        <p>No planners found for the selected filters.</p>
       )}
     </div>
   );
