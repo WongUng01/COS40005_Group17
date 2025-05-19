@@ -1,3 +1,4 @@
+// students/page.tsx
 'use client';
 
 import Sidebar from '../../components/Sidebar';

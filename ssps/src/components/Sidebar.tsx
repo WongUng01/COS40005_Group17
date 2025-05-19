@@ -16,7 +16,8 @@ const navItems = [
   { label: 'Dashboard', href: '/dashboard', icon: <FaTachometerAlt /> },
   { label: 'Units', href: '/units', icon: <FaBook /> },
   { label: 'Study Planner', href: '/study-planner', icon: <FaClipboardList /> },
-  { label: 'Students', href: '/students', icon: <FaClipboardList /> }
+  { label: 'Students', href: '/students', icon: <FaClipboardList /> },
+  { label: 'Students_Unit', href: '/student_units', icon: <FaClipboardList /> }
 ];
 
 export default function Sidebar() {

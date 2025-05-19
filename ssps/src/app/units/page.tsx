@@ -4,31 +4,38 @@ import { useEffect, useState } from 'react';
 
 type Unit = {
   id: number;
-  courseId: string;
-  courseName: string;
-  creditHours: number;
-  faculty: string;
-  prequisites: string;
+  unit_code: string;
+  unit_name: string;
+  prerequisites: string;
+  concurrent_prerequisites: string;
+  offered_terms: string;
+  credit_point: number;
 };
 
 export default function Units() {
   const [units, setUnits] = useState<Unit[]>([]);
-  const [courseId, setCourseId] = useState('');
-  const [courseName, setCourseName] = useState('');
-  const [creditHours, setCreditHours] = useState<number | ''>('');
-  const [faculty, setFaculty] = useState('');
-  const [prequisites, setPrequisites] = useState('');
+  const [unitCode, setUnitCode] = useState('');
+  const [unitName, setUnitName] = useState('');
+  const [prerequisites, setPrerequisites] = useState('');
+  const [concurrentPrerequisites, setConcurrentPrerequisites] = useState('');
+  const [offeredTerms, setOfferedTerms] = useState('');
+  const [creditPoint, setCreditPoint] = useState<number | ''>('');
   const [editing, setEditing] = useState<number | null>(null);
-  const [newCourseName, setNewCourseName] = useState('');
-  const [newCreditHours, setNewCreditHours] = useState<number | ''>('');
-  const [newFaculty, setNewFaculty] = useState('');
-  const [newPrequisites, setNewPrequisites] = useState('');
+  const [newUnitName, setNewUnitName] = useState('');
+  const [newPrerequisites, setNewPrerequisites] = useState('');
+  const [newConcurrentPrerequisites, setNewConcurrentPrerequisites] = useState('');
+  const [newOfferedTerms, setNewOfferedTerms] = useState('');
+  const [newCreditPoint, setNewCreditPoint] = useState<number | ''>('');
 
-  const API = 'http://localhost:8000';
+  const validateUnit = () => {
+    return unitCode && unitName && creditPoint !== '';
+  };
 
   useEffect(() => {
     fetchUnits();
   }, []);
+
+  const API = 'http://localhost:8000';
 
   const fetchUnits = async () => {
     try {
@@ -40,10 +47,6 @@ export default function Units() {
     }
   };
 
-  const validateUnit = () => {
-    return courseId && courseName && creditHours !== '' && faculty;
-  };
-
   const addUnit = async () => {
     if (!validateUnit()) return;
 
@@ -51,11 +54,12 @@ export default function Units() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        courseId,
-        courseName,
-        creditHours,
-        faculty,
-        prequisites
+        unit_code: unitCode,
+        unit_name: unitName,
+        prerequisites,
+        concurrent_prerequisites: concurrentPrerequisites,
+        offered_terms: offeredTerms,
+        credit_point: creditPoint
       }),
     });
 
@@ -63,17 +67,24 @@ export default function Units() {
     fetchUnits();
   };
 
+  
+  const deleteUnit = async (id: number) => {
+    await fetch(`${API}/units/${id}`, { method: 'DELETE' });
+    fetchUnits();
+  };
+
   const updateUnit = async (id: number) => {
-    if (!newCourseName || newCreditHours === '' || !newFaculty) return;
+    if (!newUnitName || newCreditPoint === '') return;
 
     await fetch(`${API}/units/${id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        courseName: newCourseName,
-        creditHours: newCreditHours,
-        faculty: newFaculty,
-        prequisites: newPrequisites
+        unit_name: newUnitName,
+        prerequisites: newPrerequisites,
+        concurrent_prerequisites: newConcurrentPrerequisites,
+        offered_terms: newOfferedTerms,
+        credit_point: newCreditPoint
       }),
     });
 
@@ -81,25 +92,22 @@ export default function Units() {
     fetchUnits();
   };
 
-  const deleteUnit = async (id: number) => {
-    await fetch(`${API}/units/${id}`, { method: 'DELETE' });
-    fetchUnits();
-  };
-
   const resetForm = () => {
-    setCourseId('');
-    setCourseName('');
-    setCreditHours('');
-    setFaculty('');
-    setPrequisites('');
+    setUnitCode('');
+    setUnitName('');
+    setPrerequisites('');
+    setConcurrentPrerequisites('');
+    setOfferedTerms('');
+    setCreditPoint('');
   };
 
   const resetEditForm = () => {
     setEditing(null);
-    setNewCourseName('');
-    setNewCreditHours('');
-    setNewFaculty('');
-    setNewPrequisites('');
+    setNewUnitName('');
+    setNewPrerequisites('');
+    setNewConcurrentPrerequisites('');
+    setNewOfferedTerms('');
+    setNewCreditPoint('');
   };
 
   return (
@@ -107,36 +115,43 @@ export default function Units() {
       <h1 className="text-3xl font-bold text-center text-blue-700 mb-6">📚 Manage Units</h1>
 
       {/* Add Unit Form */}
-      <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
+      <div className="grid grid-cols-1 md:grid-cols-6 gap-4 mb-6">
         <input
-          value={courseId}
-          onChange={(e) => setCourseId(e.target.value)}
-          placeholder="Course ID"
+          value={unitCode}
+          onChange={(e) => setUnitCode(e.target.value)}
+          placeholder="Unit Code"
           className="px-4 py-2 border rounded-md"
         />
         <input
-          value={courseName}
-          onChange={(e) => setCourseName(e.target.value)}
-          placeholder="Course Name"
+          value={unitName}
+          onChange={(e) => setUnitName(e.target.value)}
+          placeholder="Unit Name"
           className="px-4 py-2 border rounded-md"
         />
         <input
           type="number"
-          value={creditHours}
-          onChange={(e) => setCreditHours(Number(e.target.value) || '')}
-          placeholder="Credit Hours"
+          step="0.5"
+          value={creditPoint}
+          onChange={(e) => setCreditPoint(Number(e.target.value) || '')}
+          placeholder="Credit Points"
           className="px-4 py-2 border rounded-md"
         />
         <input
-          value={faculty}
-          onChange={(e) => setFaculty(e.target.value)}
-          placeholder="Faculty"
+          value={prerequisites}
+          onChange={(e) => setPrerequisites(e.target.value)}
+          placeholder="Prerequisites"
           className="px-4 py-2 border rounded-md"
         />
         <input
-          value={prequisites}
-          onChange={(e) => setPrequisites(e.target.value)}
-          placeholder="Prerequisites (comma separated)"
+          value={concurrentPrerequisites}
+          onChange={(e) => setConcurrentPrerequisites(e.target.value)}
+          placeholder="Concurrent Prerequisites"
+          className="px-4 py-2 border rounded-md"
+        />
+        <input
+          value={offeredTerms}
+          onChange={(e) => setOfferedTerms(e.target.value)}
+          placeholder="Offered Terms"
           className="px-4 py-2 border rounded-md"
         />
       </div>
@@ -155,24 +170,24 @@ export default function Units() {
         <table className="min-w-full table-auto">
           <thead>
             <tr className="bg-blue-100">
-              <th className="px-4 py-2 text-left">Course ID</th>
-              <th className="px-4 py-2 text-left">Course Name</th>
-              <th className="px-4 py-2 text-left">Credits</th>
-              <th className="px-4 py-2 text-left">Faculty</th>
+              <th className="px-4 py-2 text-left">Unit Code</th>
+              <th className="px-4 py-2 text-left">Unit Name</th>
+              <th className="px-4 py-2 text-left">Credit Points</th>
               <th className="px-4 py-2 text-left">Prerequisites</th>
+              <th className="px-4 py-2 text-left">Concurrent Prerequisites</th>
+              <th className="px-4 py-2 text-left">Offered Terms</th>
               <th className="px-4 py-2 text-left">Actions</th>
             </tr>
           </thead>
           <tbody>
             {units.map((unit) => (
               <tr key={unit.id} className="border-b">
-                <td className="px-4 py-2">{unit.courseId}</td>
-                <td className="px-4 py-2">{unit.courseName}</td>
-                <td className="px-4 py-2">{unit.creditHours}</td>
-                <td className="px-4 py-2">{unit.faculty}</td>
+                <td className="px-4 py-2">{unit.unit_code}</td>
+                <td className="px-4 py-2">{unit.unit_name}</td>
+                <td className="px-4 py-2">{unit.credit_point}</td>
                 <td className="px-4 py-2">
-                  {unit.prequisites ? (
-                    unit.prequisites
+                  {unit.prerequisites ? (
+                    unit.prerequisites
                       .split(',')
                       .filter(Boolean)
                       .map((preq, i) => (
@@ -180,8 +195,36 @@ export default function Units() {
                           {preq.trim()}
                         </span>
                       ))
-                    ) : (
-                      <span className="text-gray-400">No prerequisites</span>
+                  ) : (
+                    <span className="text-gray-400">None</span>
+                  )}
+                </td>
+                <td className="px-4 py-2">
+                  {unit.concurrent_prerequisites ? (
+                    unit.concurrent_prerequisites
+                      .split(',')
+                      .filter(Boolean)
+                      .map((preq, i) => (
+                        <span key={i} className="bg-gray-100 px-2 py-1 rounded mr-1 mb-1">
+                          {preq.trim()}
+                        </span>
+                      ))
+                  ) : (
+                    <span className="text-gray-400">None</span>
+                  )}
+                </td>
+                <td className="px-4 py-2">
+                  {unit.offered_terms ? (
+                    unit.offered_terms
+                      .split(',')
+                      .filter(Boolean)
+                      .map((term, i) => (
+                        <span key={i} className="bg-gray-100 px-2 py-1 rounded mr-1 mb-1">
+                          {term.trim()}
+                        </span>
+                      ))
+                  ) : (
+                    <span className="text-gray-400">None</span>
                   )}
                 </td>
                 <td className="px-4 py-2">
@@ -189,10 +232,11 @@ export default function Units() {
                     <button
                       onClick={() => {
                         setEditing(unit.id);
-                        setNewCourseName(unit.courseName);
-                        setNewCreditHours(unit.creditHours);
-                        setNewFaculty(unit.faculty);
-                        setNewPrequisites(unit.prequisites);
+                        setNewUnitName(unit.unit_name);
+                        setNewPrerequisites(unit.prerequisites);
+                        setNewConcurrentPrerequisites(unit.concurrent_prerequisites);
+                        setNewOfferedTerms(unit.offered_terms);
+                        setNewCreditPoint(unit.credit_point);
                       }}
                       className="text-blue-600 hover:text-blue-800"
                     >
@@ -218,28 +262,35 @@ export default function Units() {
           <h3 className="text-xl font-semibold text-blue-700">Edit Unit</h3>
           <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mt-4">
             <input
-              value={newCourseName}
-              onChange={(e) => setNewCourseName(e.target.value)}
-              placeholder="Course Name"
+              value={newUnitName}
+              onChange={(e) => setNewUnitName(e.target.value)}
+              placeholder="Unit Name"
               className="px-4 py-2 border rounded-md"
             />
             <input
               type="number"
-              value={newCreditHours}
-              onChange={(e) => setNewCreditHours(Number(e.target.value) || '')}
-              placeholder="Credit Hours"
+              step="0.5"
+              value={newCreditPoint}
+              onChange={(e) => setNewCreditPoint(Number(e.target.value) || '')}
+              placeholder="Credit Points"
               className="px-4 py-2 border rounded-md"
             />
             <input
-              value={newFaculty}
-              onChange={(e) => setNewFaculty(e.target.value)}
-              placeholder="Faculty"
+              value={newPrerequisites}
+              onChange={(e) => setNewPrerequisites(e.target.value)}
+              placeholder="Prerequisites"
               className="px-4 py-2 border rounded-md"
             />
             <input
-              value={newPrequisites}
-              onChange={(e) => setNewPrequisites(e.target.value)}
-              placeholder="Prerequisites (comma separated)"
+              value={newConcurrentPrerequisites}
+              onChange={(e) => setNewConcurrentPrerequisites(e.target.value)}
+              placeholder="Concurrent Prerequisites"
+              className="px-4 py-2 border rounded-md"
+            />
+            <input
+              value={newOfferedTerms}
+              onChange={(e) => setNewOfferedTerms(e.target.value)}
+              placeholder="Offered Terms"
               className="px-4 py-2 border rounded-md"
             />
           </div>
