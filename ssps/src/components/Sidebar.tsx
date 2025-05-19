@@ -17,12 +17,12 @@ import {
 } from 'react-icons/fa';
 
 const navItems = [
-  { label: 'Dashboard', href: '/dashboard', icon: <FaTachometerAlt /> },
+  // { label: 'Dashboard', href: '/dashboard', icon: <FaTachometerAlt /> },
   { label: 'Units', href: '/units', icon: <FaBook /> },
   { label: 'Upload Study Planner', href: '/study-planner-upload', icon: <FaFileUpload /> },
   { label: 'Create Study Planner', href: '/create-study-planner', icon: <FaClipboardList /> },
   { label: 'View Study Planner', href: '/study-planner', icon: <FaEye /> },
-  { label: 'Student', href: '/student', icon: <FaUserGraduate /> }
+  { label: 'Students', href: '/students', icon: <FaUserGraduate /> },
 ];
 
 export default function Sidebar() {
@@ -55,13 +55,13 @@ export default function Sidebar() {
 
           {showProfileMenu && (
             <div className="absolute left-16 top-0 bg-white border rounded-md shadow-md p-2 z-10 w-36">
-              <Link
+              {/* <Link
                 href="/profile"
                 className="flex items-center gap-2 p-2 text-sm text-gray-700 hover:bg-gray-100 rounded"
               >
                 <FaCog className="text-xs" />
-                Settings
-              </Link>
+                Settings  
+              </Link> */}
               <button
                 onClick={handleLogout}
                 className="flex items-center gap-2 p-2 text-sm text-red-600 hover:bg-gray-100 w-full text-left rounded"
