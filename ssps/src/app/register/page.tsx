@@ -34,7 +34,7 @@ const RegisterPage = () => {
     if (userId) {
       const { error: insertError } = await supabase
         .from('users')
-        .insert([{ id: userId, email, full_name: fullName }]);
+        .insert([{ id: userId, email, full_name: fullName}]);
 
       if (insertError) {
         setError(insertError.message);
@@ -43,7 +43,8 @@ const RegisterPage = () => {
       }
     }
 
-    router.push('/'); // Redirect to login page after successful registration
+    setLoading(false);
+    router.push('/'); // Redirect to login page
   };
 
   return (
@@ -64,11 +65,11 @@ const RegisterPage = () => {
             <input
               type="email"
               id="email"
-              className="mt-1 w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
               placeholder="you@example.com"
+              className="mt-1 w-full px-4 py-2 border border-gray-300 rounded-md"
             />
           </div>
 
@@ -79,11 +80,11 @@ const RegisterPage = () => {
             <input
               type="text"
               id="fullName"
-              className="mt-1 w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               value={fullName}
               onChange={(e) => setFullName(e.target.value)}
               required
               placeholder="John Doe"
+              className="mt-1 w-full px-4 py-2 border border-gray-300 rounded-md"
             />
           </div>
 
@@ -94,18 +95,18 @@ const RegisterPage = () => {
             <input
               type="password"
               id="password"
-              className="mt-1 w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
               placeholder="••••••••"
+              className="mt-1 w-full px-4 py-2 border border-gray-300 rounded-md"
             />
           </div>
 
           <button
             type="submit"
-            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-md transition duration-300"
             disabled={loading}
+            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-md"
           >
             {loading ? 'Registering...' : 'Register'}
           </button>
