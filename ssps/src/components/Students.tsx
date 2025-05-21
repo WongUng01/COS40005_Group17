@@ -20,11 +20,11 @@ type Student = {
   created_at: string;
 };
 
-const MAX_FILE_SIZE_MB = 10;
-const SUPPORTED_TYPES = [
-  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-  'application/vnd.ms-excel'
-];
+// const MAX_FILE_SIZE_MB = 10;
+// const SUPPORTED_TYPES = [
+//   'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+//   'application/vnd.ms-excel'
+// ];
 
 export default function StudentsPage() {
   const [students, setStudents] = useState<Student[]>([]);
@@ -219,8 +219,12 @@ const handleFileUpload = async (
       });
       setEditingId(null);
       await fetchStudents();
-    } catch (err: any) {
-      alert(err.message);
+    } catch (err: unknown) {
+      if (err instanceof Error) {
+        alert(err.message);
+      } else {
+        alert('An unknown error occurred');
+      }
     }
   };
 
@@ -231,6 +235,7 @@ const handleFileUpload = async (
       await fetch(`${API_URL}/students/${id}`, { method: 'DELETE' });
       await fetchStudents();
     } catch (err) {
+      console.error(err);
       alert('Failed to delete student');
     }
   };

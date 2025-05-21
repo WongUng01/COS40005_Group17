@@ -1,8 +1,8 @@
 "use client";
 
 import React, { useState, useRef } from "react";
-import axios from "axios";
 import toast from "react-hot-toast";
+import axios, { AxiosError } from "axios";
 
 const UploadStudyPlanner = () => {
   const [file, setFile] = useState<File | null>(null);
@@ -35,8 +35,20 @@ const UploadStudyPlanner = () => {
     ],
   };
 
+  const selectedMajors = majors[program as keyof typeof majors];
+
   const years = ["2026", "2025", "2024", "2023", "2022", "2021"];
   const semesters = ["Feb/Mar", "Aug/Sep"];
+
+  type UploadErrorDetail = {
+    existing?: boolean;
+    message?: string;
+  };
+
+  type UploadErrorResponse = {
+    detail?: string | UploadErrorDetail;
+  };
+
 
   const handleUpload = async (overwrite = false) => {
     if (!file || !program || !major || !intakeYear || !intakeSemester) {
@@ -66,9 +78,18 @@ const UploadStudyPlanner = () => {
       setIntakeSemester("");
       if (fileInputRef.current) fileInputRef.current.value = "";
 
-    } catch (err: any) {
-      if (err.response?.status === 409 && err.response.data?.detail?.existing) {
-        const confirm = window.confirm("A planner for this intake already exists. Do you want to overwrite it?");
+    } catch (err: unknown) {
+      const axiosError = err as AxiosError<UploadErrorResponse>;
+      const data = axiosError.response?.data;
+
+      if (
+        axiosError.response?.status === 409 &&
+        typeof data?.detail === "object" &&
+        (data.detail as UploadErrorDetail).existing
+      ) {
+        const confirm = window.confirm(
+          "A planner for this intake already exists. Do you want to overwrite it?"
+        );
         if (confirm) {
           await handleUpload(true); // retry
           return;
@@ -78,16 +99,15 @@ const UploadStudyPlanner = () => {
         }
       }
 
-      const detail = err.response?.data?.detail;
+      const detail = data?.detail;
       const errorMessage =
         typeof detail === "string"
           ? detail
           : typeof detail === "object"
           ? detail.message || JSON.stringify(detail)
-          : err.message;
+          : axiosError.message;
 
       toast.error(`Upload failed: ${errorMessage}`);
-
     } finally {
       setLoading(false);
     }
@@ -126,10 +146,10 @@ const UploadStudyPlanner = () => {
         value={major}
         onChange={(e) => setMajor(e.target.value)}
         className="border p-2 w-full rounded"
-        disabled={majors[program]?.length === 0}
+        disabled={!selectedMajors || selectedMajors.length === 0}
       >
         <option value="">Select Major</option>
-        {majors[program]?.map((m) => (
+        {selectedMajors?.map((m) => (
           <option key={m} value={m}>
             {m}
           </option>
@@ -162,8 +182,8 @@ const UploadStudyPlanner = () => {
         ))}
       </select>
 
-      <button
-        onClick={handleUpload}
+      <button 
+        onClick={() => handleUpload()}
         className={`w-full py-2 rounded flex items-center justify-center transition duration-200 ${
           loading || !isFormValid
             ? "bg-gray-300 text-gray-500 cursor-not-allowed"

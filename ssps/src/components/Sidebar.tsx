@@ -5,12 +5,12 @@ import { usePathname, useRouter } from 'next/navigation';
 import { supabase } from '../lib/supabaseClient';
 import { useState } from 'react';
 import {
-  FaTachometerAlt,
+  // FaTachometerAlt,
   FaBook,
   FaClipboardList,
   FaUserCircle,
   FaSignOutAlt,
-  FaCog,
+  // FaCog,
   FaUserGraduate, 
   FaFileUpload, 
   FaEye,

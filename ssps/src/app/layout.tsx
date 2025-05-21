@@ -1,7 +1,6 @@
 // layout.tsx
 import type { Metadata } from "next";
 import "@/styles/globals.css";
-import Footer from "@/components/Footer";
 import { Providers } from "./providers";
 
 export const metadata: Metadata = {

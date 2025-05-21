@@ -53,12 +53,32 @@ const CreateStudyPlanner = () => {
   const unitTypes = ["Major", "Core", "Elective", "MPU", "WIL"];
   const studyYears = ["1", "2", "3", "4"];
 
+  interface AxiosError {
+    response?: {
+      status?: number;
+      data?: {
+        detail?: {
+          existing?: boolean;
+        };
+      };
+    };
+  }
+
+  const isAxiosError = (error: unknown): error is AxiosError => {
+    return (
+      typeof error === "object" &&
+      error !== null &&
+      "response" in error
+    );
+  };
+
+
   useEffect(() => {
     const fetchUnits = async () => {
       try {
         const res = await axios.get<Unit[]>("http://localhost:8000/api/units");
         setUnits(res.data);
-      } catch (err) {
+      } catch {
         toast.error("Failed to fetch units.");
       }
     };
@@ -126,8 +146,12 @@ const CreateStudyPlanner = () => {
 
       toast.success("Study planner saved.");
       setPlannerRows([]);
-    } catch (err: any) {
-      if (err.response?.status === 409 && err.response.data?.detail?.existing) {
+    } catch (error: unknown) {
+      if (
+        isAxiosError(error) &&
+        error.response?.status === 409 &&
+        error.response.data?.detail?.existing
+      ) {
         const confirm = window.confirm("Planner already exists. Overwrite?");
         if (confirm) await handleSave(true);
         else toast("Save canceled.");
@@ -135,7 +159,7 @@ const CreateStudyPlanner = () => {
       }
 
       toast.error("Failed to save planner.");
-    } finally {
+    }finally {
       setLoading(false);
     }
   };
