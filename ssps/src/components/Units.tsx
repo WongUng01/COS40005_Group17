@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { supabase } from '../lib/supabaseClient';
 
 type Unit = {
   id: number;
@@ -38,13 +39,9 @@ export default function Units() {
   const API = 'http://localhost:8000';
 
   const fetchUnits = async () => {
-    try {
-      const res = await fetch(`${API}/units`);
-      const data = await res.json();
-      setUnits(Array.isArray(data) ? data : []);
-    } catch (err) {
-      console.error('Fetch error:', err);
-    }
+    const { data, error } = await supabase.from('units').select('*');
+    if (error) console.error(error);
+    else setUnits(data);
   };
 
   const addUnit = async () => {
