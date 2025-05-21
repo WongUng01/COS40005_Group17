@@ -25,7 +25,7 @@ const ProtectedRoute = ({ children }: ProtectedRouteProps) => {
     checkAuth();
   }, [router]);
 
-  if (loading) return <div className="p-6">Checking authentication...</div>;
+  if (loading) return <div className="p-6"></div>;
 
   return <>{children}</>;
 };

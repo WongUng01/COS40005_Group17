@@ -21,7 +21,7 @@ const LoginPage = () => {
     if (error) {
       alert('Login failed: ' + error.message);
     } else {
-      router.push('/dashboard'); // Change this to your post-login page
+      router.push('/units'); // Change this to your post-login page
     }
 
     setLoading(false);
