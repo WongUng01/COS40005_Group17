@@ -19,16 +19,10 @@ import {
 const navItems = [
   // { label: 'Dashboard', href: '/dashboard', icon: <FaTachometerAlt /> },
   { label: 'Units', href: '/units', icon: <FaBook /> },
-<<<<<<< HEAD
-  { label: 'Study Planner', href: '/study-planner', icon: <FaClipboardList /> },
-  { label: 'Students', href: '/students', icon: <FaClipboardList /> },
-  { label: 'Students_Unit', href: '/student_units', icon: <FaClipboardList /> }
-=======
   { label: 'Upload Study Planner', href: '/study-planner-upload', icon: <FaFileUpload /> },
   { label: 'Create Study Planner', href: '/create-study-planner', icon: <FaClipboardList /> },
   { label: 'View Study Planner', href: '/study-planner', icon: <FaEye /> },
   { label: 'Students', href: '/students', icon: <FaUserGraduate /> },
->>>>>>> main
 ];
 
 export default function Sidebar() {

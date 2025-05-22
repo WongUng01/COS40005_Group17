@@ -1,14 +1,9 @@
-<<<<<<< HEAD
-
-=======
->>>>>>> main
-//student page
+// Student Page
 'use client';
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import axios from 'axios';
 import toast from 'react-hot-toast';
-
 
 type Student = {
   id: number;
@@ -24,19 +19,11 @@ type Student = {
   created_at: string;
 };
 
-<<<<<<< HEAD
 const MAX_FILE_SIZE_MB = 10;
 const SUPPORTED_TYPES = [
   'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
   'application/vnd.ms-excel'
 ];
-=======
-// const MAX_FILE_SIZE_MB = 10;
-// const SUPPORTED_TYPES = [
-//   'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-//   'application/vnd.ms-excel'
-// ];
->>>>>>> main
 
 export default function StudentsPage() {
   const [students, setStudents] = useState<Student[]>([]);
@@ -58,149 +45,145 @@ export default function StudentsPage() {
     fetchStudents();
   }, []);
 
-  
+  // Check graduation eligibility for a student
+  const checkGraduation = async (studentId: number) => {
+    try {
+      const response = await axios.put(`${API_URL}/students/${studentId}/graduate`);
+      const result = response.data;
 
-const checkGraduation = async (studentId: number) => {
-  try {
-    const response = await axios.put(
-      `${API_URL}/students/${studentId}/graduate`
-    );
-    const result = response.data;
+      // Refresh student list
+      await fetchStudents();
 
-    // Refresh student list
-    await fetchStudents();
+      if (result.can_graduate) {
+        alert(`✅ Graduation Approved!\n
+          Total Credits: ${result.total_credits}/300\n
+          Core Units Completed: ${result.core_completed}/${result.core_completed + result.missing_core_units.length}\n
+          Major Units Completed: ${result.major_completed}/${result.major_completed + result.missing_major_units.length}`);
+      } else {
+        let message = `❌ Not Eligible\nCredits: ${result.total_credits}/300`;
+        
+        if (result.missing_core_units.length > 0) {
+          message += `\nMissing Core: ${result.missing_core_units.join(', ')}`;
+        }
+        
+        if (result.missing_major_units.length > 0) {
+          message += `\nMissing Major: ${result.missing_major_units.join(', ')}`;
+        }
 
-    if (result.can_graduate) {
-      alert(`✅ Graduation Approved!\n
-        Total Credits: ${result.total_credits}/300\n
-        Core Units Completed: ${result.core_completed}/${result.core_completed + result.missing_core_units.length}\n
-        Major Units Completed: ${result.major_completed}/${result.major_completed + result.missing_major_units.length}`);
-    } else {
-      let message = `❌ Not Eligible\nCredits: ${result.total_credits}/300`;
+        alert(message);
+      }
+    } catch (err) {
+      let errorMessage = 'Error checking graduation status';
       
-      if (result.missing_core_units.length > 0) {
-        message += `\nMissing Core: ${result.missing_core_units.join(', ')}`;
+      if (axios.isAxiosError(err)) {
+        errorMessage = err.response?.data?.detail || err.message;
+        
+        if (err.response?.status === 400) {
+          errorMessage += "\n(Please check the study plan)";
+        }
       }
       
-      if (result.missing_major_units.length > 0) {
-        message += `\nMissing Major: ${result.missing_major_units.join(', ')}`;
+      alert(errorMessage);
+    }
+  };
+
+  // Handle file upload (Excel) for unit records
+  const handleFileUpload = async (
+    e: React.ChangeEvent<HTMLInputElement>,
+    studentId: number
+  ) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      // 1. Ensure the student exists
+      const studentCheck = await axios.get(`${API_URL}/students/${studentId}`);
+      if (!studentCheck.data) {
+        toast.error('Student does not exist. Please create the profile first.');
+        return;
       }
 
-      alert(message);
-    }
-  } catch (err) {
-    let errorMessage = 'Error checking graduation status';
-    
-    if (axios.isAxiosError(err)) {
-      errorMessage = err.response?.data?.detail || err.message;
+      // 2. Validate file type and size
+      if (!file.name.match(/\.(xlsx|xls)$/i)) {
+        toast.error('Only Excel files are supported.');
+        return;
+      }
+
+      if (file.size > MAX_FILE_SIZE_MB * 1024 * 1024) {
+        toast.error('File exceeds 10MB size limit.');
+        return;
+      }
+
+      // 3. Upload file
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('overwrite', 'true');
+
+      const response = await axios.post(
+        `${API_URL}/students/${studentId}/upload-units`,
+        formData,
+        { headers: { 'Content-Type': 'multipart/form-data' }, timeout: 30000 }
+      );
+
+      toast.success(response.data.message);
+      await fetchStudents();
+    } catch (err) {
+      let errorMessage = 'Upload failed';
       
-      if (err.response?.status === 400) {
-        errorMessage += "\n(Please check your study plan)";
+      if (axios.isAxiosError(err)) {
+        errorMessage = err.response?.data?.detail || err.message;
+
+        if (err.response?.status === 404) {
+          errorMessage = 'Associated student not found';
+        } else if (err.response?.status === 400) {
+          errorMessage = 'Invalid data format';
+        }
       }
+
+      toast.error(errorMessage);
+    } finally {
+      e.target.value = '';
     }
-    
-    alert(errorMessage);
-  }
-};
+  };
 
-  // 在StudentsPage组件中添加处理函数
-const handleFileUpload = async (
-  e: React.ChangeEvent<HTMLInputElement>,
-  studentId: number
-) => {
-  const file = e.target.files?.[0];
-  if (!file) return;
-
-  try {
-    // 1. Validate student exists
-    const studentCheck = await axios.get(`${API_URL}/students/${studentId}`);
-    if (!studentCheck.data) {
-      toast.error('学生不存在，请先创建学生档案');
-      return;
-    }
-
-    // 2. Validate file
-    if (!file.name.match(/\.(xlsx|xls)$/i)) {
-      toast.error('仅支持 Excel 文件');
-      return;
-    }
-
-    if (file.size > 10 * 1024 * 1024) {
-      toast.error('文件大小超过 10MB 限制');
-      return;
-    }
-
-    // 3. Proceed with upload
-    const formData = new FormData();
-    formData.append('file', file);
-    formData.append('overwrite', 'true');
-
-    const response = await axios.post(
-      `${API_URL}/students/${studentId}/upload-units`,
-      formData,
-      { headers: { 'Content-Type': 'multipart/form-data' }, timeout: 30000 }
-    );
-
-    toast.success(response.data.message);
-    await fetchStudents();
-  } catch (err) {
-    let errorMessage = '上传失败';
-    
-    if (axios.isAxiosError(err)) {
-      errorMessage = err.response?.data?.detail || err.message;
-      
-      // Handle specific error codes
-      if (err.response?.status === 404) {
-        errorMessage = '关联学生不存在';
-      } else if (err.response?.status === 400) {
-        errorMessage = '数据格式错误';
-      }
-    }
-    
-    toast.error(errorMessage);
-  } finally {
-    e.target.value = '';
-  }
-};
-
+  // Fetch all students from backend
   const fetchStudents = async () => {
     try {
       const res = await fetch(`${API_URL}/students`);
       const data = await res.json();
-  
+
       if (!res.ok) {
         console.error('Failed to load students:', data);
         return;
       }
-  
+
       setStudents(data);
     } catch (err) {
-    let errorMessage = 'Upload failed';
-    
-    if (axios.isAxiosError(err)) {
-      // Handle Chinese error messages
-      const serverMessage = err.response?.data?.detail || 
-                           (typeof err.response?.data === 'string' ? err.response.data : '');
-      
-      // Special handling for file validation errors
-      if (err.response?.status === 413) {
-        errorMessage = '文件过大：请上传小于10MB的文件';
-      } else if (err.response?.status === 400) {
-        errorMessage = '文件类型错误：仅支持Excel文件';
-      } else {
-        errorMessage = `上传失败：${serverMessage || '未知错误'}`;
+      let errorMessage = 'Failed to load students';
+
+      if (axios.isAxiosError(err)) {
+        const serverMessage = err.response?.data?.detail || 
+                             (typeof err.response?.data === 'string' ? err.response.data : '');
+
+        if (err.response?.status === 413) {
+          errorMessage = 'File too large: Please upload a file smaller than 10MB';
+        } else if (err.response?.status === 400) {
+          errorMessage = 'Unsupported file type: Only Excel files allowed';
+        } else {
+          errorMessage = `Failed to load: ${serverMessage || 'Unknown error'}`;
+        }
+
+        console.error('Error Details:', {
+          status: err.response?.status,
+          error: err.response?.data
+        });
       }
 
-      console.error('Error Details:', {
-        status: err.response?.status,
-        error: err.response?.data
-      });
+      toast.error(errorMessage);
     }
-    
-    toast.error(errorMessage);
-  }
-};
+  };
 
+  // Handle form submission to add or update a student
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const url = editingId ? `${API_URL}/students/${editingId}` : `${API_URL}/students`;
@@ -231,36 +214,22 @@ const handleFileUpload = async (
       });
       setEditingId(null);
       await fetchStudents();
-<<<<<<< HEAD
     } catch (err: any) {
       alert(err.message);
-=======
-    } catch (err: unknown) {
-      if (err instanceof Error) {
-        alert(err.message);
-      } else {
-        alert('An unknown error occurred');
-      }
->>>>>>> main
     }
   };
 
+  // Delete a student record
   const handleDelete = async (id: number) => {
     if (!confirm('Are you sure you want to delete this student?')) return;
-    
+
     try {
       await fetch(`${API_URL}/students/${id}`, { method: 'DELETE' });
       await fetchStudents();
     } catch (err) {
-<<<<<<< HEAD
-=======
-      console.error(err);
->>>>>>> main
       alert('Failed to delete student');
     }
   };
-
-  
 
   return (
     <div className="max-w-6xl mx-auto p-6">
@@ -364,9 +333,6 @@ const handleFileUpload = async (
               <th className="px-6 py-3 text-left">Email</th>
               <th className="px-6 py-3 text-left">Course</th>
               <th className="px-6 py-3 text-left">Major</th>
-              <th className="px-6 py-3 text-left">Intake Term</th>
-              <th className="px-6 py-3 text-left">Intake Year</th>
-              <th className="px-6 py-3 text-left">Credit Points</th>
               <th className="px-6 py-3 text-left">Actions</th>
             </tr>
           </thead>
@@ -407,11 +373,7 @@ const handleFileUpload = async (
     Check Graduation
   </button>
 <Link
-<<<<<<< HEAD
                     href={`/student_units/${student.student_id}`}
-=======
-                    href={`/student-units/${student.student_id}`}
->>>>>>> main
                     className="text-green-600 hover:text-green-800"
                   >
                     View Details
@@ -450,7 +412,3 @@ const handleFileUpload = async (
     </div>
   );
 }
-<<<<<<< HEAD
-
-=======
->>>>>>> main
