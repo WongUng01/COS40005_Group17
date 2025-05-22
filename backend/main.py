@@ -1,92 +1,28 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, File, UploadFile, Form, HTTPException, APIRouter, Query
+from fastapi import Body
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
-from supabaseClient import get_supabase_client
-from typing      import List, Dict
-from fastapi import FastAPI, UploadFile, File, Form, HTTPException
-import pandas as pd
-from fastapi import HTTPException
-from io import BytesIO
-import traceback
-from typing import Optional
-from fastapi.responses import JSONResponse
-from postgrest.exceptions import APIError
-from fastapi import APIRouter
+from supabaseClient import get_supabase_client  # unchanged
 
 app = FastAPI()
 
-# CORS configuration
+# CORS settings
+origins = ["http://localhost:3000"]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], allow_credentials=True,
-    allow_methods=["*"], allow_headers=["*"],
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
-client = get_supabase_client()
+# Test endpoints
+@app.get("/ping")
+def ping():
+    return {"message": "Connected to FastAPI"}
 
-# ========== Common Models ==========
-class UnitBase(BaseModel):
-    unit_code: str
-    unit_name: str
-    prerequisites: str
-    concurrent_prerequisites: str
-    offered_terms: str
-    credit_point: float
-
-class StudentBase(BaseModel):
-    graduation_status: bool
-    student_name: str
-    student_id: int
-    student_email: str
-    student_course: str
-    student_major: str
-    intake_term: str
-    intake_year: str
-    credit_point: float
-
-class StudentUnitBase(BaseModel):
-    student_id: int
-    unit_code: str
-    unit_name: str
-    grade: str
-    completed: bool
-
-class GraduationStatus(BaseModel):
-    can_graduate:        bool
-    total_credits:       float
-    core_credits:        float
-    major_credits:       float
-    core_completed:      int
-    major_completed:     int
-    missing_core_units:  List[str]
-    missing_major_units: List[str]
-
-class StudentUnitOut(BaseModel):
-    id: int
-    student_id: int
-    unit_code: str
-    unit_name: str
-    grade: str
-    completed: bool
-
-    class Config:
-        orm_mode = True
-
-class StudentUnitCreate(BaseModel):
-    student_id: int
-    unit_code: str
-    unit_name: str
-    grade: str
-    completed: bool
-
-MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
-
-@app.post("/students/{student_id}/upload-units")
-async def upload_units(
-    student_id: int,
-    file: UploadFile = File(...),
-    overwrite: bool = Form(False),
-):
+@app.get("/test-connection")
+def test_connection():
     try:
         # 1. File size/type validation
         file.file.seek(0, 2)
@@ -153,24 +89,11 @@ async def upload_units(
     except HTTPException:
         raise
     except Exception as e:
-        traceback.print_exc()
-        raise HTTPException(500, f"Internal server error: {e}")
+        raise HTTPException(status_code=500, detail=f"Error connecting to Supabase: {str(e)}")
 
-@app.get("/students/{student_id}")
-async def get_student(student_id: int):
-    try:
-        response = client.from_('students') \
-                        .select('*') \
-                        .eq('student_id', student_id) \
-                        .single() \
-                        .execute()
-        return response.data
-    except Exception as e:
-        if 'No rows found' in str(e):
-            raise HTTPException(status_code=404, detail="Student not found")
-        raise HTTPException(status_code=500, detail=str(e))
-        
-# ========== Units Routes ==========
+# In-memory storage for units
+units = []
+
 @app.get("/units")
 async def get_units():
     try:

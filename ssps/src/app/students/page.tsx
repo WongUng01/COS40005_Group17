@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 // Student Page
 'use client';
 import { useEffect, useState } from 'react';
@@ -413,3 +414,19 @@ export default function StudentsPage() {
   );
 }
 
+=======
+"use client";
+
+import ProtectedRoute from "../../components/ProtectedRoute";
+import StudentsPage from "../../components/Students";
+
+const UploadPage = () => {
+  return (
+    <ProtectedRoute>
+      <StudentsPage />
+    </ProtectedRoute>
+  );
+};
+
+export default UploadPage;
+>>>>>>> main

@@ -1,9 +1,7 @@
-"use client";
+'use client';
 
-import ProtectedRoute from "../../components/ProtectedRoute";
-import Units from "../../components/Units";
+import { useEffect, useState } from 'react';
 
-<<<<<<< HEAD
 type Unit = {
   id: number;
   unit_code: string;
@@ -315,14 +313,3 @@ export default function Units() {
     </div>
   );
 }
-=======
-const UploadPage = () => {
-  return (
-    <ProtectedRoute>
-      <Units />
-    </ProtectedRoute>
-  );
-};
-
-export default UploadPage;
->>>>>>> main

@@ -1,4 +1,7 @@
+<<<<<<< HEAD
 
+=======
+>>>>>>> main
 //student page
 'use client';
 import { useEffect, useState } from 'react';
@@ -21,11 +24,19 @@ type Student = {
   created_at: string;
 };
 
+<<<<<<< HEAD
 const MAX_FILE_SIZE_MB = 10;
 const SUPPORTED_TYPES = [
   'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
   'application/vnd.ms-excel'
 ];
+=======
+// const MAX_FILE_SIZE_MB = 10;
+// const SUPPORTED_TYPES = [
+//   'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+//   'application/vnd.ms-excel'
+// ];
+>>>>>>> main
 
 export default function StudentsPage() {
   const [students, setStudents] = useState<Student[]>([]);
@@ -220,8 +231,17 @@ const handleFileUpload = async (
       });
       setEditingId(null);
       await fetchStudents();
+<<<<<<< HEAD
     } catch (err: any) {
       alert(err.message);
+=======
+    } catch (err: unknown) {
+      if (err instanceof Error) {
+        alert(err.message);
+      } else {
+        alert('An unknown error occurred');
+      }
+>>>>>>> main
     }
   };
 
@@ -232,6 +252,10 @@ const handleFileUpload = async (
       await fetch(`${API_URL}/students/${id}`, { method: 'DELETE' });
       await fetchStudents();
     } catch (err) {
+<<<<<<< HEAD
+=======
+      console.error(err);
+>>>>>>> main
       alert('Failed to delete student');
     }
   };
@@ -383,7 +407,11 @@ const handleFileUpload = async (
     Check Graduation
   </button>
 <Link
+<<<<<<< HEAD
                     href={`/student_units/${student.student_id}`}
+=======
+                    href={`/student-units/${student.student_id}`}
+>>>>>>> main
                     className="text-green-600 hover:text-green-800"
                   >
                     View Details
@@ -422,4 +450,7 @@ const handleFileUpload = async (
     </div>
   );
 }
+<<<<<<< HEAD
 
+=======
+>>>>>>> main

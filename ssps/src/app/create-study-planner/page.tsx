@@ -1,12 +1,12 @@
 "use client";
 
 import ProtectedRoute from "../../components/ProtectedRoute";
-import Dashboard from "../../components/Dashboard";
+import CreateStudyPlanner from "../../components/CreateStudyPlanner";
 
 const UploadPage = () => {
   return (
     <ProtectedRoute>
-      <Dashboard />
+      <CreateStudyPlanner />
     </ProtectedRoute>
   );
 };
