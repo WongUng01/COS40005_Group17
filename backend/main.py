@@ -88,13 +88,13 @@ async def upload_units(
     overwrite: bool = Form(False),
 ):
     try:
-        # 1. Size/type validation
+        # 1. File size/type validation
         file.file.seek(0, 2)
         if file.file.tell() > MAX_FILE_SIZE:
-            raise HTTPException(413, "文件大小超过 10MB 限制")
+            raise HTTPException(413, "File size exceeds 10MB limit")
         file.file.seek(0)
         if not file.filename.lower().endswith((".xlsx", ".xls")):
-            raise HTTPException(400, "仅支持 Excel 文件 (.xlsx/.xls)")
+            raise HTTPException(400, "Only Excel files (.xlsx/.xls) are supported")
 
         # 2. Read Excel
         try:
@@ -105,11 +105,11 @@ async def upload_units(
                 dtype={"Grade": str},
             )
         except ValueError as e:
-            raise HTTPException(400, f"缺少必要列或格式错误: {e}")
+            raise HTTPException(400, f"Missing required columns or format error: {e}")
 
         df.columns = df.columns.str.strip().str.lower()
         if missing := {"course", "course title", "status"} - set(df.columns):
-            raise HTTPException(400, f"缺少列: {', '.join(missing)}")
+            raise HTTPException(400, f"Missing columns: {', '.join(missing)}")
 
         # 3. Build payload
         units = []
@@ -117,18 +117,18 @@ async def upload_units(
             code = str(row["course"]).strip()
             status = str(row["status"]).strip().lower()
             if not code:
-                raise HTTPException(422, f"第 {idx+2} 行缺少 Course")
+                raise HTTPException(422, f"Missing Course at row {idx + 2}")
             if not status:
-                raise HTTPException(422, f"第 {idx+2} 行缺少 Status")
+                raise HTTPException(422, f"Missing Status at row {idx + 2}")
             units.append({
                 "student_id": student_id,
-                "unit_code":  code,
-                "unit_name":  str(row.get("course title", "")).strip(),
-                "grade":      str(row.get("grade", "")).strip().upper(),
-                "completed":  status == "complete",
+                "unit_code": code,
+                "unit_name": str(row.get("course title", "")).strip(),
+                "grade": str(row.get("grade", "")).strip().upper(),
+                "completed": status == "complete",
             })
         if not units:
-            raise HTTPException(400, "Excel 中未找到有效课程记录")
+            raise HTTPException(400, "No valid course records found in Excel")
 
         # 4. Ensure student exists
         resp = client.from_("students") \
@@ -137,9 +137,9 @@ async def upload_units(
             .single() \
             .execute()
         if resp.data is None:
-            raise HTTPException(404, "关联学生不存在")
+            raise HTTPException(404, "Associated student not found")
 
-        # 5. Optional overwrite
+        # 5. Optionally overwrite existing data
         if overwrite:
             client.from_("student_units") \
                 .delete() \
@@ -148,16 +148,13 @@ async def upload_units(
 
         # 6. Insert new records
         ins = client.from_("student_units").insert(units).execute()
-        # ins.data is a list of inserted rows
-        return {"message": f"成功上传 {len(ins.data or [])} 条课程记录"}
-    
-        
+        return {"message": f"Successfully uploaded {len(ins.data or [])} course records"}
 
     except HTTPException:
         raise
     except Exception as e:
         traceback.print_exc()
-        raise HTTPException(500, f"服务器内部错误: {e}")
+        raise HTTPException(500, f"Internal server error: {e}")
 
 @app.get("/students/{student_id}")
 async def get_student(student_id: int):
