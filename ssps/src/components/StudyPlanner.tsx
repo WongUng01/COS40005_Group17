@@ -326,11 +326,11 @@ const ViewStudyPlannerTabs = () => {
                               ))}
                             </select>
                           ) : (
-                            unit.unit_code
+                            displayValue(unit.unit_code)
                           )}
                         </td>
 
-                        <td className="border p-2">{displayValue(unit.unit_name)}</td>
+                        <td className="border p-2">{(unit.unit_name)}</td>
                         <td className="border p-2">{displayValue(unit.prerequisites)}</td>
 
                         {editPlannerId === planner.id && (
