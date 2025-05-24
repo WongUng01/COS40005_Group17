@@ -44,6 +44,9 @@ class PlannerPayload(BaseModel):
     planner: List[PlannerUnit]
     overwrite: bool = False
 
+class UnitDeleteRequest(BaseModel):
+    unit_id: int
+
 # CORS config
 app.add_middleware(
     CORSMiddleware,
@@ -199,21 +202,28 @@ def view_study_planner(
             "major": major,
             "intake_year": intake_year,
             "intake_semester": intake_semester
-        }).execute()
+        }).single().execute()
 
-        if not planner_res.data:
-            print(f"No planners found for {program}, {major}, {intake_year}, {intake_semester}")  # Debugging log
+        planner = planner_res.data
+
+        if not planner:
             raise HTTPException(status_code=404, detail="No matching study planner found.")
-
-        planner = planner_res.data[0]
-        print(f"Planner found: {planner}")  # Debugging log
 
         # Fetch the related units
         units_res = supabase_client.table("study_planner_units").select("*").eq("planner_id", planner["id"]).execute()
-        units = units_res.data
+        units = units_res.data or []
 
-        if not units:
-            print(f"No units found for planner {planner['id']}")  # Debugging log
+        # Optional: sort the units
+        def sort_key(unit):
+            semester_order = {"1": 1, "2": 2, "Summer": 3, "Winter": 4}
+            unit_type_order = {"Major": 1, "Core": 2, "Elective": 3, "MPU": 4, "WIL": 5}
+            return (
+                unit.get("year", 0),
+                semester_order.get(unit.get("semester", ""), 99),
+                unit_type_order.get(unit.get("unit_type", ""), 99)
+            )
+
+        units.sort(key=sort_key)
 
         return {
             "planner": planner,
@@ -222,7 +232,7 @@ def view_study_planner(
 
     except Exception as e:
         print("Error:", str(e))
-        raise HTTPException(status_code=500, detail="Internal server error")
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
 @app.get("/api/study-planner-tabs")
 def get_study_planner_tabs():
@@ -401,6 +411,56 @@ def create_study_planner(data: PlannerPayload = Body(...)):
     except Exception as e:
         print("Internal Server Error:", str(e))
         raise HTTPException(status_code=500, detail="Internal server error")
+    
+@app.delete("/api/delete-study-planner-unit")
+def delete_study_planner_unit(id: str = Query(...)):
+    try:
+        res = supabase_client.table("study_planner_units").delete().eq("id", id).execute()
+        print("Delete result:", res)
+
+        # If res has 'status_code', check if it's successful (usually 200 or 204)
+        if hasattr(res, 'status_code'):
+            if res.status_code not in (200, 204):
+                raise HTTPException(status_code=500, detail=f"Failed to delete unit: {res.data}")
+
+        # If res.data is empty or delete count is 0, it means nothing deleted
+        if hasattr(res, 'data') and (not res.data or len(res.data) == 0):
+            raise HTTPException(status_code=404, detail="Unit not found or already deleted.")
+
+        return {"message": f"Unit ID {id} deleted successfully."}
+    except Exception as e:
+        print("Exception during delete:", str(e))
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+
+# @app.post("/api/add-study-planner-unit")
+# def add_study_planner_unit(unit: dict = Body(...)):
+#     try:
+#         if "planner_id" not in unit:
+#             raise HTTPException(status_code=400, detail="Missing required field: planner_id")
+
+#         # Set default values
+#         unit.setdefault("year", "1")
+#         unit.setdefault("semester", "1")
+#         unit.setdefault("unit_code", "")
+#         unit.setdefault("unit_name", "")
+#         unit.setdefault("unit_type", "")
+#         unit.setdefault("prerequisites", "")
+
+#         # Insert the unit
+#         res = supabase_client.table("study_planner_units").insert(unit).execute()
+
+#         # Validate the response
+#         if not res.data or len(res.data) == 0:
+#             raise HTTPException(status_code=500, detail="Failed to insert unit or no data returned.")
+
+#         return {
+#             "message": "Unit added successfully.",
+#             "unit": res.data[0]
+#         }
+
+#     except Exception as e:
+#         print("Add unit error:", str(e))
+#         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
     
 @app.post("/students/{student_id}/upload-units")
 async def upload_units(

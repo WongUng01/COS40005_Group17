@@ -46,6 +46,36 @@ const ViewStudyPlannerTabs = () => {
     return indexA - indexB;
   });
 
+  // const handleAddRow = async (plannerId: number) => {
+  //   try {
+  //     const res = await axios.post("http://localhost:8000/api/add-study-planner-unit", {
+  //       planner_id: plannerId,
+  //     });
+
+  //     const newUnit = res.data; // expect backend to return the new blank unit
+  //     setUnitsMap((prev) => ({
+  //       ...prev,
+  //       [plannerId]: [...(prev[plannerId] || []), newUnit],
+  //     }));
+  //   } catch (err) {
+  //     console.error("Failed to add row", err);
+  //   }
+  // };
+
+const handleRemoveRow = async (plannerId: number, unitId: number) => {
+  try {
+    await axios.delete("http://localhost:8000/api/delete-study-planner-unit", {
+      params: { id: unitId }
+    });
+    setUnitsMap((prev) => ({
+      ...prev,
+      [plannerId]: (prev[plannerId] || []).filter((unit) => unit.id !== unitId),
+    }));
+  } catch (err) {
+    console.error("Failed to remove row", err);
+  }
+};
+
   useEffect(() => {
     const fetchTabs = async () => {
       try {
@@ -187,10 +217,11 @@ const ViewStudyPlannerTabs = () => {
                 onClick={() => setEditPlannerId(editPlannerId === planner.id ? null : planner.id)}
                 className="text-sm px-3 py-1 bg-blue-500 text-white rounded"
               >
-                {editPlannerId === planner.id ? "Cancel Edit" : "Edit Planner"}
+                {editPlannerId === planner.id ? "Done" : "Edit Planner"}
               </button>
             </div>
 
+            <div className="relative pb-3">
             <table className="w-full border mt-2">
               <thead className="bg-gray-100">
                 <tr>
@@ -215,12 +246,11 @@ const ViewStudyPlannerTabs = () => {
                     const typeIndexB = typeOrder.indexOf(b.unit_type);
                     return typeIndexA - typeIndexB;
                   })
-                  .map(unit => {
+                  .map((unit, index) => {
                     const unitIndex = (unitsMap[planner.id] || []).findIndex(u => u.id === unit.id);
-
                     return (
                       <tr
-                        key={unit.id}
+                        key={unit.id ?? unit.tempId ?? `fallback-${index}`}
                         className={classNames("hover:bg-opacity-80", unitTypeColors[unit.unit_type] || "bg-gray-100")}
                       >
                         <td className="border p-2">
@@ -363,11 +393,30 @@ const ViewStudyPlannerTabs = () => {
                             </select>
                           </td>
                         )}
+                        {editPlannerId === planner.id && (
+                          <td className="border p-2">
+                            <button
+                              onClick={() => handleRemoveRow(planner.id, unit.id)}
+                              className="text-red-600 hover:underline"
+                            >
+                              Remove
+                            </button>
+                          </td>
+                        )}
                       </tr>
                     );
                   })}
               </tbody>
             </table>
+            </div>
+            {/* {editPlannerId === planner.id && (
+              <button
+                onClick={() => handleAddRow(planner.id)}
+                className="px-3 py-1 bg-green-500 text-white rounded"
+              >
+                Add Row
+              </button>
+            )} */}
           </div>
         ))
       ) : (
