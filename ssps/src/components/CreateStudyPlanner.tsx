@@ -53,6 +53,14 @@ const CreateStudyPlanner = () => {
   const unitTypes = ["Major", "Core", "Elective", "MPU", "WIL"];
   const studyYears = ["1", "2", "3", "4"];
 
+  const unitTypeColors: Record<string, string> = {
+    Core: "bg-blue-200",
+    Major: "bg-orange-200",
+    Elective: "bg-green-200",
+    MPU: "bg-red-200",
+    WIL: "bg-purple-200",
+  };
+
   interface AxiosError {
     response?: {
       status?: number;
@@ -133,6 +141,22 @@ const CreateStudyPlanner = () => {
       return;
     }
 
+    // Validation for each planner row:
+    for (let i = 0; i < plannerRows.length; i++) {
+      const row = plannerRows[i];
+      if (
+        !row.year ||
+        !row.semester ||
+        !row.unit_code ||
+        !row.unit_name ||
+        !row.prerequisites ||
+        !row.unit_type
+      ) {
+        toast.error(`Please complete all fields in row ${i + 1}.`);
+        return;
+      }
+    }
+
     try {
       setLoading(true);
       await axios.post("http://localhost:8000/api/create-study-planner", {
@@ -145,6 +169,10 @@ const CreateStudyPlanner = () => {
       });
 
       toast.success("Study planner saved.");
+      setProgram("");
+      setMajor("");
+      setIntakeYear("");
+      setIntakeSemester("");
       setPlannerRows([]);
     } catch (error: unknown) {
       if (
@@ -159,7 +187,7 @@ const CreateStudyPlanner = () => {
       }
 
       toast.error("Failed to save planner.");
-    }finally {
+    } finally {
       setLoading(false);
     }
   };
@@ -233,18 +261,21 @@ const CreateStudyPlanner = () => {
           </thead>
           <tbody>
             {plannerRows.map((row, i) => (
-              <tr key={i}>
+              <tr
+                key={i}
+                className={unitTypeColors[row.unit_type] || ""}
+              >
                 <td className="border p-2">
                   <select
                     value={row.year}
                     onChange={(e) => handleChange(i, "year", e.target.value)}
                     className="w-full border rounded p-1"
-                    >
+                  >
                     <option value="">Year</option>
                     {studyYears.map((y) => (
-                        <option key={y} value={y}>{y}</option>
+                      <option key={y} value={y}>{y}</option>
                     ))}
-                    </select>
+                  </select>
                 </td>
 
                 <td className="border p-2">
