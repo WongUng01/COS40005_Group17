@@ -4,6 +4,8 @@ import React, { useState, useRef } from "react";
 import toast from "react-hot-toast";
 import axios, { AxiosError } from "axios";
 
+const API = "https://cos40005-group17.onrender.com";
+
 const UploadStudyPlanner = () => {
   const [file, setFile] = useState<File | null>(null);
   const [program, setProgram] = useState("");
@@ -66,7 +68,7 @@ const UploadStudyPlanner = () => {
 
     try {
       setLoading(true);
-      await axios.post("http://localhost:8000/api/upload-study-planner", formData, {
+      await axios.post(`${API}/api/upload-study-planner`, formData, {
         headers: { "Content-Type": "multipart/form-data" },
       });
 

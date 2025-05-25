@@ -39,7 +39,7 @@ export default function StudentsPage() {
     credit_point: 0
   });
   const [editingId, setEditingId] = useState<number | null>(null);
-  const API_URL = 'http://localhost:8000';
+  const API_URL = "https://cos40005-group17.onrender.com";
 
   useEffect(() => {
     fetchStudents();

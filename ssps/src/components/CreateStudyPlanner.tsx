@@ -4,6 +4,8 @@ import React, { useEffect, useState } from "react";
 import axios from "axios";
 import toast from "react-hot-toast";
 
+const API = "https://cos40005-group17.onrender.com";
+
 type Unit = {
   unit_code: string;
   unit_name: string;
@@ -84,7 +86,7 @@ const CreateStudyPlanner = () => {
   useEffect(() => {
     const fetchUnits = async () => {
       try {
-        const res = await axios.get<Unit[]>("http://localhost:8000/api/units");
+        const res = await axios.get<Unit[]>(`${API}/api/units`);
         setUnits(res.data);
       } catch {
         toast.error("Failed to fetch units.");
@@ -159,7 +161,7 @@ const CreateStudyPlanner = () => {
 
     try {
       setLoading(true);
-      await axios.post("http://localhost:8000/api/create-study-planner", {
+      await axios.post(`${API}/api/create-study-planner`, {
         program,
         major,
         intake_year: intakeYear,
