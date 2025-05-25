@@ -1,5 +1,4 @@
 fastapi
 uvicorn
-supabase-py
+supabase
 python-dotenv
-httpx
