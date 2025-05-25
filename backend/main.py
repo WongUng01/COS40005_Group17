@@ -774,3 +774,7 @@ async def process_graduation(student_id: int):
     except Exception as e:
         traceback.print_exc()
         raise HTTPException(500, f"Server error: {str(e)}")
+    
+@app.get("/")
+def read_root():
+    return {"message": "FastAPI backend is running"}

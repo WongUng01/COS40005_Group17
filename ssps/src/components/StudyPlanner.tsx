@@ -46,6 +46,8 @@ const ViewStudyPlannerTabs = () => {
     return indexA - indexB;
   });
 
+  const API = "https://cos40005-group17.onrender.com";
+
   // const handleAddRow = async (plannerId: number) => {
   //   try {
   //     const res = await axios.post("http://localhost:8000/api/add-study-planner-unit", {
@@ -64,7 +66,7 @@ const ViewStudyPlannerTabs = () => {
 
 const handleRemoveRow = async (plannerId: number, unitId: number) => {
   try {
-    await axios.delete("http://localhost:8000/api/delete-study-planner-unit", {
+    await axios.delete(`${API}/api/delete-study-planner-unit`, {
       params: { id: unitId }
     });
     setUnitsMap((prev) => ({
@@ -79,7 +81,7 @@ const handleRemoveRow = async (plannerId: number, unitId: number) => {
   useEffect(() => {
     const fetchTabs = async () => {
       try {
-        const res = await axios.get("http://localhost:8000/api/study-planner-tabs");
+        const res = await axios.get(`${API}/api/study-planner-tabs`);
         setTabs(res.data);
         if (res.data.length > 0) {
           const latestYear = res.data.sort((a: any, b: any) => b.intake_year - a.intake_year)[0].intake_year;
@@ -94,7 +96,7 @@ const handleRemoveRow = async (plannerId: number, unitId: number) => {
 
     const fetchAllUnits = async () => {
       try {
-        const res = await axios.get("http://localhost:8000/api/units");
+        const res = await axios.get(`${API}/api/units`);
         setAllUnits(res.data);
       } catch (err) {
         console.error("Error fetching all units", err);
@@ -119,7 +121,7 @@ const handleRemoveRow = async (plannerId: number, unitId: number) => {
         for (const planner of result) {
           if (!unitsMap[planner.id]) {
             try {
-              const res = await axios.get("http://localhost:8000/api/view-study-planner", {
+              const res = await axios.get(`${API}/api/view-study-planner`, {
                 params: {
                   program: planner.program,
                   major: planner.major,
@@ -264,7 +266,7 @@ const handleRemoveRow = async (plannerId: number, unitId: number) => {
                                 newUnits[unitIndex] = updatedUnit;
                                 setUnitsMap((prev) => ({ ...prev, [planner.id]: newUnits }));
                                 try {
-                                  await axios.put("http://localhost:8000/api/update-study-planner-unit", {
+                                  await axios.put(`${API}/api/update-study-planner-unit`, {
                                     unit_id: unit.id,
                                     field: "year",
                                     value: newValue,
@@ -297,7 +299,7 @@ const handleRemoveRow = async (plannerId: number, unitId: number) => {
                                 newUnits[unitIndex] = updatedUnit;
                                 setUnitsMap((prev) => ({ ...prev, [planner.id]: newUnits }));
                                 try {
-                                  await axios.put("http://localhost:8000/api/update-study-planner-unit", {
+                                  await axios.put(`${API}/api/update-study-planner-unit`, {
                                     unit_id: unit.id,
                                     field: "semester",
                                     value: newValue,
@@ -338,7 +340,7 @@ const handleRemoveRow = async (plannerId: number, unitId: number) => {
                                 setUnitsMap((prev) => ({ ...prev, [planner.id]: newUnits }));
 
                                 try {
-                                  await axios.put("http://localhost:8000/api/update-study-planner-unit", {
+                                  await axios.put(`${API}/api/update-study-planner-unit`, {
                                     unit_id: unit.id,
                                     field: "unit_code",
                                     value: newCode,
@@ -374,7 +376,7 @@ const handleRemoveRow = async (plannerId: number, unitId: number) => {
                                 newUnits[unitIndex] = updatedUnit;
                                 setUnitsMap((prev) => ({ ...prev, [planner.id]: newUnits }));
                                 try {
-                                  await axios.put("http://localhost:8000/api/update-study-planner-unit", {
+                                  await axios.put(`${API}/api/update-study-planner-unit`, {
                                     unit_id: unit.id,
                                     field: "unit_type",
                                     value: newValue,
