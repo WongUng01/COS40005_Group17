@@ -373,7 +373,7 @@ export default function StudentsPage() {
     Check Graduation
   </button>
 <Link
-                    href={`/src/components/student_units/${student.student_id}`}
+                    href={`/student_units/${student.student_id}`}
                     className="text-green-600 hover:text-green-800"
                   >
                     View Details
