@@ -113,8 +113,8 @@ class StudentUnitCreate(BaseModel):
 MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
 
 # Supabase setup
-SUPABASE_URL = "https://rfvcutixkmawyzrlrarp.supabase.co"
-SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJmdmN1dGl4a21hd3l6cmxyYXJwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDU4Mzk2MzgsImV4cCI6MjA2MTQxNTYzOH0.NKToyHvzFd_ACs_QzRH99m-AkFYBtZmV5OLgoXU7Cuc"
+SUPABASE_URL = "https://zllavejtltdcpxkzpvpe.supabase.co"
+SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpsbGF2ZWp0bHRkY3B4a3pwdnBlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTc0MTQ3NzUsImV4cCI6MjA3Mjk5MDc3NX0.MvfPars9qL-H6RU5e2Z2tnUtB6Y8aIY3Sjf3lX_xYDQ"
 supabase_client = supabase.create_client(SUPABASE_URL, SUPABASE_KEY)
 
 client = get_supabase_client()
