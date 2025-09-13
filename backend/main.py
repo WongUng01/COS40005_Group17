@@ -177,7 +177,7 @@ async def upload_study_planner(
                 "unit_name": str(row["Unit Name"]),
                 "prerequisites": str(row["Prerequisites"]),
                 "unit_type": str(row["Unit Type"]),
-                "row_order": index,  # 🔹 preserve Excel order
+                "row_order": index,  #preserve Excel order
             }
             supabase_client.table("study_planner_units").insert(unit).execute()
 
