@@ -167,7 +167,7 @@ async def upload_study_planner(
         }
         supabase_client.table("study_planners").insert(planner_data).execute()
 
-        for _, row in df.iterrows():
+        for index, row in df.iterrows():
             unit = {
                 "id": str(uuid.uuid4()),
                 "planner_id": planner_id,
@@ -177,6 +177,7 @@ async def upload_study_planner(
                 "unit_name": str(row["Unit Name"]),
                 "prerequisites": str(row["Prerequisites"]),
                 "unit_type": str(row["Unit Type"]),
+                "row_order": index,  # 🔹 preserve Excel order
             }
             supabase_client.table("study_planner_units").insert(unit).execute()
 
@@ -197,33 +198,32 @@ def view_study_planner(
 ):
     try:
         # Fetch the matching planner
-        planner_res = supabase_client.table("study_planners").select("*").match({
-            "program": program,
-            "major": major,
-            "intake_year": intake_year,
-            "intake_semester": intake_semester
-        }).single().execute()
+        planner_res = (
+            supabase_client.table("study_planners")
+            .select("*")
+            .match({
+                "program": program,
+                "major": major,
+                "intake_year": intake_year,
+                "intake_semester": intake_semester
+            })
+            .single()
+            .execute()
+        )
 
         planner = planner_res.data
-
         if not planner:
             raise HTTPException(status_code=404, detail="No matching study planner found.")
 
-        # Fetch the related units
-        units_res = supabase_client.table("study_planner_units").select("*").eq("planner_id", planner["id"]).execute()
+        # Fetch related units in Excel order
+        units_res = (
+            supabase_client.table("study_planner_units")
+            .select("*")
+            .eq("planner_id", planner["id"])
+            .order("row_order", asc=True)   # 🔹 Excel order
+            .execute()
+        )
         units = units_res.data or []
-
-        # Optional: sort the units
-        def sort_key(unit):
-            semester_order = {"1": 1, "2": 2, "Summer": 3, "Winter": 4}
-            unit_type_order = {"Major": 1, "Core": 2, "Elective": 3, "MPU": 4, "WIL": 5}
-            return (
-                unit.get("year", 0),
-                semester_order.get(unit.get("semester", ""), 99),
-                unit_type_order.get(unit.get("unit_type", ""), 99)
-            )
-
-        units.sort(key=sort_key)
 
         return {
             "planner": planner,
