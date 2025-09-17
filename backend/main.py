@@ -515,9 +515,8 @@ async def upload_units(
         resp = client.from_("students") \
             .select("student_id") \
             .eq("student_id", student_id) \
-            .single() \
             .execute()
-        if resp.data is None:
+        if not resp.data:
             raise HTTPException(404, "Associated student not found")
 
         # 5. Optionally overwrite existing data
@@ -543,12 +542,13 @@ async def get_student(student_id: int):
         response = client.from_('students') \
                         .select('*') \
                         .eq('student_id', student_id) \
-                        .single() \
                         .execute()
-        return response.data
-    except Exception as e:
-        if 'No rows found' in str(e):
+        
+        if not response.data:
             raise HTTPException(status_code=404, detail="Student not found")
+            
+        return response.data[0]
+    except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
         
 # ========== Units Routes ==========
@@ -585,7 +585,7 @@ async def update_unit(unit_id: int, updated: UnitBase):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Update failed: {e}")
 
-@app.delete("/units/{unit_id}")
+@app.delete("/units/{unit_id")
 async def delete_unit(unit_id: int):
     try:
         response = (
@@ -690,47 +690,80 @@ async def get_student_units(student_id: int):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error fetching units: {e}")
     
-    
-# Add after existing endpoints
+# Add search endpoint for students
+@app.get("/students/search/{student_id}")
+async def search_student(student_id: int):
+    try:
+        response = client.from_('students') \
+                        .select('*') \
+                        .eq('student_id', student_id) \
+                        .execute()
+        
+        if not response.data:
+            return JSONResponse(
+                status_code=404,
+                content={"message": f"Student with ID {student_id} not found"}
+            )
+            
+        return response.data
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Search error: {str(e)}")
+
+# Fix the graduation endpoint to handle cases where no planner is found
 @app.put("/students/{student_id}/graduate", response_model=GraduationStatus)
 async def process_graduation(student_id: int):
     try:
         # 1. Get student information
-        student = client.from_('students') \
+        student_res = client.from_('students') \
             .select('student_major, intake_year, intake_term') \
             .eq('student_id', student_id) \
-            .single().execute().data
+            .execute()
         
-        if not student:
+        if not student_res.data:
             raise HTTPException(404, "Student not found")
+            
+        student = student_res.data[0]
 
         # 2. Get student's completed units (passed with grade != 'F')
-        completed_units = client.from_('student_units') \
+        completed_units_res = client.from_('student_units') \
             .select('unit_code') \
             .eq('student_id', student_id) \
             .eq('completed', True) \
             .neq('grade', 'F') \
-            .execute().data
+            .execute()
         
-        passed_codes = [u['unit_code'] for u in completed_units]
+        passed_codes = [u['unit_code'] for u in completed_units_res.data]
 
-        # 3. Get study planner for the student
-        planner = client.from_('study_planners') \
+        # 3. Get study planner for the student - handle case where no planner exists
+        planner_res = client.from_('study_planners') \
             .select('id') \
             .eq('major', student['student_major']) \
-            .eq('intake_year', student['intake_year']) \
+            .eq('intake_year', int(student['intake_year'])) \
             .eq('intake_semester', student['intake_term']) \
-            .single().execute().data
+            .execute()
         
-        if not planner:
-            raise HTTPException(400, "No study plan found for this student")
+        # If no planner found, return with all units as missing
+        if not planner_res.data:
+            return {
+                "can_graduate": False,
+                "total_credits": len(passed_codes) * 12.5,
+                "core_credits": 0,
+                "major_credits": 0,
+                "core_completed": 0,
+                "major_completed": 0,
+                "missing_core_units": ["No study plan found for this student"],
+                "missing_major_units": ["No study plan found for this student"]
+            }
+
+        planner = planner_res.data[0]
 
         # 4. Get required core and major units from planner
-        required_units = client.from_('study_planner_units') \
+        required_units_res = client.from_('study_planner_units') \
             .select('unit_code, unit_type') \
             .eq('planner_id', planner['id']) \
-            .execute().data
+            .execute()
         
+        required_units = required_units_res.data
         core_units = [u['unit_code'] for u in required_units if u['unit_type'].lower() == 'core']
         major_units = [u['unit_code'] for u in required_units if u['unit_type'].lower() == 'major']
 
@@ -778,3 +811,22 @@ async def process_graduation(student_id: int):
 @app.get("/")
 def read_root():
     return {"message": "FastAPI backend is running"}
+
+@app.get("/students/search/{student_id}")
+async def search_student(student_id: int):
+    try:
+        response = client.from_('students') \
+                        .select('*') \
+                        .eq('student_id', student_id) \
+                        .execute()
+        
+        if not response.data:
+            return JSONResponse(
+                status_code=404,
+                content={"message": f"Student with ID {student_id} not found"}
+            )
+            
+        return response.data
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Search error: {str(e)}")
+
