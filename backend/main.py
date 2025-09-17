@@ -188,50 +188,49 @@ async def upload_study_planner(
         print("Internal Error:", str(e))
         raise HTTPException(status_code=500, detail="Internal server error")
 
-@app.get("/api/view-study-planner")
-def view_study_planner(
-    program: str = Query(...),
-    major: str = Query(...),
-    intake_year: int = Query(...),
-    intake_semester: str = Query(...)
-):
-    try:
+@app.get("/api/view-study-planner") 
+def view_study_planner( 
+    program: str = Query(...), 
+    major: str = Query(...), 
+    intake_year: int = Query(...), 
+    intake_semester: str = Query(...) 
+): 
+    try: 
         # Fetch the matching planner
-        planner_res = supabase_client.table("study_planners").select("*").match({
-            "program": program,
-            "major": major,
-            "intake_year": intake_year,
-            "intake_semester": intake_semester
-        }).single().execute()
-
-        planner = planner_res.data
-
-        if not planner:
-            raise HTTPException(status_code=404, detail="No matching study planner found.")
-
-        # Fetch the related units
-        units_res = supabase_client.table("study_planner_units").select("*").eq("planner_id", planner["id"]).execute()
-        units = units_res.data or []
-
-        # Optional: sort the units
-        def sort_key(unit):
-            semester_order = {"1": 1, "2": 2, "Summer": 3, "Winter": 4}
-            unit_type_order = {"Major": 1, "Core": 2, "Elective": 3, "MPU": 4, "WIL": 5}
-            return (
-                unit.get("year", 0),
-                semester_order.get(unit.get("semester", ""), 99),
-                unit_type_order.get(unit.get("unit_type", ""), 99)
-            )
-
-        units.sort(key=sort_key)
-
-        return {
-            "planner": planner,
-            "units": units
-        }
-
-    except Exception as e:
-        print("Error:", str(e))
+        planner_res = supabase_client.table("study_planners").select("*").match({ 
+            "program": program, 
+            "major": major, 
+            "intake_year": intake_year, 
+            "intake_semester": intake_semester 
+        }).single().execute() 
+        planner = planner_res.data 
+        
+        if not planner: 
+            raise HTTPException(status_code=404, detail="No matching study planner found.") 
+        
+        # Fetch the related units 
+        units_res = supabase_client.table("study_planner_units").select("*").eq("planner_id", planner["id"]).execute() 
+        
+        units = units_res.data or [] 
+        
+        # Optional: sort the units 
+        def sort_key(unit): 
+            semester_order = {"1": 1, "2": 2, "Summer": 3, "Winter": 4} 
+            unit_type_order = {"Major": 1, "Core": 2, "Elective": 3, "MPU": 4, "WIL": 5} 
+            return ( 
+                unit.get("year", 0), 
+                semester_order.get(unit.get("semester", ""), 99), 
+                unit_type_order.get(unit.get("unit_type", ""), 99) 
+            ) 
+        
+        units.sort(key=sort_key) 
+        
+        return { 
+            "planner": planner, 
+            "units": units } 
+        
+    except Exception as e: 
+        print("Error:", str(e)) 
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
 @app.get("/api/study-planner-tabs")
