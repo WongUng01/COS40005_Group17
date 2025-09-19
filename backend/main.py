@@ -11,6 +11,8 @@ from io import BytesIO
 import traceback
 from fastapi.responses import JSONResponse
 from postgrest.exceptions import APIError
+import logging
+logger = logging.getLogger("uvicorn.error")
 
 app = FastAPI()
 
@@ -128,8 +130,10 @@ async def upload_study_planner(
     intake_semester: str = Form(...),
     overwrite: str = Form("false")
 ):
+    logger.debug("Upload endpoint hit!")
+
     try:
-        overwrite = overwrite.lower() == "true" 
+        overwrite = overwrite.lower() == "true"
         df = pd.read_excel(file.file)
         df.columns = [col.strip().title() for col in df.columns]
 
@@ -142,35 +146,48 @@ async def upload_study_planner(
             )
 
         # Check if a planner already exists
-        existing = supabase_client.table("study_planners").select("id").eq("program", program).eq("major", major).eq("intake_year", intake_year).eq("intake_semester", intake_semester).execute()
+        existing = (
+            supabase_client.table("study_planners")
+            .select("id")
+            .eq("program", program)
+            .eq("major", major)
+            .eq("intake_year", intake_year)
+            .eq("intake_semester", intake_semester)
+            .execute()
+        )
 
         if existing.data:
             if not overwrite:
                 raise HTTPException(
                     status_code=409,
-                    detail={"message": "A planner for this intake already exists.", "existing": True}
+                    detail={
+                        "message": "A planner for this intake already exists.",
+                        "existing": True,
+                    },
                 )
             else:
                 existing_id = existing.data[0]["id"]
-                # Delete units first (foreign key constraint)
                 supabase_client.table("study_planner_units").delete().eq("planner_id", existing_id).execute()
-                # Delete planner
                 supabase_client.table("study_planners").delete().eq("id", existing_id).execute()
 
+        # Insert planner
         planner_id = str(uuid.uuid4())
         planner_data = {
             "id": planner_id,
             "program": program,
             "major": major,
             "intake_year": intake_year,
-            "intake_semester": intake_semester
+            "intake_semester": intake_semester,
         }
         supabase_client.table("study_planners").insert(planner_data).execute()
 
-        for _, row in df.iterrows():
+        # Build all units
+        units_to_insert = []
+        for idx, row in df.iterrows():
             unit = {
                 "id": str(uuid.uuid4()),
                 "planner_id": planner_id,
+                "row_index": int(idx + 1),
                 "year": int(row["Year"]),
                 "semester": str(row["Semester"]),
                 "unit_code": str(row["Unit Code"]),
@@ -178,59 +195,71 @@ async def upload_study_planner(
                 "prerequisites": str(row["Prerequisites"]),
                 "unit_type": str(row["Unit Type"]),
             }
-            supabase_client.table("study_planner_units").insert(unit).execute()
+            print("DEBUG row:", unit, flush=True)   # print each row
+            units_to_insert.append(unit)
+
+        # Debug first row
+        if units_to_insert:
+            print("DEBUG first row full:", units_to_insert[0], flush=True)
+            print("DEBUG keys:", list(units_to_insert[0].keys()), flush=True)
+
+        # Insert all rows
+        supabase_client.table("study_planner_units").insert(units_to_insert).execute()
 
         return {"message": "Study planner uploaded successfully."}
 
     except HTTPException as http_err:
         raise http_err
     except Exception as e:
-        print("Internal Error:", str(e))
+        print("Internal Error:", str(e), flush=True)
         raise HTTPException(status_code=500, detail="Internal server error")
 
-@app.get("/api/view-study-planner") 
-def view_study_planner( 
-    program: str = Query(...), 
-    major: str = Query(...), 
-    intake_year: int = Query(...), 
-    intake_semester: str = Query(...) 
-): 
-    try: 
+@app.get("/api/view-study-planner")
+def view_study_planner(
+    program: str = Query(...),
+    major: str = Query(...),
+    intake_year: int = Query(...),
+    intake_semester: str = Query(...)
+):
+    try:
         # Fetch the matching planner
-        planner_res = supabase_client.table("study_planners").select("*").match({ 
-            "program": program, 
-            "major": major, 
-            "intake_year": intake_year, 
-            "intake_semester": intake_semester 
-        }).single().execute() 
-        planner = planner_res.data 
-        
-        if not planner: 
-            raise HTTPException(status_code=404, detail="No matching study planner found.") 
-        
-        # Fetch the related units 
-        units_res = supabase_client.table("study_planner_units").select("*").eq("planner_id", planner["id"]).execute() 
-        
-        units = units_res.data or [] 
-        
-        # Optional: sort the units 
-        def sort_key(unit): 
-            semester_order = {"1": 1, "2": 2, "Summer": 3, "Winter": 4} 
-            unit_type_order = {"Major": 1, "Core": 2, "Elective": 3, "MPU": 4, "WIL": 5} 
-            return ( 
-                unit.get("year", 0), 
-                semester_order.get(unit.get("semester", ""), 99), 
-                unit_type_order.get(unit.get("unit_type", ""), 99) 
-            ) 
-        
-        units.sort(key=sort_key) 
-        
-        return { 
-            "planner": planner, 
-            "units": units } 
-        
-    except Exception as e: 
-        print("Error:", str(e)) 
+        planner_res = (
+            supabase_client.table("study_planners")
+            .select("*")
+            .match({
+                "program": program,
+                "major": major,
+                "intake_year": intake_year,
+                "intake_semester": intake_semester,
+            })
+            .single()
+            .execute()
+        )
+        planner = planner_res.data
+
+        if not planner:
+            raise HTTPException(status_code=404, detail="No matching study planner found.")
+
+        # Fetch the related units in the same order as Excel (row_index)
+        units_res = (
+            supabase_client.table("study_planner_units")
+            .select("*")
+            .eq("planner_id", planner["id"])
+            .order("row_index", asc=True)   # ✅ keep Excel order
+            .execute()
+        )
+
+        units = units_res.data or []
+
+        print("Row order:", [u["row_index"] for u in units])
+
+        return {
+            "planner": planner,
+            "units": units
+        }
+
+    except Exception as e:
+        print("Error:", str(e))
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
 @app.get("/api/study-planner-tabs")
