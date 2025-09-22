@@ -245,7 +245,7 @@ def view_study_planner(
             supabase_client.table("study_planner_units")
             .select("*")
             .eq("planner_id", planner["id"])
-            .order("row_index", asc=True)   # ✅ keep Excel order
+            .order("row_index", desc=False)   # ascending
             .execute()
         )
 
