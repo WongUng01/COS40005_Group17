@@ -24,6 +24,7 @@ const ViewStudyPlannerTabs = () => {
     Elective: "bg-green-200",
     MPU: "bg-red-200",
     WIL: "bg-purple-200",
+    Specialisation: "bg-cyan-200",
   };
 
   const displayValue = (value: any) =>
@@ -44,7 +45,7 @@ const ViewStudyPlannerTabs = () => {
 
   const API = "https://cos40005-group17.onrender.com";
 
-  //const API = "http://127.0.0.1:8000";
+  //const API = "http://127.0.0.1:8000"; redeploy testing
 
   // --- Fetch tabs and all units once on mount ---
   useEffect(() => {
