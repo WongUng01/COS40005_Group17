@@ -31,8 +31,20 @@ const ViewStudyPlannerTabs = () => {
     value && value.toString().toLowerCase() !== "nan" ? value : "";
 
   const years = Array.from(new Set(tabs.map(t => t.intake_year))).sort((a, b) => b - a);
-  const programs = Array.from(new Set(tabs.filter(t => (!selectedYear || t.intake_year === selectedYear)).map(t => t.program)));
-  const majors = Array.from(new Set(tabs.filter(t => (!selectedProgram || t.program === selectedProgram)).map(t => t.major)));
+  const programs = Array.from(
+    new Set(
+      tabs
+        .filter(t => !selectedYear || t.intake_year === selectedYear)
+        .map(t => t.program)
+    )
+  ).sort((a, b) => a.localeCompare(b));
+  const majors = Array.from(
+    new Set(
+      tabs
+        .filter(t => !selectedProgram || t.program === selectedProgram)
+        .map(t => t.major)
+    )
+  ).sort((a, b) => a.localeCompare(b));
   const semesterOrder = ["Feb/Mar", "Aug/Sep"];
 
   const semesters = Array.from(
@@ -234,9 +246,19 @@ const ViewStudyPlannerTabs = () => {
       {filteredPlanners.length > 0 ? (
         filteredPlanners
         .sort((a, b) => {
+          // 1. Program alphabetical
           const progCompare = a.program.localeCompare(b.program);
           if (progCompare !== 0) return progCompare;
-          return a.major.localeCompare(b.major);
+
+          // 2. Major alphabetical
+          const majorCompare = a.major.localeCompare(b.major);
+          if (majorCompare !== 0) return majorCompare;
+
+          // 3. Semester order (custom, not plain A–Z)
+          const semesterOrder = ["Feb/Mar", "Aug/Sep"];
+          const indexA = semesterOrder.indexOf(a.intake_semester);
+          const indexB = semesterOrder.indexOf(b.intake_semester);
+          return indexA - indexB;
         })
         .map(planner => (
           <PlannerAccordion
