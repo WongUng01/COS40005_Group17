@@ -24,7 +24,7 @@ const ViewStudyPlannerTabs = () => {
     Elective: "bg-green-200",
     MPU: "bg-red-200",
     WIL: "bg-purple-200",
-    Specialisation: "bg-cyan-200",
+    Special: "bg-sky-100",
   };
 
   const displayValue = (value: any) =>
@@ -232,7 +232,13 @@ const ViewStudyPlannerTabs = () => {
       </div>
 
       {filteredPlanners.length > 0 ? (
-        filteredPlanners.map(planner => (
+        filteredPlanners
+        .sort((a, b) => {
+          const progCompare = a.program.localeCompare(b.program);
+          if (progCompare !== 0) return progCompare;
+          return a.major.localeCompare(b.major);
+        })
+        .map(planner => (
           <PlannerAccordion
             key={planner.id}
             planner={planner}
