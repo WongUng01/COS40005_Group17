@@ -121,6 +121,7 @@ supabase_client = supabase.create_client(SUPABASE_URL, SUPABASE_KEY)
 
 client = get_supabase_client()
 
+#testing redeploy
 @app.post("/api/upload-study-planner")
 async def upload_study_planner(
     file: UploadFile = File(...),
