@@ -4,9 +4,9 @@ import React, { useState, useRef } from "react";
 import toast from "react-hot-toast";
 import axios, { AxiosError } from "axios";
 
-// const API = "https://cos40005-group17.onrender.com";
+const API = "https://cos40005-group17.onrender.com";
 
-const API = "http://127.0.0.1:8000";
+// const API = "http://127.0.0.1:8000";
 
 const UploadStudyPlanner = () => {
   const [file, setFile] = useState<File | null>(null);
