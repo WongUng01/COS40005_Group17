@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from "react";
 import axios from "axios";
 import classNames from "classnames";
+import Select from "react-select";
 
 const ViewStudyPlannerTabs = () => {
   const [tabs, setTabs] = useState<any[]>([]);
@@ -17,6 +18,7 @@ const ViewStudyPlannerTabs = () => {
   const [selectedProgram, setSelectedProgram] = useState<string | null>(null);
   const [selectedMajor, setSelectedMajor] = useState<string | null>(null);
   const [selectedSemester, setSelectedSemester] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState(""); // ✅ new search state
 
   const unitTypeColors: Record<string, string> = {
     Core: "bg-blue-200",
@@ -30,25 +32,31 @@ const ViewStudyPlannerTabs = () => {
   const displayValue = (value: any) =>
     value && value.toString().toLowerCase() !== "nan" ? value : "";
 
-  const years = Array.from(new Set(tabs.map(t => t.intake_year))).sort((a, b) => b - a);
+  const years = Array.from(new Set(tabs.map((t) => t.intake_year))).sort(
+    (a, b) => b - a
+  );
   const programs = Array.from(
     new Set(
       tabs
-        .filter(t => !selectedYear || t.intake_year === selectedYear)
-        .map(t => t.program)
+        .filter((t) => !selectedYear || t.intake_year === selectedYear)
+        .map((t) => t.program)
     )
   ).sort((a, b) => a.localeCompare(b));
   const majors = Array.from(
     new Set(
       tabs
-        .filter(t => !selectedProgram || t.program === selectedProgram)
-        .map(t => t.major)
+        .filter((t) => !selectedProgram || t.program === selectedProgram)
+        .map((t) => t.major)
     )
   ).sort((a, b) => a.localeCompare(b));
   const semesterOrder = ["Feb/Mar", "Aug/Sep"];
 
   const semesters = Array.from(
-    new Set(tabs.filter(t => (!selectedMajor || t.major === selectedMajor)).map(t => t.intake_semester))
+    new Set(
+      tabs
+        .filter((t) => !selectedMajor || t.major === selectedMajor)
+        .map((t) => t.intake_semester)
+    )
   ).sort((a, b) => {
     const indexA = semesterOrder.indexOf(a);
     const indexB = semesterOrder.indexOf(b);
@@ -56,7 +64,6 @@ const ViewStudyPlannerTabs = () => {
   });
 
   // const API = "https://cos40005-group17.onrender.com";
-
   const API = "http://127.0.0.1:8000";
 
   // --- Fetch tabs and all units once on mount ---
@@ -66,7 +73,9 @@ const ViewStudyPlannerTabs = () => {
         const res = await axios.get(`${API}/api/study-planner-tabs`);
         setTabs(res.data);
         if (res.data.length > 0) {
-          const latestYear = res.data.sort((a: any, b: any) => b.intake_year - a.intake_year)[0].intake_year;
+          const latestYear = res.data.sort(
+            (a: any, b: any) => b.intake_year - a.intake_year
+          )[0].intake_year;
           setSelectedYear(latestYear);
         }
       } catch (err) {
@@ -90,14 +99,32 @@ const ViewStudyPlannerTabs = () => {
   // --- Compute filteredPlanners only (no mass-fetching) ---
   useEffect(() => {
     let result = [...tabs];
-    if (selectedYear) result = result.filter(t => t.intake_year === selectedYear);
-    if (selectedProgram) result = result.filter(t => t.program === selectedProgram);
-    if (selectedMajor) result = result.filter(t => t.major === selectedMajor);
-    if (selectedSemester) result = result.filter(t => t.intake_semester === selectedSemester);
+    if (selectedYear) result = result.filter((t) => t.intake_year === selectedYear);
+    if (selectedProgram) result = result.filter((t) => t.program === selectedProgram);
+    if (selectedMajor) result = result.filter((t) => t.major === selectedMajor);
+    if (selectedSemester)
+      result = result.filter((t) => t.intake_semester === selectedSemester);
+
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      result = result.filter(
+        (t) =>
+          t.program.toLowerCase().includes(q) ||
+          t.major.toLowerCase().includes(q) ||
+          t.intake_year.toString().includes(q) ||
+          t.intake_semester.toLowerCase().includes(q)
+      );
+    }
 
     setFilteredPlanners(result);
-    // don't prefetch units here (we fetch lazily when opening an accordion)
-  }, [selectedYear, selectedProgram, selectedMajor, selectedSemester, tabs]);
+  }, [
+    selectedYear,
+    selectedProgram,
+    selectedMajor,
+    selectedSemester,
+    searchQuery,
+    tabs,
+  ]);
 
   // --- lazy fetch units for a single planner ---
   const fetchUnitsForPlanner = async (planner: any) => {
@@ -110,28 +137,24 @@ const ViewStudyPlannerTabs = () => {
           intake_semester: planner.intake_semester,
         },
       });
-      setUnitsMap(prev => ({ ...prev, [planner.id]: res.data.units }));
+      setUnitsMap((prev) => ({ ...prev, [planner.id]: res.data.units }));
     } catch (err) {
       console.error(`Failed to fetch units for planner ${planner.id}`, err);
     }
   };
 
-  // --- Toggle open state while preserving scroll and lazily fetching units when opened ---
+  // --- Toggle open state ---
   const handleTogglePlanner = (planner: any) => {
-    // Save current scroll
     const prevScrollY = typeof window !== "undefined" ? window.scrollY : 0;
 
     const wasOpen = !!openPlanners[planner.id];
     const nextOpen = !wasOpen;
-    setOpenPlanners(prev => ({ ...prev, [planner.id]: nextOpen }));
+    setOpenPlanners((prev) => ({ ...prev, [planner.id]: nextOpen }));
 
-    // If we are opening now, lazy fetch units (only if not already loaded)
     if (nextOpen && !unitsMap[planner.id]) {
       fetchUnitsForPlanner(planner);
     }
 
-    // Restore scroll after DOM update to avoid jump
-    // double requestAnimationFrame to run after React paint / layout
     if (typeof window !== "undefined") {
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
@@ -144,7 +167,7 @@ const ViewStudyPlannerTabs = () => {
   const handleRemoveRow = async (plannerId: number, unitId: number) => {
     try {
       await axios.delete(`${API}/api/delete-study-planner-unit`, {
-        params: { id: unitId }
+        params: { id: unitId },
       });
       setUnitsMap((prev) => ({
         ...prev,
@@ -155,7 +178,6 @@ const ViewStudyPlannerTabs = () => {
     }
   };
 
-  // Accordion component (header is a real button with type="button")
   const PlannerAccordion = ({
     planner,
     isOpen,
@@ -181,7 +203,6 @@ const ViewStudyPlannerTabs = () => {
           <span>{isOpen ? "▲" : "▼"}</span>
         </button>
 
-        {/* Conditional render (keeps DOM lighter). We restore scroll after toggle. */}
         {isOpen && <div className="p-4">{children}</div>}
       </div>
     );
@@ -214,6 +235,7 @@ const ViewStudyPlannerTabs = () => {
 
       {message && <p className="text-red-500">{message}</p>}
 
+      {/* Filters */}
       <FilterRow title="Year" options={years} selected={selectedYear} onSelect={setSelectedYear} />
       <FilterRow
         title="Program"
@@ -232,7 +254,12 @@ const ViewStudyPlannerTabs = () => {
           onSelect={setSelectedMajor}
         />
       )}
-      <FilterRow title="Semester" options={semesters} selected={selectedSemester} onSelect={setSelectedSemester} />
+      <FilterRow
+        title="Semester"
+        options={semesters}
+        selected={selectedSemester}
+        onSelect={setSelectedSemester}
+      />
 
       <div className="flex flex-wrap gap-4 mb-6">
         {Object.entries(unitTypeColors).map(([type, color]) => (
@@ -243,30 +270,37 @@ const ViewStudyPlannerTabs = () => {
         ))}
       </div>
 
+      {/* ✅ Search Bar */}
+      <div className="flex justify-end mb-6">
+        <input
+          type="text"
+          placeholder="Search planners by program, major, year, or semester..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="w-full md:w-110 px-3 py-2 border rounded shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+        />
+      </div>
+
+      {/* Accordion List */}
       {filteredPlanners.length > 0 ? (
         filteredPlanners
-        .sort((a, b) => {
-          // 1. Program alphabetical
-          const progCompare = a.program.localeCompare(b.program);
-          if (progCompare !== 0) return progCompare;
-
-          // 2. Major alphabetical
-          const majorCompare = a.major.localeCompare(b.major);
-          if (majorCompare !== 0) return majorCompare;
-
-          // 3. Semester order (custom, not plain A–Z)
-          const semesterOrder = ["Feb/Mar", "Aug/Sep"];
-          const indexA = semesterOrder.indexOf(a.intake_semester);
-          const indexB = semesterOrder.indexOf(b.intake_semester);
-          return indexA - indexB;
-        })
-        .map(planner => (
-          <PlannerAccordion
-            key={planner.id}
-            planner={planner}
-            isOpen={!!openPlanners[planner.id]}
-            onToggle={() => handleTogglePlanner(planner)}
-          >
+          .sort((a, b) => {
+            const progCompare = a.program.localeCompare(b.program);
+            if (progCompare !== 0) return progCompare;
+            const majorCompare = a.major.localeCompare(b.major);
+            if (majorCompare !== 0) return majorCompare;
+            const semesterOrder = ["Feb/Mar", "Aug/Sep"];
+            const indexA = semesterOrder.indexOf(a.intake_semester);
+            const indexB = semesterOrder.indexOf(b.intake_semester);
+            return indexA - indexB;
+          })
+          .map((planner) => (
+            <PlannerAccordion
+              key={planner.id}
+              planner={planner}
+              isOpen={!!openPlanners[planner.id]}
+              onToggle={() => handleTogglePlanner(planner)}
+            >
             <div className="flex justify-between items-center mb-2">
               <button
                 type="button"
@@ -326,7 +360,7 @@ const ViewStudyPlannerTabs = () => {
                               >
                                 {["1", "2", "3", "4"].map((year) => (
                                   <option key={year} value={year}>
-                                    Year {year}
+                                    {year}
                                   </option>
                                 ))}
                               </select>
@@ -358,7 +392,7 @@ const ViewStudyPlannerTabs = () => {
                                 }}
                                 className="w-full px-2 py-1 border rounded"
                               >
-                                {["1", "2", "Summer", "Winter"].map((sem) => (
+                                {["1", "2", "Summer", "Winter", "Term 1", "Term 2", "Term 3", "Term 4"].map((sem) => (
                                   <option key={sem} value={sem}>
                                     {sem}
                                   </option>
@@ -372,11 +406,12 @@ const ViewStudyPlannerTabs = () => {
                           {/* Unit Code */}
                           <td className="border p-2">
                             {editPlannerId === planner.id ? (
-                              <select
-                                value={unit.unit_code}
-                                onChange={async (e) => {
-                                  const newCode = e.target.value;
+                              <Select
+                                value={{ value: unit.unit_code, label: `${unit.unit_code} - ${unit.unit_name}` }}
+                                onChange={async (selectedOption) => {
+                                  const newCode = selectedOption?.value || "";
                                   const selectedUnit = allUnits.find(u => u.unit_code === newCode);
+
                                   const updatedUnit = {
                                     ...unit,
                                     unit_code: selectedUnit?.unit_code || newCode,
@@ -384,6 +419,7 @@ const ViewStudyPlannerTabs = () => {
                                     prerequisites: selectedUnit?.prerequisites || "",
                                     unit_type: selectedUnit?.unit_type || "Elective",
                                   };
+
                                   const newUnits = [...(unitsMap[planner.id] || [])];
                                   newUnits[index] = updatedUnit;
                                   setUnitsMap((prev) => ({ ...prev, [planner.id]: newUnits }));
@@ -398,14 +434,56 @@ const ViewStudyPlannerTabs = () => {
                                     console.error("Failed to update unit code", err);
                                   }
                                 }}
-                                className="w-full px-2 py-1 border rounded"
-                              >
-                                {allUnits.map((u) => (
-                                  <option key={u.unit_code} value={u.unit_code}>
-                                    {u.unit_code}
-                                  </option>
-                                ))}
-                              </select>
+                                options={allUnits
+                                  .sort((a, b) => a.unit_code.localeCompare(b.unit_code))
+                                  .map((u) => ({
+                                    value: u.unit_code,
+                                    label: `${u.unit_code} - ${u.unit_name}`,
+                                  }))
+                                }
+                                isClearable={false}
+                                isSearchable
+                                components={{ ClearIndicator: undefined }} // 🚫 removes the "x"
+                                className="w-64"
+                                styles={{
+                                  control: (base) => ({
+                                    ...base,
+                                    minHeight: "32px", // slimmer height
+                                    height: "32px",
+                                    fontSize: "0.875rem",
+                                    borderRadius: "4px",
+                                    borderColor: "#d1d5db", // Tailwind gray-300
+                                    boxShadow: "none",
+                                    "&:hover": { borderColor: "#2563eb" }, // Tailwind blue-600
+                                  }),
+                                  valueContainer: (base) => ({
+                                    ...base,
+                                    padding: "0 6px",
+                                  }),
+                                  input: (base) => ({
+                                    ...base,
+                                    margin: 0,
+                                    padding: 0,
+                                  }),
+                                  indicatorsContainer: (base) => ({
+                                    ...base,
+                                    height: "32px",
+                                  }),
+                                  option: (base, state) => ({
+                                    ...base,
+                                    fontSize: "0.875rem",
+                                    padding: "4px 8px",
+                                    backgroundColor: state.isFocused ? "#bfdbfe" : "white", // Tailwind blue-200 hover
+                                    color: "#111827", // Tailwind gray-900
+                                  }),
+                                  menu: (base) => ({
+                                    ...base,
+                                    zIndex: 9999,
+                                    fontSize: "0.875rem",
+                                  }),
+                                }}
+                              />
+
                             ) : (
                               displayValue(unit.unit_code)
                             )}
