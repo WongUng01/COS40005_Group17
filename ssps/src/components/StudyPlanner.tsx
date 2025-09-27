@@ -14,7 +14,7 @@ const ViewStudyPlannerTabs = () => {
   const [editPlannerId, setEditPlannerId] = useState<number | null>(null);
   const [openPlanners, setOpenPlanners] = useState<Record<any, boolean>>({});
 
-  const [selectedYear, setSelectedYear] = useState<string | null>(null);
+  const [selectedYears, setSelectedYears] = useState<string[]>([]);
   const [selectedProgram, setSelectedProgram] = useState<string | null>(null);
   const [selectedMajor, setSelectedMajor] = useState<string | null>(null);
   const [selectedSemester, setSelectedSemester] = useState<string | null>(null);
@@ -38,7 +38,7 @@ const ViewStudyPlannerTabs = () => {
   const programs = Array.from(
     new Set(
       tabs
-        .filter((t) => !selectedYear || t.intake_year === selectedYear)
+        .filter((t) => !selectedYears || t.intake_year === selectedYears)
         .map((t) => t.program)
     )
   ).sort((a, b) => a.localeCompare(b));
@@ -64,7 +64,6 @@ const ViewStudyPlannerTabs = () => {
   });
 
   // const API = "https://cos40005-group17.onrender.com";
-
   const API = "http://127.0.0.1:8000";
 
   // --- Fetch tabs and all units once on mount ---
@@ -73,12 +72,6 @@ const ViewStudyPlannerTabs = () => {
       try {
         const res = await axios.get(`${API}/api/study-planner-tabs`);
         setTabs(res.data);
-        if (res.data.length > 0) {
-          const latestYear = res.data.sort(
-            (a: any, b: any) => b.intake_year - a.intake_year
-          )[0].intake_year;
-          setSelectedYear(latestYear);
-        }
       } catch (err) {
         console.error("Error fetching tabs", err);
         setMessage("Could not load planner tabs.");
@@ -100,7 +93,9 @@ const ViewStudyPlannerTabs = () => {
   // --- Compute filteredPlanners only (no mass-fetching) ---
   useEffect(() => {
     let result = [...tabs];
-    if (selectedYear) result = result.filter((t) => t.intake_year === selectedYear);
+    if (selectedYears.length > 0) {
+      result = result.filter((t) => selectedYears.includes(t.intake_year.toString()));
+    }
     if (selectedProgram) result = result.filter((t) => t.program === selectedProgram);
     if (selectedMajor) result = result.filter((t) => t.major === selectedMajor);
     if (selectedSemester)
@@ -119,7 +114,7 @@ const ViewStudyPlannerTabs = () => {
 
     setFilteredPlanners(result);
   }, [
-    selectedYear,
+    selectedYears,
     selectedProgram,
     selectedMajor,
     selectedSemester,
@@ -144,10 +139,7 @@ const ViewStudyPlannerTabs = () => {
     }
   };
 
-  // --- Toggle open state ---
   const handleTogglePlanner = (planner: any) => {
-    const prevScrollY = typeof window !== "undefined" ? window.scrollY : 0;
-
     const wasOpen = !!openPlanners[planner.id];
     const nextOpen = !wasOpen;
     setOpenPlanners((prev) => ({ ...prev, [planner.id]: nextOpen }));
@@ -156,13 +148,10 @@ const ViewStudyPlannerTabs = () => {
       fetchUnitsForPlanner(planner);
     }
 
-    if (typeof window !== "undefined") {
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          window.scrollTo({ top: prevScrollY });
-        });
-      });
-    }
+    // Smoothly scroll that specific accordion into view (optional)
+    setTimeout(() => {
+      document.getElementById(`planner-${planner.id}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 50);
   };
 
   const handleRemoveRow = async (plannerId: number, unitId: number) => {
@@ -232,6 +221,7 @@ const ViewStudyPlannerTabs = () => {
       <div className="mb-4 border rounded">
         <button
           type="button"
+          onMouseDown={(e) => e.preventDefault()}
           onClick={onToggle}
           className="w-full flex justify-between items-center p-3 bg-gray-100 hover:bg-gray-200"
         >
@@ -275,16 +265,54 @@ const ViewStudyPlannerTabs = () => {
       {message && <p className="text-red-500">{message}</p>}
 
       {/* Filters */}
-      <FilterRow title="Year" options={years} selected={selectedYear} onSelect={setSelectedYear} />
-      <FilterRow
-        title="Program"
-        options={programs}
-        selected={selectedProgram}
-        onSelect={(program: string | null) => {
-          setSelectedProgram(program);
-          setSelectedMajor(null);
-        }}
-      />
+      <div className="flex flex-wrap gap-2 mb-4 items-center">
+        <span className="font-medium w-24">Year:</span>
+        {years.map((year: any) => {
+          const isSelected = selectedYears.includes(year.toString());
+          return (
+            <button
+              key={year}
+              onClick={() => {
+                setSelectedYears((prev) =>
+                  isSelected
+                    ? prev.filter((y) => y !== year.toString()) // remove if already selected
+                    : [...prev, year.toString()] // add if not selected
+                );
+              }}
+              className={classNames(
+                "px-3 py-1 rounded border",
+                isSelected
+                  ? "bg-blue-600 text-white border-blue-600"
+                  : "bg-gray-100 text-blue-600 hover:bg-gray-200"
+              )}
+              type="button"
+            >
+              {year}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Program Filter as Dropdown */}
+      <div className="flex items-center gap-2 mb-4">
+        <span className="font-medium w-24">Program:</span>
+        <select
+          value={selectedProgram || ""}
+          onChange={(e) => {
+            const value = e.target.value || null;
+            setSelectedProgram(value);
+            setSelectedMajor(null); // reset major when program changes
+          }}
+          className="px-3 py-1 border rounded bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+        >
+          <option value="">All</option>
+          {programs.map((opt) => (
+            <option key={opt} value={opt}>
+              {opt}
+            </option>
+          ))}
+        </select>
+      </div>
       {selectedProgram && (
         <FilterRow
           title="Major"
@@ -324,15 +352,24 @@ const ViewStudyPlannerTabs = () => {
       {filteredPlanners.length > 0 ? (
         filteredPlanners
           .sort((a, b) => {
-            const progCompare = a.program.localeCompare(b.program);
-            if (progCompare !== 0) return progCompare;
-            const majorCompare = a.major.localeCompare(b.major);
-            if (majorCompare !== 0) return majorCompare;
-            const semesterOrder = ["Feb/Mar", "Aug/Sep"];
-            const indexA = semesterOrder.indexOf(a.intake_semester);
-            const indexB = semesterOrder.indexOf(b.intake_semester);
-            return indexA - indexB;
-          })
+          // 1. sort by year (descending → 2025, 2024, …)
+          const yearCompare = Number(b.intake_year) - Number(a.intake_year);
+          if (yearCompare !== 0) return yearCompare;
+
+          // 2. sort by program
+          const progCompare = a.program.localeCompare(b.program);
+          if (progCompare !== 0) return progCompare;
+
+          // 3. sort by major
+          const majorCompare = a.major.localeCompare(b.major);
+          if (majorCompare !== 0) return majorCompare;
+
+          // 4. sort by semester order
+          const semesterOrder = ["Feb/Mar", "Aug/Sep"];
+          const indexA = semesterOrder.indexOf(a.intake_semester);
+          const indexB = semesterOrder.indexOf(b.intake_semester);
+          return indexA - indexB;
+        })
           .map((planner) => (
             <PlannerAccordion
               key={planner.id}
@@ -343,6 +380,7 @@ const ViewStudyPlannerTabs = () => {
             <div className="flex justify-between items-center mb-2">
               <button
                 type="button"
+                onMouseDown={(e) => e.preventDefault()}
                 onClick={() => setEditPlannerId(editPlannerId === planner.id ? null : planner.id)}
                 className="text-sm px-3 py-1 bg-blue-500 text-white rounded"
               >
@@ -579,6 +617,7 @@ const ViewStudyPlannerTabs = () => {
                           {editPlannerId === planner.id && (
                             <td className="border p-2">
                               <button
+                                onMouseDown={(e) => e.preventDefault()}
                                 onClick={() => handleRemoveRow(planner.id, unit.id)}
                                 className="text-red-600 hover:underline"
                                 type="button"
