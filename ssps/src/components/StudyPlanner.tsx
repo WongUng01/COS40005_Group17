@@ -38,7 +38,9 @@ const ViewStudyPlannerTabs = () => {
   const programs = Array.from(
     new Set(
       tabs
-        .filter((t) => !selectedYears || t.intake_year === selectedYears)
+        .filter((t) =>
+          selectedYears.length === 0 || selectedYears.includes(t.intake_year.toString())
+        )
         .map((t) => t.program)
     )
   ).sort((a, b) => a.localeCompare(b));
