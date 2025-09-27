@@ -165,18 +165,56 @@ const ViewStudyPlannerTabs = () => {
   };
 
   const handleRemoveRow = async (plannerId: number, unitId: number) => {
+    const units = unitsMap[plannerId] || [];
+    const isLastUnit = units.length === 1;
+
+    const confirmMessage = isLastUnit
+      ? "⚠️ You are removing the last unit in this planner. This may delete the study planner as well. Continue?"
+      : "Are you sure you want to remove this unit?";
+
+    if (!window.confirm(confirmMessage)) {
+      return;
+    }
+
     try {
       await axios.delete(`${API}/api/delete-study-planner-unit`, {
         params: { id: unitId },
       });
-      setUnitsMap((prev) => ({
-        ...prev,
-        [plannerId]: (prev[plannerId] || []).filter((unit) => unit.id !== unitId),
-      }));
+
+      if (isLastUnit) {
+        // Remove planner entirely
+        await handleRemovePlanner(plannerId);
+      } else {
+        // Just remove unit
+        setUnitsMap((prev) => ({
+          ...prev,
+          [plannerId]: units.filter((unit) => unit.id !== unitId),
+        }));
+      }
     } catch (err) {
       console.error("Failed to remove row", err);
+      setMessage("❌ Failed to remove unit.");
     }
   };
+
+  const handleRemovePlanner = async (plannerId: number) => {
+  if (!window.confirm("Are you sure you want to remove this study planner? This action cannot be undone.")) {
+    return;
+  }
+  try {
+    await axios.delete(`${API}/api/delete-study-planner`, {
+      params: { id: plannerId },
+    });
+    setTabs((prev) => prev.filter((p) => p.id !== plannerId));
+    setFilteredPlanners((prev) => prev.filter((p) => p.id !== plannerId));
+    const newUnitsMap = { ...unitsMap };
+    delete newUnitsMap[plannerId];
+    setUnitsMap(newUnitsMap);
+  } catch (err) {
+    console.error("Failed to remove planner", err);
+    setMessage("❌ Failed to remove study planner.");
+  }
+};
 
   const PlannerAccordion = ({
     planner,
@@ -309,6 +347,15 @@ const ViewStudyPlannerTabs = () => {
               >
                 {editPlannerId === planner.id ? "Done" : "Edit Planner"}
               </button>
+              {editPlannerId === planner.id && (
+                <button
+                  type="button"
+                  onClick={() => handleRemovePlanner(planner.id)}
+                  className="text-sm px-3 py-1 bg-red-500 text-white rounded"
+                >
+                  Remove Planner
+                </button>
+              )}
             </div>
 
             <div className="relative pb-3">

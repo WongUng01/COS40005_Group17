@@ -13,6 +13,7 @@ from fastapi.responses import JSONResponse
 from postgrest.exceptions import APIError
 import logging
 logger = logging.getLogger("uvicorn.error")
+from uuid import UUID
 
 app = FastAPI()
 
@@ -273,6 +274,29 @@ def get_study_planner_tabs():
     except Exception as e:
         print("Error fetching planner tabs:", str(e))
         raise HTTPException(status_code=500, detail="Failed to fetch planner tabs")
+    
+@app.delete("/api/delete-study-planner")
+def delete_study_planner(id: UUID = Query(...)):  # accepts UUID
+    try:
+        # Delete related units first
+        supabase_client.table("study_planner_units").delete().eq("planner_id", str(id)).execute()
+
+        # Delete the planner
+        planner_res = (
+            supabase_client.table("study_planners")
+            .delete()
+            .eq("id", str(id))  # supabase stores UUIDs as strings
+            .execute()
+        )
+
+        if not planner_res.data:
+            raise HTTPException(status_code=404, detail="Study planner not found")
+
+        return {"message": f"Study planner {id} deleted successfully"}
+
+    except Exception as e:
+        print("Error deleting planner:", str(e))
+        raise HTTPException(status_code=500, detail=f"Failed to delete study planner: {str(e)}")
 
 # Test endpoint
 @app.get("/ping")
