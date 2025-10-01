@@ -108,6 +108,7 @@ const ViewStudyPlannerTabs = () => {
       result = result.filter(
         (t) =>
           t.program.toLowerCase().includes(q) ||
+          t.program_code?.toLowerCase().includes(q) || // 🔍 search by code
           t.major.toLowerCase().includes(q) ||
           t.intake_year.toString().includes(q) ||
           t.intake_semester.toLowerCase().includes(q)
@@ -228,9 +229,9 @@ const ViewStudyPlannerTabs = () => {
           className="w-full flex justify-between items-center p-3 bg-gray-100 hover:bg-gray-200"
         >
           <span className="font-semibold">
-            {planner.program} - {planner.major} ({planner.intake_semester}{" "}
-            {planner.intake_year})
+            {planner.program} - {planner.major} ({planner.intake_semester} {planner.intake_year})
           </span>
+
           <span>{isOpen ? "▲" : "▼"}</span>
         </button>
 

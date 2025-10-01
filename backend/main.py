@@ -113,6 +113,14 @@ class StudentUnitCreate(BaseModel):
     grade: str
     completed: bool
 
+PROGRAM_CODES = {
+    "Bachelor of Computer Science": "BA-CS",
+    "Bachelor of Information and Communication Technology": "BA-ICT",
+    "Bachelor of Engineering": "MA-IT1",
+    "Diploma of Information Technology": "DP-IT",
+    "Master of Information Technology": "MA-IT1",
+}
+
 MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
 
 # Supabase setup
@@ -174,9 +182,15 @@ async def upload_study_planner(
 
         # Insert planner
         planner_id = str(uuid.uuid4())
+
+        program_code = PROGRAM_CODES.get(program)
+        if not program_code:
+            raise HTTPException(status_code=400, detail=f"Unknown program: {program}")
+
         planner_data = {
             "id": planner_id,
             "program": program,
+            "program_code": program_code,
             "major": major,
             "intake_year": intake_year,
             "intake_semester": intake_semester,
@@ -227,7 +241,7 @@ def view_study_planner(
         # Fetch the matching planner
         planner_res = (
             supabase_client.table("study_planners")
-            .select("*")
+            .select("id, program, program_code, major, intake_year, intake_semester")
             .match({
                 "program": program,
                 "major": major,
@@ -267,7 +281,7 @@ def view_study_planner(
 @app.get("/api/study-planner-tabs")
 def get_study_planner_tabs():
     try:
-        res = supabase_client.table("study_planners").select("id, program, major, intake_year, intake_semester").execute()
+        res = supabase_client.table("study_planners").select("id, program, program_code, major, intake_year, intake_semester").execute()
         planners = res.data
 
         return planners
@@ -432,11 +446,16 @@ def create_study_planner(data: PlannerPayload = Body(...)):
                 # Delete existing planner
                 supabase_client.table("study_planners").delete().eq("id", existing_id).execute()
 
+        program_code = PROGRAM_CODES.get(data.program)
+        if not program_code:
+            raise HTTPException(status_code=400, detail=f"Unknown program: {data.program}")
+
         # Insert new planner metadata
         planner_id = str(uuid.uuid4())
         planner_data = {
             "id": planner_id,
             "program": data.program,
+            "program_code": program_code,
             "major": data.major,
             "intake_year": data.intake_year,
             "intake_semester": data.intake_semester
