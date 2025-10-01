@@ -49,8 +49,8 @@ const UploadStudyPlanner = () => {
     ],
     "Master of Information Technology": [
       "Specialisation in Cybersecurity (Cognate Entry)",
-      "Specialisation in Data Science (Cognate Entry)",
       "Specialisation in Cybersecurity (Non-Cognate Entry)",
+      "Specialisation in Data Science (Cognate Entry)",
       "Specialisation in Data Science (Non-Cognate Entry)",
     ],
   };

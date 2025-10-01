@@ -3,8 +3,11 @@
 import React, { useEffect, useState } from "react";
 import axios from "axios";
 import toast from "react-hot-toast";
+import Select from "react-select";
 
-const API = "https://cos40005-group17.onrender.com";
+// const API = "https://cos40005-group17.onrender.com";
+
+const API = "http://127.0.0.1:8000";
 
 type Unit = {
   unit_code: string;
@@ -33,7 +36,10 @@ const CreateStudyPlanner = () => {
 
   const programs = [
     "Bachelor of Computer Science",
+    "Bachelor of Engineering",
     "Bachelor of Information and Communication Technology",
+    "Diploma of Information Technology",
+    "Master of Information Technology",
   ];
 
   const majors: Record<string, string[]> = {
@@ -47,6 +53,19 @@ const CreateStudyPlanner = () => {
     "Bachelor of Information and Communication Technology": [
       "Network Technology",
       "Software Technology",
+    ],
+    "Bachelor of Engineering": [
+      "Software",
+    ],
+    "Diploma of Information Technology": [
+      "Cybersecurity",
+      "Data Science",
+    ],
+    "Master of Information Technology": [
+      "Specialisation in Cybersecurity (Cognate Entry)",
+      "Specialisation in Cybersecurity (Non-Cognate Entry)",
+      "Specialisation in Data Science (Cognate Entry)",
+      "Specialisation in Data Science (Non-Cognate Entry)",
     ],
   };
 
@@ -62,6 +81,12 @@ const CreateStudyPlanner = () => {
     MPU: "bg-red-200",
     WIL: "bg-purple-200",
   };
+
+  const unitOptions = units.map((u) => ({
+    value: u.unit_code,
+    code: u.unit_code,
+    name: u.unit_name,
+  }));
 
   interface AxiosError {
     response?: {
@@ -87,7 +112,11 @@ const CreateStudyPlanner = () => {
     const fetchUnits = async () => {
       try {
         const res = await axios.get<Unit[]>(`${API}/api/units`);
-        setUnits(res.data);
+        // sort by unit_code
+        const sorted = res.data.sort((a, b) =>
+          a.unit_code.localeCompare(b.unit_code, "en", { numeric: true })
+        );
+        setUnits(sorted);
       } catch {
         toast.error("Failed to fetch units.");
       }
@@ -293,17 +322,48 @@ const CreateStudyPlanner = () => {
                   </select>
                 </td>
 
-                <td className="border p-2">
-                  <select
-                    value={row.unit_code}
-                    onChange={(e) => handleChange(i, "unit_code", e.target.value)}
-                    className="w-full border rounded p-1"
-                  >
-                    <option value="">Unit Code</option>
-                    {units.map((u) => (
-                      <option key={u.unit_code} value={u.unit_code}>{u.unit_code}</option>
-                    ))}
-                  </select>
+                <td className="border p-2 w-48">
+                  <Select
+                    options={unitOptions}
+                    value={
+                      row.unit_code
+                        ? { value: row.unit_code, code: row.unit_code, name: row.unit_name }
+                        : null
+                    }
+                    onChange={(selected) => {
+                      handleChange(i, "unit_code", selected ? selected.value : "");
+                    }}
+                    isClearable={false}
+                    classNamePrefix="react-select"
+                    menuPortalTarget={document.body}
+                    styles={{
+                      container: (base) => ({
+                        ...base,
+                        width: "100%",
+                      }),
+                      control: (base) => ({
+                        ...base,
+                        width: "100%",
+                        minHeight: "32px",
+                        height: "32px",
+                        fontSize: "14px",
+                      }),
+                      menuPortal: (base) => ({ ...base, zIndex: 9999 }),
+                    }}
+                    getOptionLabel={(option) => `${option.code} - ${option.name}`} // show code+name in dropdown
+                    formatOptionLabel={(option, { context }) =>
+                      context === "menu" ? `${option.code} - ${option.name}` : option.code
+                    } // only show code when selected
+                    getOptionValue={(option) => option.value}
+                    filterOption={(option, input) => {
+                      if (!input) return true;
+                      const search = input.toLowerCase();
+                      return (
+                        option.data.code.toLowerCase().includes(search) ||
+                        option.data.name.toLowerCase().includes(search)
+                      );
+                    }}
+                  />
                 </td>
 
                 <td className="border p-2">{row.unit_name}</td>

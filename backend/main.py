@@ -443,11 +443,12 @@ def create_study_planner(data: PlannerPayload = Body(...)):
         }
         supabase_client.table("study_planners").insert(planner_data).execute()
 
-        # Insert each planner row
-        for row in data.planner:
+       # Insert each planner row
+        for idx, row in enumerate(data.planner, start=1):
             unit = {
                 "id": str(uuid.uuid4()),
                 "planner_id": planner_id,
+                "row_index": idx,   # ✅ add row index
                 "year": row.year,
                 "semester": row.semester,
                 "unit_code": row.unit_code,
@@ -456,6 +457,7 @@ def create_study_planner(data: PlannerPayload = Body(...)):
                 "unit_type": row.unit_type,
             }
             supabase_client.table("study_planner_units").insert(unit).execute()
+
 
         return {"message": "Study planner created successfully."}
 
