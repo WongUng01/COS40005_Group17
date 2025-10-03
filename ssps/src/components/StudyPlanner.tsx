@@ -12,6 +12,7 @@ const ViewStudyPlannerTabs = () => {
   const [allUnits, setAllUnits] = useState<any[]>([]);
   const [message, setMessage] = useState("");
   const [editPlannerId, setEditPlannerId] = useState<number | null>(null);
+  const [draftUnitsMap, setDraftUnitsMap] = useState<Record<any, any[]>>({});
   const [openPlanners, setOpenPlanners] = useState<Record<any, boolean>>({});
 
   const [selectedYears, setSelectedYears] = useState<string[]>([]);
@@ -157,6 +158,27 @@ const ViewStudyPlannerTabs = () => {
     }, 50);
   };
 
+  // --- Enter edit mode ---
+  const handleEditPlanner = (plannerId: number) => {
+    setEditPlannerId(plannerId);
+    // make a deep copy so cancel works
+    setDraftUnitsMap((prev) => ({
+      ...prev,
+      [plannerId]: JSON.parse(JSON.stringify(unitsMap[plannerId] || [])),
+    }));
+  };
+
+  // --- Cancel edit ---
+  const handleCancelEdit = (plannerId: number) => {
+    setEditPlannerId(null);
+    // discard draft
+    setDraftUnitsMap((prev) => {
+      const copy = { ...prev };
+      delete copy[plannerId];
+      return copy;
+    });
+  };
+
   const handleRemoveRow = async (plannerId: number, unitId: number) => {
     const units = unitsMap[plannerId] || [];
     const isLastUnit = units.length === 1;
@@ -191,23 +213,78 @@ const ViewStudyPlannerTabs = () => {
   };
 
   const handleRemovePlanner = async (plannerId: number) => {
-  if (!window.confirm("Are you sure you want to remove this study planner? This action cannot be undone.")) {
-    return;
-  }
-  try {
-    await axios.delete(`${API}/api/delete-study-planner`, {
-      params: { id: plannerId },
-    });
-    setTabs((prev) => prev.filter((p) => p.id !== plannerId));
-    setFilteredPlanners((prev) => prev.filter((p) => p.id !== plannerId));
-    const newUnitsMap = { ...unitsMap };
-    delete newUnitsMap[plannerId];
-    setUnitsMap(newUnitsMap);
-  } catch (err) {
-    console.error("Failed to remove planner", err);
-    setMessage("❌ Failed to remove study planner.");
-  }
-};
+    if (!window.confirm("Are you sure you want to remove this study planner? This action cannot be undone.")) {
+      return;
+    }
+    try {
+      await axios.delete(`${API}/api/delete-study-planner`, {
+        params: { id: plannerId },
+      });
+      setTabs((prev) => prev.filter((p) => p.id !== plannerId));
+      setFilteredPlanners((prev) => prev.filter((p) => p.id !== plannerId));
+      const newUnitsMap = { ...unitsMap };
+      delete newUnitsMap[plannerId];
+      setUnitsMap(newUnitsMap);
+    } catch (err) {
+      console.error("Failed to remove planner", err);
+      setMessage("❌ Failed to remove study planner.");
+    }
+  };
+
+  // --- Save edit ---
+  const handleSavePlanner = async (plannerId: number) => {
+    const draftUnits = draftUnitsMap[plannerId] || [];
+
+    try {
+      await Promise.all(
+        draftUnits.flatMap((unit) => {
+          const updates = [];
+
+          updates.push(
+            axios.put(`${API}/api/update-study-planner-unit`, {
+              unit_id: unit.id,
+              field: "year",
+              value: unit.year.toString(),
+            })
+          );
+
+          updates.push(
+            axios.put(`${API}/api/update-study-planner-unit`, {
+              unit_id: unit.id,
+              field: "semester",
+              value: unit.semester,
+            })
+          );
+
+          updates.push(
+            axios.put(`${API}/api/update-study-planner-unit`, {
+              unit_id: unit.id,
+              field: "unit_code",
+              value: unit.unit_code,
+            })
+          );
+
+          updates.push(
+            axios.put(`${API}/api/update-study-planner-unit`, {
+              unit_id: unit.id,
+              field: "unit_type",
+              value: unit.unit_type,
+            })
+          );
+
+          return updates;
+        })
+      );
+
+      // After all updates succeed, sync local state
+      setUnitsMap((prev) => ({ ...prev, [plannerId]: draftUnits }));
+      handleCancelEdit(plannerId);
+      alert("Planner saved successfully!");
+    } catch (err) {
+      console.error("Failed to save changes", err);
+      setMessage("❌ Failed to save planner changes.");
+    }
+  };
 
   const PlannerAccordion = ({
     planner,
@@ -381,14 +458,32 @@ const ViewStudyPlannerTabs = () => {
               onToggle={() => handleTogglePlanner(planner)}
             >
             <div className="flex justify-between items-center mb-2">
-              <button
-                type="button"
-                onMouseDown={(e) => e.preventDefault()}
-                onClick={() => setEditPlannerId(editPlannerId === planner.id ? null : planner.id)}
-                className="text-sm px-3 py-1 bg-blue-500 text-white rounded"
-              >
-                {editPlannerId === planner.id ? "Done" : "Edit Planner"}
-              </button>
+              {editPlannerId === planner.id ? (
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => handleSavePlanner(planner.id)}
+                    className="text-sm px-3 py-1 bg-green-500 text-white rounded"
+                  >
+                    Save
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleCancelEdit(planner.id)}
+                    className="text-sm px-3 py-1 bg-gray-500 text-white rounded"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => handleEditPlanner(planner.id)}
+                  className="text-sm px-3 py-1 bg-blue-500 text-white rounded"
+                >
+                  Edit Planner
+                </button>
+              )}
               {editPlannerId === planner.id && (
                 <button
                   type="button"
@@ -413,8 +508,9 @@ const ViewStudyPlannerTabs = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {(unitsMap[planner.id] || [])
-                    .sort((a, b) => a.row_index - b.row_index)
+                  {(editPlannerId === planner.id
+                    ? draftUnitsMap[planner.id]
+                    : unitsMap[planner.id])?.sort((a, b) => a.row_index - b.row_index)
                     .map((unit, index) => {
                       return (
                         <tr
@@ -429,21 +525,13 @@ const ViewStudyPlannerTabs = () => {
                             {editPlannerId === planner.id ? (
                               <select
                                 value={unit.year}
-                                onChange={async (e) => {
+                                onChange={(e) => {
                                   const newValue = e.target.value;
-                                  const updatedUnit = { ...unit, year: newValue };
-                                  const newUnits = [...(unitsMap[planner.id] || [])];
-                                  newUnits[index] = updatedUnit;
-                                  setUnitsMap((prev) => ({ ...prev, [planner.id]: newUnits }));
-                                  try {
-                                    await axios.put(`${API}/api/update-study-planner-unit`, {
-                                      unit_id: unit.id,
-                                      field: "year",
-                                      value: newValue,
-                                    });
-                                  } catch (err) {
-                                    console.error("Failed to update year", err);
-                                  }
+                                  setDraftUnitsMap((prev) => {
+                                    const newUnits = [...(prev[planner.id] || [])];
+                                    newUnits[index] = { ...unit, year: newValue };
+                                    return { ...prev, [planner.id]: newUnits };
+                                  });
                                 }}
                                 className="w-full px-2 py-1 border rounded"
                               >
@@ -463,21 +551,13 @@ const ViewStudyPlannerTabs = () => {
                             {editPlannerId === planner.id ? (
                               <select
                                 value={unit.semester}
-                                onChange={async (e) => {
+                                onChange={(e) => {
                                   const newValue = e.target.value;
-                                  const updatedUnit = { ...unit, semester: newValue };
-                                  const newUnits = [...(unitsMap[planner.id] || [])];
-                                  newUnits[index] = updatedUnit;
-                                  setUnitsMap((prev) => ({ ...prev, [planner.id]: newUnits }));
-                                  try {
-                                    await axios.put(`${API}/api/update-study-planner-unit`, {
-                                      unit_id: unit.id,
-                                      field: "semester",
-                                      value: newValue,
-                                    });
-                                  } catch (err) {
-                                    console.error("Failed to update semester", err);
-                                  }
+                                  setDraftUnitsMap((prev) => {
+                                    const newUnits = [...(prev[planner.id] || [])];
+                                    newUnits[index] = { ...unit, semester: newValue };
+                                    return { ...prev, [planner.id]: newUnits };
+                                  });
                                 }}
                                 className="w-full px-2 py-1 border rounded"
                               >
@@ -497,31 +577,21 @@ const ViewStudyPlannerTabs = () => {
                             {editPlannerId === planner.id ? (
                               <Select
                                 value={{ value: unit.unit_code, label: `${unit.unit_code} - ${unit.unit_name}` }}
-                                onChange={async (selectedOption) => {
+                                onChange={(selectedOption) => {
                                   const newCode = selectedOption?.value || "";
-                                  const selectedUnit = allUnits.find(u => u.unit_code === newCode);
+                                  const selectedUnit = allUnits.find((u) => u.unit_code === newCode);
 
-                                  const updatedUnit = {
-                                    ...unit,
-                                    unit_code: selectedUnit?.unit_code || newCode,
-                                    unit_name: selectedUnit?.unit_name || "",
-                                    prerequisites: selectedUnit?.prerequisites || "",
-                                    unit_type: selectedUnit?.unit_type || "Elective",
-                                  };
-
-                                  const newUnits = [...(unitsMap[planner.id] || [])];
-                                  newUnits[index] = updatedUnit;
-                                  setUnitsMap((prev) => ({ ...prev, [planner.id]: newUnits }));
-
-                                  try {
-                                    await axios.put(`${API}/api/update-study-planner-unit`, {
-                                      unit_id: unit.id,
-                                      field: "unit_code",
-                                      value: newCode,
-                                    });
-                                  } catch (err) {
-                                    console.error("Failed to update unit code", err);
-                                  }
+                                  setDraftUnitsMap((prev) => {
+                                    const newUnits = [...(prev[planner.id] || [])];
+                                    newUnits[index] = {
+                                      ...unit,
+                                      unit_code: selectedUnit?.unit_code || newCode,
+                                      unit_name: selectedUnit?.unit_name || "",
+                                      prerequisites: selectedUnit?.prerequisites || "",
+                                      unit_type: selectedUnit?.unit_type || "Elective",
+                                    };
+                                    return { ...prev, [planner.id]: newUnits };
+                                  });
                                 }}
                                 options={allUnits
                                   .sort((a, b) => a.unit_code.localeCompare(b.unit_code))
@@ -532,47 +602,9 @@ const ViewStudyPlannerTabs = () => {
                                 }
                                 isClearable={false}
                                 isSearchable
-                                components={{ ClearIndicator: undefined }} // 🚫 removes the "x"
+                                components={{ ClearIndicator: undefined }}
                                 className="w-64"
-                                styles={{
-                                  control: (base) => ({
-                                    ...base,
-                                    minHeight: "32px", // slimmer height
-                                    height: "32px",
-                                    fontSize: "0.875rem",
-                                    borderRadius: "4px",
-                                    borderColor: "#d1d5db", // Tailwind gray-300
-                                    boxShadow: "none",
-                                    "&:hover": { borderColor: "#2563eb" }, // Tailwind blue-600
-                                  }),
-                                  valueContainer: (base) => ({
-                                    ...base,
-                                    padding: "0 6px",
-                                  }),
-                                  input: (base) => ({
-                                    ...base,
-                                    margin: 0,
-                                    padding: 0,
-                                  }),
-                                  indicatorsContainer: (base) => ({
-                                    ...base,
-                                    height: "32px",
-                                  }),
-                                  option: (base, state) => ({
-                                    ...base,
-                                    fontSize: "0.875rem",
-                                    padding: "4px 8px",
-                                    backgroundColor: state.isFocused ? "#bfdbfe" : "white", // Tailwind blue-200 hover
-                                    color: "#111827", // Tailwind gray-900
-                                  }),
-                                  menu: (base) => ({
-                                    ...base,
-                                    zIndex: 9999,
-                                    fontSize: "0.875rem",
-                                  }),
-                                }}
                               />
-
                             ) : (
                               displayValue(unit.unit_code)
                             )}
@@ -589,21 +621,13 @@ const ViewStudyPlannerTabs = () => {
                             <td className="border p-2">
                               <select
                                 value={unit.unit_type}
-                                onChange={async (e) => {
+                                onChange={(e) => {
                                   const newValue = e.target.value;
-                                  const updatedUnit = { ...unit, unit_type: newValue };
-                                  const newUnits = [...(unitsMap[planner.id] || [])];
-                                  newUnits[index] = updatedUnit;
-                                  setUnitsMap((prev) => ({ ...prev, [planner.id]: newUnits }));
-                                  try {
-                                    await axios.put(`${API}/api/update-study-planner-unit`, {
-                                      unit_id: unit.id,
-                                      field: "unit_type",
-                                      value: newValue,
-                                    });
-                                  } catch (err) {
-                                    console.error("Failed to update unit type", err);
-                                  }
+                                  setDraftUnitsMap((prev) => {
+                                    const newUnits = [...(prev[planner.id] || [])];
+                                    newUnits[index] = { ...unit, unit_type: newValue };
+                                    return { ...prev, [planner.id]: newUnits };
+                                  });
                                 }}
                                 className="w-full px-2 py-1 border rounded"
                               >
