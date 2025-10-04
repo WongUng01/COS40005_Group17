@@ -19,6 +19,13 @@ app = FastAPI()
 
 planners_db: Dict[str, List[dict]] = {}
 
+class AddUnitRequest(BaseModel):
+    planner_id: str
+    year: str
+    semester: str
+    unit_code: str | None = None
+    unit_type: str | None = None
+
 class PlannerRequest(BaseModel):
     id: int
     program: str
@@ -486,55 +493,81 @@ def create_study_planner(data: PlannerPayload = Body(...)):
         print("Internal Server Error:", str(e))
         raise HTTPException(status_code=500, detail="Internal server error")
     
-@app.delete("/api/delete-study-planner-unit")
-def delete_study_planner_unit(id: str = Query(...)):
+@app.delete("/api/delete-study-planner-unit/{unit_id}")
+def delete_study_planner_unit(unit_id: str):
     try:
-        res = supabase_client.table("study_planner_units").delete().eq("id", id).execute()
-        print("Delete result:", res)
+        print(f"Deleting study planner unit with ID: {unit_id}")
 
-        # If res has 'status_code', check if it's successful (usually 200 or 204)
-        if hasattr(res, 'status_code'):
-            if res.status_code not in (200, 204):
-                raise HTTPException(status_code=500, detail=f"Failed to delete unit: {res.data}")
+        response = supabase_client.table("study_planner_units") \
+            .delete() \
+            .eq("id", unit_id) \
+            .execute()
 
-        # If res.data is empty or delete count is 0, it means nothing deleted
-        if hasattr(res, 'data') and (not res.data or len(res.data) == 0):
-            raise HTTPException(status_code=404, detail="Unit not found or already deleted.")
+        if response.data is None:
+            raise HTTPException(status_code=404, detail="Unit not found")
 
-        return {"message": f"Unit ID {id} deleted successfully."}
+        return {"message": "Unit deleted successfully"}
+
+    except HTTPException as http_err:
+        raise http_err
     except Exception as e:
-        print("Exception during delete:", str(e))
-        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Server error: {str(e)}")
 
-# @app.post("/api/add-study-planner-unit")
-# def add_study_planner_unit(unit: dict = Body(...)):
-#     try:
-#         if "planner_id" not in unit:
-#             raise HTTPException(status_code=400, detail="Missing required field: planner_id")
+@app.post("/api/add-study-planner-unit")
+def add_study_planner_unit(payload: dict):
+    try:
+        print("📩 Incoming add-study-planner-unit payload:", payload)
 
-#         # Set default values
-#         unit.setdefault("year", "1")
-#         unit.setdefault("semester", "1")
-#         unit.setdefault("unit_code", "")
-#         unit.setdefault("unit_name", "")
-#         unit.setdefault("unit_type", "")
-#         unit.setdefault("prerequisites", "")
+        required_fields = ["planner_id", "year", "semester", "row_index"]
+        for field in required_fields:
+            if field not in payload or payload[field] in (None, ""):
+                raise HTTPException(status_code=400, detail=f"Missing required field: {field}")
 
-#         # Insert the unit
-#         res = supabase_client.table("study_planner_units").insert(unit).execute()
+        unit_code = payload.get("unit_code")
+        unit_name = None
+        prerequisites = None
 
-#         # Validate the response
-#         if not res.data or len(res.data) == 0:
-#             raise HTTPException(status_code=500, detail="Failed to insert unit or no data returned.")
+        # 🧩 Auto-fetch unit name + prerequisites if unit_code provided
+        if unit_code:
+            unit_res = supabase_client.table("units") \
+                .select("unit_name, prerequisites") \
+                .eq("unit_code", unit_code) \
+                .maybe_single() \
+                .execute()
 
-#         return {
-#             "message": "Unit added successfully.",
-#             "unit": res.data[0]
-#         }
+            if unit_res.data:
+                unit_name = unit_res.data.get("unit_name")
+                prerequisites = unit_res.data.get("prerequisites")
 
-#     except Exception as e:
-#         print("Add unit error:", str(e))
-#         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+        insert_data = {
+            "planner_id": payload["planner_id"],
+            "year": payload["year"],
+            "semester": payload["semester"],
+            "row_index": payload["row_index"],
+            "unit_code": unit_code,
+            "unit_type": payload.get("unit_type"),
+            "unit_name": unit_name,              # ✅ now safe
+            "prerequisites": prerequisites,      # ✅ optional
+        }
+
+        print("🧾 Inserting:", insert_data)
+
+        response = supabase_client.table("study_planner_units").insert(insert_data).execute()
+        print("✅ Insert response:", response)
+
+        if not response.data:
+            raise HTTPException(status_code=500, detail="Insert failed: no data returned")
+
+        return {"message": "Unit added successfully", "unit": response.data[0]}
+
+    except HTTPException as http_err:
+        raise http_err
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Server error: {str(e)}")
     
 @app.post("/students/{student_id}/upload-units")
 async def upload_units(

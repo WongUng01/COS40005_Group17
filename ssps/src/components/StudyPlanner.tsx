@@ -14,7 +14,7 @@ const ViewStudyPlannerTabs = () => {
   const [editPlannerId, setEditPlannerId] = useState<number | null>(null);
   const [draftUnitsMap, setDraftUnitsMap] = useState<Record<any, any[]>>({});
   const [openPlanners, setOpenPlanners] = useState<Record<any, boolean>>({});
-
+  const [deletedUnits, setDeletedUnits] = useState<Record<string, number[]>>({});
   const [selectedYears, setSelectedYears] = useState<string[]>([]);
   const [selectedProgram, setSelectedProgram] = useState<string | null>(null);
   const [selectedMajor, setSelectedMajor] = useState<string | null>(null);
@@ -161,11 +161,11 @@ const ViewStudyPlannerTabs = () => {
   // --- Enter edit mode ---
   const handleEditPlanner = (plannerId: number) => {
     setEditPlannerId(plannerId);
-    // make a deep copy so cancel works
     setDraftUnitsMap((prev) => ({
       ...prev,
       [plannerId]: JSON.parse(JSON.stringify(unitsMap[plannerId] || [])),
     }));
+    setDeletedUnits((prev) => ({ ...prev, [plannerId]: [] }));
   };
 
   // --- Cancel edit ---
@@ -177,40 +177,70 @@ const ViewStudyPlannerTabs = () => {
       delete copy[plannerId];
       return copy;
     });
+
+    // discard any pending deletions for this planner
+    setDeletedUnits((prev) => {
+      const copy = { ...prev };
+      delete copy[plannerId];
+      return copy;
+    });
   };
 
-  const handleRemoveRow = async (plannerId: number, unitId: number) => {
-    const units = unitsMap[plannerId] || [];
-    const isLastUnit = units.length === 1;
+  // --- Add Row ---
+  const handleAddRow = (plannerId: number) => {
+    setDraftUnitsMap((prev) => {
+      const currentUnits = prev[plannerId] || [];
 
-    const confirmMessage = isLastUnit
-      ? "⚠️ You are removing the last unit in this planner. This may delete the study planner as well. Continue?"
-      : "Are you sure you want to remove this unit?";
+      // Determine next row_index
+      const nextIndex = currentUnits.length > 0
+        ? Math.max(...currentUnits.map((u) => u.row_index ?? 0)) + 1
+        : 1;
 
-    if (!window.confirm(confirmMessage)) {
-      return;
-    }
+      // Create new temp unit with sensible defaults
+      const newUnit = {
+        tempId: crypto.randomUUID(),
+        year: "1",
+        semester: "1",
+        unit_code: "",
+        unit_name: "",
+        prerequisites: "",
+        unit_type: "",
+        row_index: nextIndex,
+      };
 
-    try {
-      await axios.delete(`${API}/api/delete-study-planner-unit`, {
-        params: { id: unitId },
-      });
+      return {
+        ...prev,
+        [plannerId]: [...currentUnits, newUnit],
+      };
+    });
+  };
 
-      if (isLastUnit) {
-        // Remove planner entirely
-        await handleRemovePlanner(plannerId);
-      } else {
-        // Just remove unit
-        setUnitsMap((prev) => ({
-          ...prev,
-          [plannerId]: units.filter((unit) => unit.id !== unitId),
-        }));
+  // Soft-delete: mark for deletion (only saved units) and remove from draft UI
+  const handleRemoveRow = (plannerId: number, unit: any) => {
+    // If it's a saved unit, confirm and mark it for backend deletion on Save
+    if (unit?.id) {
+      if (!window.confirm("Are you sure you want to delete this unit? This will be removed when you press Save.")) {
+        return;
       }
-    } catch (err) {
-      console.error("Failed to remove row", err);
-      setMessage("❌ Failed to remove unit.");
+      setDeletedUnits((prev) => ({
+        ...prev,
+        [plannerId]: [...(prev[plannerId] || []), unit.id],
+      }));
     }
+
+    // Remove the row from the current draft list so the UI immediately updates
+    setDraftUnitsMap((prev) => {
+      const current = prev[plannerId] || [];
+      const filtered = current.filter((u) => {
+        // If unit has an id, remove matching id. Otherwise remove matching tempId.
+        if (unit?.id != null) return u.id !== unit.id;
+        if (unit?.tempId != null) return u.tempId !== unit.tempId;
+        return true;
+      });
+      return { ...prev, [plannerId]: filtered };
+    });
   };
+
 
   const handleRemovePlanner = async (plannerId: number) => {
     if (!window.confirm("Are you sure you want to remove this study planner? This action cannot be undone.")) {
@@ -233,56 +263,81 @@ const ViewStudyPlannerTabs = () => {
 
   // --- Save edit ---
   const handleSavePlanner = async (plannerId: number) => {
-    const draftUnits = draftUnitsMap[plannerId] || [];
-
     try {
+      const draftUnits = draftUnitsMap[plannerId] || [];
+
+      // 🧩 Step 1: Validate all draft rows before saving
+      const missingUnits = draftUnits.filter(
+        (unit) => !unit.unit_code || unit.unit_code.trim() === ""
+      );
+
+      if (missingUnits.length > 0) {
+        alert(
+          `⚠️ Please select a unit for all rows before saving.\n` +
+          `Missing unit in ${missingUnits.length} row${missingUnits.length > 1 ? "s" : ""}.`
+        );
+        return; // ❌ Stop saving
+      }
+
+      // 🧩 Step 2: Handle deletions
+      const pendingDeletes = deletedUnits[plannerId] || [];
+      if (pendingDeletes.length > 0) {
+        await Promise.all(
+          pendingDeletes.map((id) =>
+            axios.delete(`${API}/api/delete-study-planner-unit/${id}`)
+          )
+        );
+        setDeletedUnits((prev) => ({ ...prev, [plannerId]: [] }));
+      }
+
+      // 🧩 Step 3: Save (add or update)
       await Promise.all(
-        draftUnits.flatMap((unit) => {
-          const updates = [];
+        draftUnits.map(async (unit, index) => {
+          // New units
+          if (!unit.id && unit.tempId) {
+            const res = await axios.post(`${API}/api/add-study-planner-unit`, {
+              planner_id: plannerId,
+              year: String(unit.year ?? "1"),
+              semester: String(unit.semester ?? "1"),
+              unit_code: unit.unit_code,
+              unit_type: unit.unit_type || null,
+              row_index: index + 1,
+            });
 
-          updates.push(
-            axios.put(`${API}/api/update-study-planner-unit`, {
+            const newUnit = res.data.unit;
+
+            setDraftUnitsMap((prev) => ({
+              ...prev,
+              [plannerId]: prev[plannerId].map((u) =>
+                u.tempId === unit.tempId ? { ...newUnit } : u
+              ),
+            }));
+          }
+
+          // Existing unit edits
+          else if (unit.id && unit.editedField) {
+            await axios.put(`${API}/api/update-study-planner-unit`, {
               unit_id: unit.id,
-              field: "year",
-              value: unit.year.toString(),
-            })
-          );
-
-          updates.push(
-            axios.put(`${API}/api/update-study-planner-unit`, {
-              unit_id: unit.id,
-              field: "semester",
-              value: unit.semester,
-            })
-          );
-
-          updates.push(
-            axios.put(`${API}/api/update-study-planner-unit`, {
-              unit_id: unit.id,
-              field: "unit_code",
-              value: unit.unit_code,
-            })
-          );
-
-          updates.push(
-            axios.put(`${API}/api/update-study-planner-unit`, {
-              unit_id: unit.id,
-              field: "unit_type",
-              value: unit.unit_type,
-            })
-          );
-
-          return updates;
+              field: unit.editedField,
+              value: unit[unit.editedField],
+            });
+          }
         })
       );
 
-      // After all updates succeed, sync local state
-      setUnitsMap((prev) => ({ ...prev, [plannerId]: draftUnits }));
-      handleCancelEdit(plannerId);
-      alert("Planner saved successfully!");
+      // 🧩 Step 4: Apply local updates
+      setUnitsMap((prev) => ({
+        ...prev,
+        [plannerId]: draftUnitsMap[plannerId],
+      }));
+
+      // 🧩 Step 5: Exit edit mode
+      setEditPlannerId(null);
+
+      alert("✅ Planner saved successfully!");
     } catch (err) {
-      console.error("Failed to save changes", err);
-      setMessage("❌ Failed to save planner changes.");
+      console.error(err);
+      alert("❌ Failed to save planner.");
     }
   };
 
@@ -459,7 +514,7 @@ const ViewStudyPlannerTabs = () => {
             >
             <div className="flex justify-between items-center mb-2">
               {editPlannerId === planner.id ? (
-                <div className="flex gap-2">
+                <div className="flex gap-2  ml-auto">
                   <button
                     type="button"
                     onClick={() => handleSavePlanner(planner.id)}
@@ -479,18 +534,9 @@ const ViewStudyPlannerTabs = () => {
                 <button
                   type="button"
                   onClick={() => handleEditPlanner(planner.id)}
-                  className="text-sm px-3 py-1 bg-blue-500 text-white rounded"
+                  className="ml-auto text-sm px-3 py-1 bg-blue-500 text-white rounded"
                 >
                   Edit Planner
-                </button>
-              )}
-              {editPlannerId === planner.id && (
-                <button
-                  type="button"
-                  onClick={() => handleRemovePlanner(planner.id)}
-                  className="text-sm px-3 py-1 bg-red-500 text-white rounded"
-                >
-                  Remove Planner
                 </button>
               )}
             </div>
@@ -645,7 +691,7 @@ const ViewStudyPlannerTabs = () => {
                             <td className="border p-2">
                               <button
                                 onMouseDown={(e) => e.preventDefault()}
-                                onClick={() => handleRemoveRow(planner.id, unit.id)}
+                                onClick={() => handleRemoveRow(planner.id, unit)}
                                 className="text-red-600 hover:underline"
                                 type="button"
                               >
@@ -658,6 +704,26 @@ const ViewStudyPlannerTabs = () => {
                     })}
                 </tbody>
               </table>
+              <div className="mt-4 flex justify-between items-center">
+                {editPlannerId === planner.id && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => handleAddRow(planner.id)}
+                      className="px-3 py-1 bg-blue-600 text-white rounded text-sm"
+                    >
+                      + Add Row
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleRemovePlanner(planner.id)}
+                      className="px-3 py-1 bg-red-500 text-white rounded text-sm"
+                    >
+                      Remove Planner
+                    </button>
+                  </>
+                )}
+              </div>
             </div>
           </PlannerAccordion>
         ))
