@@ -417,7 +417,29 @@ def update_study_planner_unit(update: UpdateUnitRequest):
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Server error: {str(e)}")
+    
+@app.put("/api/update-study-planner-order")
+def update_study_planner_order(data: dict = Body(...)):
+    try:
+        planner_id = data.get("planner_id")
+        units = data.get("units", [])
 
+        if not planner_id or not units:
+            raise HTTPException(status_code=400, detail="Missing planner_id or units list")
+
+        # Update each unit's row_index based on its new order
+        for index, unit in enumerate(units):
+            supabase_client.table("study_planner_units") \
+                .update({"row_index": index}) \
+                .eq("id", unit["id"]) \
+                .execute()
+
+        return {"message": "Study planner unit order (row_index) updated successfully"}
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Failed to update row order: {str(e)}")
     
 @app.get("/api/units")
 def get_units():

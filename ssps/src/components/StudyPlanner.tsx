@@ -4,6 +4,7 @@ import React, { useEffect, useState } from "react";
 import axios from "axios";
 import classNames from "classnames";
 import Select from "react-select";
+import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
 
 const ViewStudyPlannerTabs = () => {
   const [tabs, setTabs] = useState<any[]>([]);
@@ -290,6 +291,21 @@ const ViewStudyPlannerTabs = () => {
         setDeletedUnits((prev) => ({ ...prev, [plannerId]: [] }));
       }
 
+      const reorderedUnits = draftUnitsMap[plannerId];
+      if (reorderedUnits) {
+        const existingUnits = reorderedUnits.filter((u) => !!u.id); // only those already saved in DB
+
+        if (existingUnits.length > 0) {
+          await axios.put(`${API}/api/update-study-planner-order`, {
+            planner_id: plannerId,
+            units: existingUnits.map((u) => ({
+              id: u.id,
+              row_index: u.row_index,
+            })),
+          });
+        }
+      }
+
       // 🧩 Step 3: Save (add or update)
       await Promise.all(
         draftUnits.map(async (unit, index) => {
@@ -553,156 +569,192 @@ const ViewStudyPlannerTabs = () => {
                     {editPlannerId === planner.id && <th className="border p-2">Type</th>}
                   </tr>
                 </thead>
-                <tbody>
-                  {(editPlannerId === planner.id
-                    ? draftUnitsMap[planner.id]
-                    : unitsMap[planner.id])?.sort((a, b) => a.row_index - b.row_index)
-                    .map((unit, index) => {
-                      return (
-                        <tr
-                          key={unit.id ?? unit.tempId ?? `fallback-${index}`}
-                          className={classNames(
-                            "hover:bg-opacity-80",
-                            unitTypeColors[unit.unit_type] || "bg-gray-100"
-                          )}
-                        >
-                          {/* Year */}
-                          <td className="border p-2">
-                            {editPlannerId === planner.id ? (
-                              <select
-                                value={unit.year}
-                                onChange={(e) => {
-                                  const newValue = e.target.value;
-                                  setDraftUnitsMap((prev) => {
-                                    const newUnits = [...(prev[planner.id] || [])];
-                                    newUnits[index] = { ...unit, year: newValue };
-                                    return { ...prev, [planner.id]: newUnits };
-                                  });
-                                }}
-                                className="w-full px-2 py-1 border rounded"
-                              >
-                                {["1", "2", "3", "4"].map((year) => (
-                                  <option key={year} value={year}>
-                                    {year}
-                                  </option>
-                                ))}
-                              </select>
-                            ) : (
-                              unit.year
-                            )}
-                          </td>
+                <DragDropContext
+                  onDragEnd={(result) => {
+                    const { source, destination } = result;
+                    if (!destination || destination.index === source.index) return;
 
-                          {/* Semester */}
-                          <td className="border p-2">
-                            {editPlannerId === planner.id ? (
-                              <select
-                                value={unit.semester}
-                                onChange={(e) => {
-                                  const newValue = e.target.value;
-                                  setDraftUnitsMap((prev) => {
-                                    const newUnits = [...(prev[planner.id] || [])];
-                                    newUnits[index] = { ...unit, semester: newValue };
-                                    return { ...prev, [planner.id]: newUnits };
-                                  });
-                                }}
-                                className="w-full px-2 py-1 border rounded"
-                              >
-                                {["1", "2", "Summer", "Winter", "Term 1", "Term 2", "Term 3", "Term 4"].map((sem) => (
-                                  <option key={sem} value={sem}>
-                                    {sem}
-                                  </option>
-                                ))}
-                              </select>
-                            ) : (
-                              unit.semester
-                            )}
-                          </td>
+                    setDraftUnitsMap((prev) => {
+                      const updated = [...(prev[planner.id] || [])];
+                      const [moved] = updated.splice(source.index, 1);
+                      updated.splice(destination.index, 0, moved);
 
-                          {/* Unit Code */}
-                          <td className="border p-2">
-                            {editPlannerId === planner.id ? (
-                              <Select
-                                value={{ value: unit.unit_code, label: `${unit.unit_code} - ${unit.unit_name}` }}
-                                onChange={(selectedOption) => {
-                                  const newCode = selectedOption?.value || "";
-                                  const selectedUnit = allUnits.find((u) => u.unit_code === newCode);
+                      // reassign row_index locally (not saved yet)
+                      return {
+                        ...prev,
+                        [planner.id]: updated.map((u, i) => ({ ...u, row_index: i + 1 })),
+                      };
+                    });
+                  }}
+                >
+                  <Droppable droppableId={`planner-${planner.id}`}>
+                    {(provided) => (
+                      <tbody ref={provided.innerRef} {...provided.droppableProps}>
+                        {(editPlannerId === planner.id
+                          ? draftUnitsMap[planner.id]
+                          : unitsMap[planner.id]
+                        )
+                          ?.sort((a, b) => a.row_index - b.row_index)
+                          .map((unit, index) => (
+                            <Draggable
+                              key={unit.id ?? unit.tempId ?? `row-${index}`}
+                              draggableId={(unit.id ?? unit.tempId ?? `row-${index}`).toString()}
+                              index={index}
+                              isDragDisabled={editPlannerId !== planner.id}
+                            >
+                              {(provided, snapshot) => (
+                                <tr
+                                  ref={provided.innerRef}
+                                  {...provided.draggableProps}
+                                  {...provided.dragHandleProps}
+                                  className={classNames(
+                                    "hover:bg-opacity-80 transition-colors",
+                                    snapshot.isDragging ? "bg-yellow-100" : "",
+                                    unitTypeColors[unit.unit_type] || "bg-gray-100"
+                                  )}
+                                >
+                                  {/* Year */}
+                                  <td className="border p-2">{editPlannerId === planner.id ? (
+                                    <select
+                                      value={unit.year}
+                                      onChange={(e) => {
+                                        const newValue = e.target.value;
+                                        setDraftUnitsMap((prev) => {
+                                          const newUnits = [...(prev[planner.id] || [])];
+                                          newUnits[index] = { ...unit, year: newValue };
+                                          return { ...prev, [planner.id]: newUnits };
+                                        });
+                                      }}
+                                      className="w-full px-2 py-1 border rounded"
+                                    >
+                                      {["1", "2", "3", "4"].map((year) => (
+                                        <option key={year} value={year}>
+                                          {year}
+                                        </option>
+                                      ))}
+                                    </select>
+                                  ) : (
+                                    unit.year
+                                  )}</td>
 
-                                  setDraftUnitsMap((prev) => {
-                                    const newUnits = [...(prev[planner.id] || [])];
-                                    newUnits[index] = {
-                                      ...unit,
-                                      unit_code: selectedUnit?.unit_code || newCode,
-                                      unit_name: selectedUnit?.unit_name || "",
-                                      prerequisites: selectedUnit?.prerequisites || "",
-                                      unit_type: selectedUnit?.unit_type || "Elective",
-                                    };
-                                    return { ...prev, [planner.id]: newUnits };
-                                  });
-                                }}
-                                options={allUnits
-                                  .sort((a, b) => a.unit_code.localeCompare(b.unit_code))
-                                  .map((u) => ({
-                                    value: u.unit_code,
-                                    label: `${u.unit_code} - ${u.unit_name}`,
-                                  }))
-                                }
-                                isClearable={false}
-                                isSearchable
-                                components={{ ClearIndicator: undefined }}
-                                className="w-64"
-                              />
-                            ) : (
-                              displayValue(unit.unit_code)
-                            )}
-                          </td>
+                                  {/* Semester */}
+                                  <td className="border p-2">{editPlannerId === planner.id ? (
+                                    <select
+                                      value={unit.semester}
+                                      onChange={(e) => {
+                                        const newValue = e.target.value;
+                                        setDraftUnitsMap((prev) => {
+                                          const newUnits = [...(prev[planner.id] || [])];
+                                          newUnits[index] = { ...unit, semester: newValue };
+                                          return { ...prev, [planner.id]: newUnits };
+                                        });
+                                      }}
+                                      className="w-full px-2 py-1 border rounded"
+                                    >
+                                      {["1", "2", "Summer", "Winter", "Term 1", "Term 2", "Term 3", "Term 4"].map((sem) => (
+                                        <option key={sem} value={sem}>
+                                          {sem}
+                                        </option>
+                                      ))}
+                                    </select>
+                                  ) : (
+                                    unit.semester
+                                  )}</td>
 
-                          {/* Unit Name */}
-                          <td className="border p-2">{unit.unit_name}</td>
+                                  {/* Unit Code */}
+                                  <td className="border p-2">{editPlannerId === planner.id ? (
+                                    <Select
+                                      value={{
+                                        value: unit.unit_code,
+                                        label: `${unit.unit_code} - ${unit.unit_name}`,
+                                      }}
+                                      onChange={(selectedOption) => {
+                                        const newCode = selectedOption?.value || "";
+                                        const selectedUnit = allUnits.find(
+                                          (u) => u.unit_code === newCode
+                                        );
 
-                          {/* Prerequisites */}
-                          <td className="border p-2">{displayValue(unit.prerequisites)}</td>
+                                        setDraftUnitsMap((prev) => {
+                                          const newUnits = [...(prev[planner.id] || [])];
+                                          newUnits[index] = {
+                                            ...unit,
+                                            unit_code: selectedUnit?.unit_code || newCode,
+                                            unit_name: selectedUnit?.unit_name || "",
+                                            prerequisites:
+                                              selectedUnit?.prerequisites || "",
+                                            unit_type: selectedUnit?.unit_type || "Elective",
+                                          };
+                                          return { ...prev, [planner.id]: newUnits };
+                                        });
+                                      }}
+                                      options={allUnits
+                                        .sort((a, b) => a.unit_code.localeCompare(b.unit_code))
+                                        .map((u) => ({
+                                          value: u.unit_code,
+                                          label: `${u.unit_code} - ${u.unit_name}`,
+                                        }))}
+                                      isSearchable
+                                      className="w-64"
+                                    />
+                                  ) : (
+                                    unit.unit_code
+                                  )}</td>
 
-                          {/* Unit Type (only editable in edit mode) */}
-                          {editPlannerId === planner.id && (
-                            <td className="border p-2">
-                              <select
-                                value={unit.unit_type}
-                                onChange={(e) => {
-                                  const newValue = e.target.value;
-                                  setDraftUnitsMap((prev) => {
-                                    const newUnits = [...(prev[planner.id] || [])];
-                                    newUnits[index] = { ...unit, unit_type: newValue };
-                                    return { ...prev, [planner.id]: newUnits };
-                                  });
-                                }}
-                                className="w-full px-2 py-1 border rounded"
-                              >
-                                {["Elective", "Core", "Major", "MPU", "WIL"].map((type) => (
-                                  <option key={type} value={type}>
-                                    {type}
-                                  </option>
-                                ))}
-                              </select>
-                            </td>
-                          )}
+                                  {/* Unit Name */}
+                                  <td className="border p-2">{unit.unit_name}</td>
 
-                          {/* Remove Button */}
-                          {editPlannerId === planner.id && (
-                            <td className="border p-2">
-                              <button
-                                onMouseDown={(e) => e.preventDefault()}
-                                onClick={() => handleRemoveRow(planner.id, unit)}
-                                className="text-red-600 hover:underline"
-                                type="button"
-                              >
-                                Remove
-                              </button>
-                            </td>
-                          )}
-                        </tr>
-                      );
-                    })}
-                </tbody>
+                                  {/* Prerequisites */}
+                                  <td className="border p-2">{unit.prerequisites}</td>
+
+                                  {/* Type (editable) */}
+                                  {editPlannerId === planner.id && (
+                                    <td className="border p-2">
+                                      <select
+                                        value={unit.unit_type}
+                                        onChange={(e) => {
+                                          const newValue = e.target.value;
+                                          setDraftUnitsMap((prev) => {
+                                            const newUnits = [...(prev[planner.id] || [])];
+                                            newUnits[index] = { ...unit, unit_type: newValue };
+                                            return { ...prev, [planner.id]: newUnits };
+                                          });
+                                        }}
+                                        className="w-full px-2 py-1 border rounded"
+                                      >
+                                        {["Elective", "Core", "Major", "MPU", "WIL"].map(
+                                          (type) => (
+                                            <option key={type} value={type}>
+                                              {type}
+                                            </option>
+                                          )
+                                        )}
+                                      </select>
+                                    </td>
+                                  )}
+
+                                  {/* Remove button */}
+                                  {editPlannerId === planner.id && (
+                                    <td className="border p-2 text-center">
+                                      <button
+                                        onMouseDown={(e) => e.preventDefault()}
+                                        onClick={() => handleRemoveRow(planner.id, unit)}
+                                        className="text-red-600 hover:underline"
+                                        type="button"
+                                      >
+                                        Remove
+                                      </button>
+                                    </td>
+                                  )}
+                                </tr>
+                              )}
+                            </Draggable>
+                          ))}
+                        {provided.placeholder}
+                      </tbody>
+                    )}
+                  </Droppable>
+                </DragDropContext>
+
               </table>
               <div className="mt-4 flex justify-between items-center">
                 {editPlannerId === planner.id && (
