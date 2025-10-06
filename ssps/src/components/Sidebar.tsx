@@ -41,7 +41,7 @@ export default function Sidebar() {
       {/* Header */}
       <div className="flex flex-col items-center justify-center bg-[#cc0000] text-white py-5 shadow-md">
         <div className="text-xl font-bold tracking-wide">Swinburne SSPS</div>
-        <div className="text-xs opacity-90">Admin Dashboard</div>
+        <div className="text-xs opacity-90">HOD</div>
       </div>
 
       {/* Profile Section */}

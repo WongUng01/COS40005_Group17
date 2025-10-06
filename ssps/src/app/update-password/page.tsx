@@ -29,7 +29,7 @@ const UpdatePasswordPage = () => {
       setError(error.message);
     } else {
       setSuccess(true);
-      setTimeout(() => router.push('/login'), 2000); // redirect after short delay
+      setTimeout(() => router.push('/login'), 2000);
     }
 
     setLoading(false);
@@ -37,26 +37,41 @@ const UpdatePasswordPage = () => {
 
   return (
     <div className="flex flex-1 items-center justify-center min-h-screen bg-gray-100">
-      <div className="bg-white shadow-lg rounded-lg max-w-md w-full p-8">
+      <div className="bg-white shadow-xl rounded-2xl max-w-md w-full p-8 border-t-4 border-[#e60028]">
+        {/* Header */}
         <div className="mb-6 text-center">
-          <h1 className="text-3xl font-bold text-blue-700">Set New Password</h1>
-          <p className="text-gray-500 text-sm mt-1">
-            Enter your new password below.
+          <h1 className="text-3xl font-extrabold text-[#e60028] tracking-tight">
+            Set New Password
+          </h1>
+          <p className="text-gray-600 text-sm mt-1">
+            Enter your new password below to continue.
           </p>
         </div>
 
+        {/* Form */}
         <form onSubmit={handleUpdatePassword} className="space-y-5">
-          {error && <p className="text-red-600 text-sm">{error}</p>}
-          {success && <p className="text-green-600 text-sm">Password updated! Redirecting to login...</p>}
+          {error && (
+            <p className="text-red-600 bg-red-50 border border-red-200 p-2 rounded-md text-sm">
+              {error}
+            </p>
+          )}
+          {success && (
+            <p className="text-green-700 bg-green-50 border border-green-200 p-2 rounded-md text-sm">
+              Password updated! Redirecting to login...
+            </p>
+          )}
 
           <div>
-            <label htmlFor="newPassword" className="block text-sm font-medium text-gray-700">
+            <label
+              htmlFor="newPassword"
+              className="block text-sm font-semibold text-gray-700"
+            >
               New Password
             </label>
             <input
               type="password"
               id="newPassword"
-              className="mt-1 w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="mt-1 w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#e60028] focus:border-[#e60028] transition"
               value={newPassword}
               onChange={(e) => setNewPassword(e.target.value)}
               required
@@ -65,13 +80,16 @@ const UpdatePasswordPage = () => {
           </div>
 
           <div>
-            <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700">
+            <label
+              htmlFor="confirmPassword"
+              className="block text-sm font-semibold text-gray-700"
+            >
               Confirm Password
             </label>
             <input
               type="password"
               id="confirmPassword"
-              className="mt-1 w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="mt-1 w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#e60028] focus:border-[#e60028] transition"
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
               required
@@ -81,7 +99,11 @@ const UpdatePasswordPage = () => {
 
           <button
             type="submit"
-            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-md transition duration-300"
+            className={`w-full py-2 px-4 rounded-md font-semibold text-white transition-all duration-300 ${
+              loading
+                ? 'bg-gray-400 cursor-not-allowed'
+                : 'bg-[#e60028] hover:bg-[#c20024] shadow-md'
+            }`}
             disabled={loading}
           >
             {loading ? 'Updating...' : 'Update Password'}

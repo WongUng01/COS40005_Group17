@@ -34,7 +34,7 @@ const RegisterPage = () => {
     if (userId) {
       const { error: insertError } = await supabase
         .from('users')
-        .insert([{ id: userId, email, full_name: fullName}]);
+        .insert([{ id: userId, email, full_name: fullName }]);
 
       if (insertError) {
         setError(insertError.message);
@@ -49,17 +49,30 @@ const RegisterPage = () => {
 
   return (
     <div className="flex flex-1 items-center justify-center min-h-screen bg-gray-100">
-      <div className="bg-white shadow-lg rounded-lg max-w-md w-full p-8">
+      <div className="bg-white shadow-xl rounded-2xl max-w-md w-full p-8 border-t-4 border-[#e60028]">
+        {/* Logo / Header */}
         <div className="mb-6 text-center">
-          <h1 className="text-3xl font-bold text-blue-700">Student Study Planner</h1>
-          <p className="text-gray-500 text-sm mt-1">Create an account to get started.</p>
+          <h1 className="text-3xl font-extrabold text-[#e60028] tracking-tight">
+            Swinburne Study Planner
+          </h1>
+          <p className="text-gray-600 text-sm mt-1">
+            Create an account to get started
+          </p>
         </div>
 
+        {/* Register Form */}
         <form onSubmit={handleRegister} className="space-y-5">
-          {error && <p className="text-red-600 mb-3 text-sm">{error}</p>}
+          {error && (
+            <p className="text-red-600 mb-3 text-sm bg-red-50 border border-red-200 p-2 rounded-md">
+              {error}
+            </p>
+          )}
 
           <div>
-            <label htmlFor="email" className="block text-sm font-medium text-gray-700">
+            <label
+              htmlFor="email"
+              className="block text-sm font-semibold text-gray-700"
+            >
               Email address
             </label>
             <input
@@ -68,13 +81,16 @@ const RegisterPage = () => {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
-              placeholder="you@example.com"
-              className="mt-1 w-full px-4 py-2 border border-gray-300 rounded-md"
+              placeholder="you@studentmail.swin.edu.my"
+              className="mt-1 w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#e60028] focus:border-[#e60028] transition"
             />
           </div>
 
           <div>
-            <label htmlFor="fullName" className="block text-sm font-medium text-gray-700">
+            <label
+              htmlFor="fullName"
+              className="block text-sm font-semibold text-gray-700"
+            >
               Full Name
             </label>
             <input
@@ -84,12 +100,15 @@ const RegisterPage = () => {
               onChange={(e) => setFullName(e.target.value)}
               required
               placeholder="John Doe"
-              className="mt-1 w-full px-4 py-2 border border-gray-300 rounded-md"
+              className="mt-1 w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#e60028] focus:border-[#e60028] transition"
             />
           </div>
 
           <div>
-            <label htmlFor="password" className="block text-sm font-medium text-gray-700">
+            <label
+              htmlFor="password"
+              className="block text-sm font-semibold text-gray-700"
+            >
               Password
             </label>
             <input
@@ -99,22 +118,30 @@ const RegisterPage = () => {
               onChange={(e) => setPassword(e.target.value)}
               required
               placeholder="••••••••"
-              className="mt-1 w-full px-4 py-2 border border-gray-300 rounded-md"
+              className="mt-1 w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#e60028] focus:border-[#e60028] transition"
             />
           </div>
 
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-md"
+            className={`w-full py-2 px-4 rounded-md font-semibold text-white transition-all duration-300 ${
+              loading
+                ? 'bg-gray-400 cursor-not-allowed'
+                : 'bg-[#b71c1c] hover:bg-[#e60028] shadow-md'
+            }`}
           >
             {loading ? 'Registering...' : 'Register'}
           </button>
         </form>
 
-        <p className="text-center text-sm text-gray-500 mt-6">
+        {/* Footer */}
+        <p className="text-center text-sm text-gray-600 mt-6">
           Already have an account?{' '}
-          <Link href="/" className="text-blue-600 hover:underline font-medium">
+          <Link
+            href="/"
+            className="text-[#b71c1c] hover:underline font-semibold"
+          >
             Login
           </Link>
         </p>

@@ -344,79 +344,82 @@ def create_user(data: dict):
         return {"status": "error", "message": response.error.message}
     return {"status": "success", "data": response.data}
 
+from fastapi import HTTPException, Request
+
 @app.put("/api/update-study-planner-unit")
-def update_study_planner_unit(update: UpdateUnitRequest):
+async def update_study_planner_unit(request: Request):
     try:
-        print(f"Updating unit ID {update.unit_id} field '{update.field}' to '{update.value}'")
+        data = await request.json()
+        unit_id = data.get("unit_id")
 
-        allowed_fields = {"unit_type", "unit_code", "year", "semester"}
-        if update.field not in allowed_fields:
-            raise HTTPException(status_code=400, detail=f"Invalid field: {update.field}")
+        if not unit_id:
+            raise HTTPException(status_code=400, detail="unit_id is required")
 
-        # If the field being updated is 'unit_code'
-        if update.field == "unit_code":
-            unit_res = supabase_client.table("units") \
-                .select("unit_code, unit_name, prerequisites") \
-                .eq("unit_code", update.value) \
-                .maybe_single() \
-                .execute()
+        # Collect updatable fields
+        updates = {
+            "year": data.get("year"),
+            "semester": data.get("semester"),
+            "unit_code": data.get("unit_code"),
+            "unit_type": data.get("unit_type"),
+            "prerequisites": data.get("prerequisites"),
+            "unit_name": data.get("unit_name"),
+        }
 
-            print("unit_res:", unit_res)
+        updates = {k: v for k, v in updates.items() if v is not None}
 
-            if unit_res.data is None:
-                raise HTTPException(status_code=404, detail=f"Unit code '{update.value}' not found in 'units' table")
+        print("=== Incoming Update ===")
+        print(data)
+        print("=== Processed Updates ===")
+        print(updates)
 
-            unit_data = unit_res.data
+        # --- Handle electives or invalid codes ---
+        unit_code_value = str(updates.get("unit_code", "")).strip().lower()
 
-            update_fields = {
-                "unit_code": unit_data["unit_code"],
-                "unit_name": unit_data["unit_name"],
-                "prerequisites": unit_data["prerequisites"]
-            }
+        if unit_code_value in ["nan", "", "none", "null"]:
+            # If this is an elective, don't try to fetch from "units"
+            # Just ensure clean placeholders
+            updates["unit_code"] = None
+            updates["unit_name"] = updates.get("unit_name") or "Elective"
+            updates["prerequisites"] = None
 
-            response = supabase_client.table("study_planner_units") \
-                .update(update_fields) \
-                .eq("id", update.unit_id) \
-                .execute()
-
-            print("Update response:", response)
-
-            if not response.data:
-                raise HTTPException(status_code=500, detail="Update failed: no data returned")
-
-            return {"message": "Unit code, name, and prerequisites updated successfully"}
-
-        # Handling the year and semester update
-        if update.field == "year":
+        else:
+            # Only fetch from "units" if the code is valid
             try:
-                # Ensure the year is a valid integer
-                new_year = int(update.value)
-                if new_year not in [1, 2, 3, 4]:
-                    raise HTTPException(status_code=400, detail="Invalid year value")
-            except ValueError:
-                raise HTTPException(status_code=400, detail="Invalid year format")
+                unit_res = (
+                    supabase_client.table("units")
+                    .select("unit_name, prerequisites")
+                    .eq("unit_code", updates["unit_code"])
+                    .maybe_single()
+                    .execute()
+                )
+                if unit_res.data:
+                    updates["unit_name"] = unit_res.data.get("unit_name")
+                    updates["prerequisites"] = unit_res.data.get("prerequisites")
+            except Exception as e:
+                print("Unit fetch failed:", e)
 
-        # For semester field, ensure it matches the valid options
-        if update.field == "semester" and update.value not in ["1", "2", "summer", "winter"]:
-            raise HTTPException(status_code=400, detail="Invalid semester value")
+        # --- Safety patch: never send invalid None values to Supabase ---
+        safe_updates = {k: v for k, v in updates.items() if v is not None}
 
-        # Update the unit in the study_planner_units table
-        response = supabase_client.table("study_planner_units") \
-            .update({update.field: update.value}) \
-            .eq("id", update.unit_id) \
+        # Execute the update
+        response = (
+            supabase_client.table("study_planner_units")
+            .update(safe_updates)
+            .eq("id", unit_id)
             .execute()
+        )
 
-        if hasattr(response, "error") and response.error is not None:
+        if getattr(response, "error", None):
+            print("Supabase error:", response.error)
             raise HTTPException(status_code=500, detail=response.error.message)
 
         return {"message": "Unit updated successfully"}
 
-    except HTTPException as http_err:
-        raise http_err
     except Exception as e:
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Server error: {str(e)}")
+
     
 @app.put("/api/update-study-planner-order")
 def update_study_planner_order(data: dict = Body(...)):

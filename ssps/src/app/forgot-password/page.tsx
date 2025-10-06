@@ -23,7 +23,7 @@ const ForgotPasswordPage = () => {
     if (error) {
       setError(error.message);
     } else {
-      setMessage('Password reset link has been sent to your email.');
+      setMessage('A password reset link has been sent to your email.');
     }
 
     setLoading(false);
@@ -31,44 +31,67 @@ const ForgotPasswordPage = () => {
 
   return (
     <div className="flex flex-1 items-center justify-center min-h-screen bg-gray-100">
-      <div className="bg-white shadow-lg rounded-lg max-w-md w-full p-8">
+      <div className="bg-white shadow-xl rounded-2xl max-w-md w-full p-8 border-t-4 border-[#e60028]">
+        {/* Header */}
         <div className="mb-6 text-center">
-          <h1 className="text-3xl font-bold text-blue-700">Forgot Password</h1>
-          <p className="text-gray-500 text-sm mt-1">
-            Enter your email to receive a password reset link.
+          <h1 className="text-3xl font-extrabold text-[#e60028] tracking-tight">
+            Forgot Password
+          </h1>
+          <p className="text-gray-600 text-sm mt-1">
+            Enter your Swinburne email to receive a reset link.
           </p>
         </div>
 
+        {/* Form */}
         <form onSubmit={handlePasswordReset} className="space-y-5">
-          {error && <p className="text-red-600 text-sm">{error}</p>}
-          {message && <p className="text-green-600 text-sm">{message}</p>}
+          {error && (
+            <p className="text-red-600 bg-red-50 border border-red-200 p-2 rounded-md text-sm">
+              {error}
+            </p>
+          )}
+          {message && (
+            <p className="text-green-700 bg-green-50 border border-green-200 p-2 rounded-md text-sm">
+              {message}
+            </p>
+          )}
 
           <div>
-            <label htmlFor="email" className="block text-sm font-medium text-gray-700">
+            <label
+              htmlFor="email"
+              className="block text-sm font-semibold text-gray-700"
+            >
               Email address
             </label>
             <input
               type="email"
               id="email"
-              className="mt-1 w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="mt-1 w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#e60028] focus:border-[#e60028] transition"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
-              placeholder="you@example.com"
+              placeholder="you@studentmail.swin.edu.my"
             />
           </div>
 
           <button
             type="submit"
-            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-md transition duration-300"
             disabled={loading}
+            className={`w-full py-2 px-4 rounded-md font-semibold text-white transition-all duration-300 ${
+              loading
+                ? 'bg-gray-400 cursor-not-allowed'
+                : 'bg-[#e60028] hover:bg-[#e60028] shadow-md'
+            }`}
           >
             {loading ? 'Sending...' : 'Send Reset Link'}
           </button>
         </form>
 
-        <p className="text-center text-sm text-gray-500 mt-6">
-          <Link href="/login" className="text-blue-600 hover:underline font-medium">
+        {/* Footer */}
+        <p className="text-center text-sm text-gray-600 mt-6">
+          <Link
+            href="/login"
+            className="text-[#e60028] hover:underline font-semibold"
+          >
             Back to Login
           </Link>
         </p>
