@@ -123,7 +123,7 @@ class StudentUnitCreate(BaseModel):
 PROGRAM_CODES = {
     "Bachelor of Computer Science": "BA-CS",
     "Bachelor of Information and Communication Technology": "BA-ICT",
-    "Bachelor of Engineering": "MA-IT1",
+    "Bachelor of Engineering": "BH-ESE1",
     "Diploma of Information Technology": "DP-IT",
     "Master of Information Technology": "MA-IT1",
 }

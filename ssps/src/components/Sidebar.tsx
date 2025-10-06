@@ -5,19 +5,16 @@ import { usePathname, useRouter } from 'next/navigation';
 import { supabase } from '../lib/supabaseClient';
 import { useState } from 'react';
 import {
-  // FaTachometerAlt,
   FaBook,
   FaClipboardList,
   FaUserCircle,
   FaSignOutAlt,
-  // FaCog,
-  FaUserGraduate, 
-  FaFileUpload, 
+  FaUserGraduate,
+  FaFileUpload,
   FaEye,
 } from 'react-icons/fa';
 
 const navItems = [
-  // { label: 'Dashboard', href: '/dashboard', icon: <FaTachometerAlt /> },
   { label: 'Units', href: '/units', icon: <FaBook /> },
   { label: 'Upload Study Planner', href: '/study-planner-upload', icon: <FaFileUpload /> },
   { label: 'Create Study Planner', href: '/create-study-planner', icon: <FaClipboardList /> },
@@ -31,72 +28,72 @@ export default function Sidebar() {
   const [showProfileMenu, setShowProfileMenu] = useState(false);
 
   const handleLogout = async () => {
-  const { error } = await supabase.auth.signOut();
-  if (error) {
-    console.error('Logout error:', error.message);
-  } else {
-    router.push('/');
-  }
-};
+    const { error } = await supabase.auth.signOut();
+    if (error) {
+      console.error('Logout error:', error.message);
+    } else {
+      router.push('/');
+    }
+  };
 
   return (
-    <aside className="fixed left-0 top-0 h-screen w-20 bg-white border-r border-gray-200 flex flex-col p-4 shadow-md z-50">
-      {/* Top Section: Profile + Nav */}
-      <div className="flex flex-col gap-6">
-        {/* Profile */}
-        <div className="relative">
-          <button
-            onClick={() => setShowProfileMenu((prev) => !prev)}
-            className="flex flex-col items-center w-full text-gray-700 hover:bg-blue-50 rounded-md p-2 transition"
-          >
-            <FaUserCircle className="text-2xl" />
-            <span className="text-xs mt-1">Me</span>
-          </button>
-
-          {showProfileMenu && (
-            <div className="absolute left-16 top-0 bg-white border rounded-md shadow-md p-2 z-10 w-36">
-              {/* <Link
-                href="/profile"
-                className="flex items-center gap-2 p-2 text-sm text-gray-700 hover:bg-gray-100 rounded"
-              >
-                <FaCog className="text-xs" />
-                Settings  
-              </Link> */}
-              <button
-                onClick={handleLogout}
-                className="flex items-center gap-2 p-2 text-sm text-red-600 hover:bg-gray-100 w-full text-left rounded"
-              >
-                <FaSignOutAlt className="text-xs" />
-                Logout
-              </button>
-            </div>
-          )}
-        </div>
-
-        {/* Navigation Items */}
-        <nav className="flex flex-col space-y-4">
-          {navItems.map(({ label, href, icon }) => {
-            const isActive = pathname === href;
-            return (
-              <Link
-                key={href}
-                href={href}
-                className={`flex flex-col items-center gap-1 px-4 py-2 rounded-md font-medium transition duration-200 ease-in-out ${
-                  isActive
-                    ? 'bg-blue-100 text-blue-700 font-semibold'
-                    : 'text-gray-700 hover:bg-blue-50'
-                }`}
-              >
-                <span className="text-xl">{icon}</span>
-                <span className="text-xs">{label}</span>
-              </Link>
-            );
-          })}
-        </nav>
+    <aside className="fixed left-0 top-0 h-screen w-64 bg-white border-r border-gray-200 flex flex-col shadow-lg z-50">
+      {/* Header */}
+      <div className="flex flex-col items-center justify-center bg-[#cc0000] text-white py-5 shadow-md">
+        <div className="text-xl font-bold tracking-wide">Swinburne SSPS</div>
+        <div className="text-xs opacity-90">Admin Dashboard</div>
       </div>
 
-      {/* Reserved Bottom Area (future use or branding) */}
-      <div className="mt-auto"></div>
+      {/* Profile Section */}
+      <div className="relative p-4 border-b border-gray-100">
+        <button
+          onClick={() => setShowProfileMenu((prev) => !prev)}
+          className="flex items-center gap-3 w-full text-gray-700 hover:bg-gray-50 rounded-lg px-3 py-2 transition"
+        >
+          <FaUserCircle className="text-2xl text-[#cc0000]" />
+          <span className="text-sm font-medium">My Account</span>
+        </button>
+
+        {showProfileMenu && (
+          <div className="absolute left-4 right-4 top-14 bg-white border border-gray-200 rounded-lg shadow-md z-10">
+            <button
+              onClick={handleLogout}
+              className="flex items-center gap-2 w-full text-left text-red-600 hover:bg-gray-50 px-3 py-2 text-sm rounded-md"
+            >
+              <FaSignOutAlt className="text-xs" />
+              Logout
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* Navigation */}
+      <nav className="flex flex-col mt-4">
+        {navItems.map(({ label, href, icon }) => {
+          const isActive = pathname === href;
+          return (
+            <Link
+              key={href}
+              href={href}
+              className={`flex items-center gap-3 px-5 py-3 text-sm font-medium transition-all duration-150 rounded-none border-l-4 ${
+                isActive
+                  ? 'bg-red-50 border-[#cc0000] text-[#cc0000]'
+                  : 'border-transparent text-gray-700 hover:bg-gray-50 hover:text-[#cc0000]'
+              }`}
+            >
+              <span className={`text-lg ${isActive ? 'text-[#cc0000]' : 'text-gray-600'}`}>
+                {icon}
+              </span>
+              <span>{label}</span>
+            </Link>
+          );
+        })}
+      </nav>
+
+      {/* Footer */}
+      <div className="mt-auto py-3 text-center text-xs text-gray-400 border-t border-gray-100">
+        © 2025 Swinburne SSPS
+      </div>
     </aside>
   );
 }
