@@ -18,6 +18,14 @@ app = FastAPI()
 
 planners_db: Dict[str, List[dict]] = {}
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 class PlannerRequest(BaseModel):
     id: int
     program: str
@@ -738,87 +746,186 @@ async def search_student(student_id: int):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Search error: {str(e)}")
 
-# Fix the graduation endpoint to handle cases where no planner is found
+
 @app.put("/students/{student_id}/graduate", response_model=GraduationStatus)
 async def process_graduation(student_id: int):
     try:
+        def normalize_code(s):
+            if s is None:
+                return ""
+            return str(s).strip().upper()
+
+        def normalize_type(s):
+            if s is None:
+                return ""
+            return str(s).strip().lower()
+
+        def normalize_course_name(s):
+            if s is None:
+                return ""
+            # 标准化课程名称，移除多余空格并转为小写进行比较
+            return str(s).strip().lower()
+
+        print(f"=== DEBUG: Checking graduation for student {student_id} ===")
+
         # 1. Get student information
         student_res = client.from_('students') \
-            .select('student_major, intake_year, intake_term') \
+            .select('student_course, student_major, intake_year, intake_term') \
             .eq('student_id', student_id) \
             .execute()
-        
+
         if not student_res.data:
             raise HTTPException(404, "Student not found")
-            
-        student = student_res.data[0]
 
-        # 2. Get student's completed units (passed with grade != 'F')
+        student = student_res.data[0]
+        student_course = student.get('student_course')
+        student_major = student.get('student_major')
+        intake_year = student.get('intake_year')
+        intake_term = student.get('intake_term')
+        
+        print(f"DEBUG: Student data - Course: '{student_course}', Major: '{student_major}', Year: '{intake_year}', Term: '{intake_term}'")
+
+        # 2. Get student's completed units
         completed_units_res = client.from_('student_units') \
             .select('unit_code') \
             .eq('student_id', student_id) \
             .eq('completed', True) \
             .neq('grade', 'F') \
             .execute()
-        
-        passed_codes = [u['unit_code'] for u in completed_units_res.data]
 
-        # 3. Get study planner for the student - handle case where no planner exists
-        planner_res = client.from_('study_planners') \
-            .select('id') \
-            .eq('major', student['student_major']) \
-            .eq('intake_year', int(student['intake_year'])) \
-            .eq('intake_semester', student['intake_term']) \
+        passed_raw = [u.get('unit_code') for u in (completed_units_res.data or [])]
+        passed_codes_norm = {normalize_code(c) for c in passed_raw if c is not None}
+
+        print(f"DEBUG: Raw passed units: {passed_raw}")
+        print(f"DEBUG: Normalized passed unit set: {passed_codes_norm}")
+
+        # 3. 获取所有学习计划进行调试
+        all_planners_res = client.from_('study_planners') \
+            .select('id, program, major, intake_year, intake_semester') \
             .execute()
-        
-        # If no planner found, return with all units as missing
-        if not planner_res.data:
+
+        print(f"DEBUG: All available planners: {all_planners_res.data}")
+
+        # 4. 查找精确匹配的学习计划
+        matched_planners = []
+        for planner in all_planners_res.data:
+            planner_course = planner.get('program')
+            planner_major = planner.get('major')
+            planner_year = planner.get('intake_year')
+            planner_semester = planner.get('intake_semester')
+            
+            # 标准化比较
+            if (normalize_course_name(planner_course) == normalize_course_name(student_course) and
+                normalize_course_name(planner_major) == normalize_course_name(student_major) and
+                str(planner_year) == str(intake_year) and
+                str(planner_semester) == str(intake_term)):
+                matched_planners.append(planner)
+
+        print(f"DEBUG: Matched planners after normalization: {matched_planners}")
+
+        if not matched_planners:
+            print(f"DEBUG: NO EXACT PLANNER MATCH FOUND!")
+            print(f"DEBUG: Looking for - Course: '{student_course}', Major: '{student_major}', Year: {intake_year}, Term: '{intake_term}'")
+            
+            # 显示所有相关的学习计划用于调试
+            cybersecurity_planners = [p for p in all_planners_res.data 
+                                   if normalize_course_name(p.get('major')) == normalize_course_name('Cybersecurity')]
+            print(f"DEBUG: All Cybersecurity planners: {cybersecurity_planners}")
+            
             return {
                 "can_graduate": False,
-                "total_credits": len(passed_codes) * 12.5,
-                "core_credits": 0,
-                "major_credits": 0,
+                "total_credits": len(passed_codes_norm) * 12.5,
+                "core_credits": 0.0,
+                "major_credits": 0.0,
                 "core_completed": 0,
                 "major_completed": 0,
-                "missing_core_units": ["No study plan found for this student"],
-                "missing_major_units": ["No study plan found for this student"]
+                "missing_core_units": [f"找不到学习计划: {student_course} - {student_major}"],
+                "missing_major_units": [f"需要: {student_course} 主修 {student_major}, 入学 {intake_year} {intake_term}"]
             }
 
-        planner = planner_res.data[0]
+        if len(matched_planners) > 1:
+            print(f"DEBUG: Multiple exact planners found: {matched_planners}")
+            print("DEBUG: WARNING: Using first matching planner")
 
-        # 4. Get required core and major units from planner
+        planner = matched_planners[0]
+        planner_id = planner['id']
+        actual_course = planner.get('program')
+        actual_major = planner.get('major')
+        
+        print(f"DEBUG: Using EXACT MATCH planner - ID: {planner_id}")
+        print(f"DEBUG: Planner Course: '{actual_course}', Major: '{actual_major}'")
+
+        # 5. Get required units from the CORRECT planner
         required_units_res = client.from_('study_planner_units') \
-            .select('unit_code, unit_type') \
-            .eq('planner_id', planner['id']) \
+            .select('unit_code, unit_type, unit_name, planner_id') \
+            .eq('planner_id', planner_id) \
             .execute()
-        
-        required_units = required_units_res.data
-        core_units = [u['unit_code'] for u in required_units if u['unit_type'].lower() == 'core']
-        major_units = [u['unit_code'] for u in required_units if u['unit_type'].lower() == 'major']
 
-        # 5. Calculate completed requirements
-        completed_core = [u for u in core_units if u in passed_codes]
-        completed_major = [u for u in major_units if u in passed_codes]
+        required_units = required_units_res.data or []
+        print(f"DEBUG: Retrieved {len(required_units)} units for CORRECT planner_id: {planner_id}")
         
-        missing_core = [u for u in core_units if u not in passed_codes]
-        missing_major = [u for u in major_units if u not in passed_codes]
+        # Filter units by type
+        core_units_raw = []
+        major_units_raw = []
+        
+        for unit in required_units:
+            unit_type = normalize_type(unit.get('unit_type'))
+            unit_code = unit.get('unit_code')
+            
+            if unit_code is None:
+                continue
+                
+            if unit_type == 'core':
+                core_units_raw.append(unit_code)
+            elif unit_type == 'major':
+                major_units_raw.append(unit_code)
 
-        # 6. Calculate credits (12.5 per completed unit)
-        total_credits = len(passed_codes) * 12.5
+        print(f"DEBUG: Core units for {actual_course}: {core_units_raw}")
+        print(f"DEBUG: Major units for {actual_course}: {major_units_raw}")
+
+        # Create normalized mappings
+        core_norm_map = {normalize_code(code): code for code in core_units_raw}
+        major_norm_map = {normalize_code(code): code for code in major_units_raw}
+
+        core_required_norm_set = set(core_norm_map.keys())
+        major_required_norm_set = set(major_norm_map.keys())
+
+        # 6. Compare normalized sets
+        completed_core_norm = core_required_norm_set.intersection(passed_codes_norm)
+        completed_major_norm = major_required_norm_set.intersection(passed_codes_norm)
+
+        missing_core_norm = core_required_norm_set - passed_codes_norm
+        missing_major_norm = major_required_norm_set - passed_codes_norm
+
+        # Map back to original raw codes
+        completed_core = [core_norm_map[n] for n in completed_core_norm]
+        completed_major = [major_norm_map[n] for n in completed_major_norm]
+        missing_core = [core_norm_map[n] for n in missing_core_norm]
+        missing_major = [major_norm_map[n] for n in missing_major_norm]
+
+        print(f"DEBUG: Completed core: {completed_core}")
+        print(f"DEBUG: Completed major: {completed_major}")
+        print(f"DEBUG: Missing core: {missing_core}")
+        print(f"DEBUG: Missing major: {missing_major}")
+
+        # 7. Calculate credits
+        total_credits = len(passed_codes_norm) * 12.5
         core_credits = len(completed_core) * 12.5
         major_credits = len(completed_major) * 12.5
 
-        # 7. Check graduation eligibility
-        can_graduate = (total_credits >= 300 and 
-                        not missing_core and 
-                        not missing_major)
+        # 8. Check graduation eligibility
+        can_graduate = (total_credits >= 300 and not missing_core and not missing_major)
 
-        # 8. Update graduation status if eligible
+        # 9. Update graduation status if eligible
         if can_graduate:
             client.from_('students') \
                 .update({'graduation_status': True}) \
                 .eq('student_id', student_id) \
                 .execute()
+
+        print(f"DEBUG: SUCCESS - Using correct course: {actual_course}")
+        print(f"DEBUG: Graduation result - Can graduate: {can_graduate}")
+        print("=== DEBUG: End graduation check ===")
 
         return {
             "can_graduate": can_graduate,
@@ -828,12 +935,15 @@ async def process_graduation(student_id: int):
             "core_completed": len(completed_core),
             "major_completed": len(completed_major),
             "missing_core_units": missing_core,
-            "missing_major_units": missing_major
+            "missing_major_units": missing_major,
+            "planner_info": f"{actual_course} - {actual_major} (入学: {intake_year} {intake_term})"
         }
 
     except HTTPException as he:
+        print(f"DEBUG: HTTP Exception: {he}")
         raise he
     except Exception as e:
+        print(f"DEBUG: General Exception: {str(e)}")
         traceback.print_exc()
         raise HTTPException(500, f"Server error: {str(e)}")
     
@@ -859,3 +969,141 @@ async def search_student(student_id: int):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Search error: {str(e)}")
 
+@app.post("/api/upload-students")
+async def upload_students(file: UploadFile = File(...)):
+    try:
+        print(f"DEBUG: Uploading students from file: {file.filename}")
+        
+        # 1. 验证文件类型和大小
+        if not file.filename.lower().endswith(('.xlsx', '.xls')):
+            raise HTTPException(status_code=400, detail="Only Excel files (.xlsx, .xls) are supported")
+        
+        # 2. 读取Excel文件
+        contents = await file.read()
+        df = pd.read_excel(BytesIO(contents))
+        
+        # 3. 标准化列名（移除空格，转为小写）
+        df.columns = [col.strip().lower() for col in df.columns]
+        print(f"DEBUG: Excel columns: {df.columns.tolist()}")
+        
+        # 4. 映射列名
+        column_mapping = {
+            'name': 'student_name',
+            'id': 'student_id', 
+            'email': 'student_email',
+            'course': 'student_course',
+            'major': 'student_major',
+            'intake term': 'intake_term',
+            'intake year': 'intake_year'
+        }
+        
+        # 检查必需的列
+        required_columns = ['name', 'id', 'email', 'course', 'major', 'intake term', 'intake year']
+        missing_columns = [col for col in required_columns if col not in df.columns]
+        
+        if missing_columns:
+            raise HTTPException(
+                status_code=400, 
+                detail=f"Missing required columns: {', '.join(missing_columns)}"
+            )
+        
+        # 5. 重命名列
+        df = df.rename(columns=column_mapping)
+        
+        # 6. 处理数据并设置默认值
+        students_to_insert = []
+        existing_students = []
+        errors = []
+        
+        for index, row in df.iterrows():
+            try:
+                student_id = int(row['student_id'])
+                student_name = str(row['student_name']).strip()
+                student_email = str(row['student_email']).strip()
+                student_course = str(row['student_course']).strip()
+                student_major = str(row['student_major']).strip()
+                intake_term = str(row['intake_term']).strip()
+                intake_year = str(row['intake_year']).strip()
+                
+                # 验证必需字段
+                if not student_name:
+                    errors.append(f"Row {index+2}: Student name is required")
+                    continue
+                if not student_email:
+                    errors.append(f"Row {index+2}: Student email is required")
+                    continue
+                if not student_course:
+                    errors.append(f"Row {index+2}: Student course is required")
+                    continue
+                if not student_major:
+                    errors.append(f"Row {index+2}: Student major is required")
+                    continue
+                
+                # 检查学生是否已存在
+                existing_check = client.from_('students') \
+                    .select('student_id') \
+                    .eq('student_id', student_id) \
+                    .execute()
+                
+                if existing_check.data:
+                    existing_students.append(student_id)
+                    continue
+                
+                # 准备插入数据
+                student_data = {
+                    'student_id': student_id,
+                    'student_name': student_name,
+                    'student_email': student_email,
+                    'student_course': student_course,
+                    'student_major': student_major,
+                    'intake_term': intake_term,
+                    'intake_year': intake_year,
+                    'graduation_status': False,
+                    'credit_point': 0.0,
+                    'created_at': 'now()'
+                }
+                
+                students_to_insert.append(student_data)
+                
+            except ValueError as e:
+                errors.append(f"Row {index+2}: Invalid student ID format - {str(e)}")
+            except Exception as e:
+                errors.append(f"Row {index+2}: Error processing data - {str(e)}")
+        
+        # 7. 插入新学生数据
+        inserted_count = 0
+        if students_to_insert:
+            result = client.from_('students').insert(students_to_insert).execute()
+            inserted_count = len(result.data) if result.data else 0
+            print(f"DEBUG: Inserted {inserted_count} new students")
+        
+        # 8. 返回结果
+        response_message = f"Successfully processed {len(df)} rows. "
+        response_message += f"Inserted {inserted_count} new students. "
+        
+        if existing_students:
+            response_message += f"Skipped {len(existing_students)} existing students. "
+        
+        if errors:
+            response_message += f"Encountered {len(errors)} errors."
+        
+        return {
+            "message": response_message,
+            "summary": {
+                "total_rows": len(df),
+                "inserted": inserted_count,
+                "skipped_existing": len(existing_students),
+                "errors": len(errors)
+            },
+            "details": {
+                "existing_student_ids": existing_students,
+                "errors": errors
+            }
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"DEBUG: Error uploading students: {str(e)}")
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")

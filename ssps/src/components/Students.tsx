@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import axios from 'axios';
 import toast from 'react-hot-toast';
+import * as XLSX from 'xlsx';
 
 type Student = {
   id: number;
@@ -18,6 +19,31 @@ type Student = {
   credit_point: number;
   created_at: string;
 };
+
+interface ExcelStudentRow {
+  Name?: string;
+  name?: string;
+  StudentName?: string;
+  Id?: number | string;
+  id?: number | string;
+  StudentID?: number | string;
+  StudentId?: number | string;
+  Email?: string;
+  email?: string;
+  StudentEmail?: string;
+  Course?: string;
+  course?: string;
+  StudentCourse?: string;
+  Major?: string;
+  major?: string;
+  StudentMajor?: string;
+  'Intake Term'?: string;
+  intake_term?: string;
+  IntakeTerm?: string;
+  'Intake Year'?: number | string;
+  intake_year?: number | string;
+  IntakeYear?: number | string;
+}
 
 const MAX_FILE_SIZE_MB = 10;
 const SUPPORTED_TYPES = [
@@ -43,52 +69,221 @@ export default function StudentsPage() {
   const [searchResults, setSearchResults] = useState<Student[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const API_URL = 'https://cos40005-group17.onrender.com';
+  const [uploadingStudents, setUploadingStudents] = useState(false);
 
   useEffect(() => {
     fetchStudents();
   }, []);
 
   // Check graduation eligibility for a student
-  const checkGraduation = async (studentId: number) => {
-    try {
-      const response = await axios.put(`${API_URL}/students/${studentId}/graduate`);
-      const result = response.data;
+  // Update the GraduationStatus type to include planner_info
+type GraduationStatus = {
+  can_graduate: boolean;
+  total_credits: number;
+  core_credits: number;
+  major_credits: number;
+  core_completed: number;
+  major_completed: number;
+  missing_core_units: string[];
+  missing_major_units: string[];
+  planner_info?: string;
+};
 
-      // Refresh student list
-      await fetchStudents();
+// Check graduation eligibility for a student
+const checkGraduation = async (studentId: number) => {
+  try {
+    const response = await axios.put(`${API_URL}/students/${studentId}/graduate`);
+    const result: GraduationStatus = response.data;
 
-      if (result.can_graduate) {
-        alert(`✅ Graduation Approved!\n
-          Total Credits: ${result.total_credits}/300\n
-          Core Units Completed: ${result.core_completed}/${result.core_completed + result.missing_core_units.length}\n
-          Major Units Completed: ${result.major_completed}/${result.major_completed + result.missing_major_units.length}`);
+    // Refresh student list
+    await fetchStudents();
+
+    if (result.can_graduate) {
+      alert(`✅ Graduation Approved!\n
+        Study Plan: ${result.planner_info || 'Unknown'}\n
+        Total Credits: ${result.total_credits}/300\n
+        Core Units Completed: ${result.core_completed}\n
+        Major Units Completed: ${result.major_completed}`);
+    } else {
+      let message = `❌ Not Eligible for Graduation\n\n`;
+      message += `Study Plan: ${result.planner_info || 'Unknown'}\n\n`;
+      message += `Total Credits: ${result.total_credits}/300\n`;
+      message += `Core Units Completed: ${result.core_completed}\n`;
+      message += `Major Units Completed: ${result.major_completed}\n\n`;
+      
+      if (result.missing_core_units.length > 0) {
+        message += `Missing Core Units (${result.missing_core_units.length}):\n${result.missing_core_units.join(', ')}\n\n`;
       } else {
-        let message = `❌ Not Eligible\nCredits: ${result.total_credits}/300`;
+        message += `✅ All Core Units Completed\n\n`;
+      }
+      
+      if (result.missing_major_units.length > 0) {
+        message += `Missing Major Units (${result.missing_major_units.length}):\n${result.missing_major_units.join(', ')}`;
+      } else {
+        message += `✅ All Major Units Completed`;
+      }
+
+      alert(message);
+    }
+  } catch (err) {
+    let errorMessage = 'Error checking graduation status';
+    
+    if (axios.isAxiosError(err)) {
+      errorMessage = err.response?.data?.detail || err.message;
+      
+      if (err.response?.status === 400) {
+        errorMessage += "\n(Please check the study plan)";
+      }
+    }
+    
+    alert(errorMessage);
+    console.error('Graduation check error:', err);
+  }
+};
+
+const handleUploadStudents = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const file = e.target.files?.[0];
+  if (!file) return;
+
+  try {
+    setUploadingStudents(true);
+    
+    // 验证文件类型
+    if (!file.name.match(/\.(xlsx|xls)$/i)) {
+      toast.error('Only Excel files are supported.');
+      return;
+    }
+
+    if (file.size > MAX_FILE_SIZE_MB * 1024 * 1024) {
+      toast.error('File exceeds 10MB size limit.');
+      return;
+    }
+
+    // 使用动态导入来避免构建时的问题
+    const XLSX = await import('xlsx');
+    
+    const reader = new FileReader();
+    
+    reader.onload = async (event) => {
+      try {
+        const data = new Uint8Array(event.target?.result as ArrayBuffer);
+        const workbook = XLSX.read(data, { type: 'array' });
+        const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+        const jsonData = XLSX.utils.sheet_to_json(worksheet) as ExcelStudentRow[];
         
-        if (result.missing_core_units.length > 0) {
-          message += `\nMissing Core: ${result.missing_core_units.join(', ')}`;
-        }
-        
-        if (result.missing_major_units.length > 0) {
-          message += `\nMissing Major: ${result.missing_major_units.join(', ')}`;
+        console.log('Processed Excel data:', jsonData);
+
+        if (!jsonData.length) {
+          toast.error('No data found in Excel file');
+          return;
         }
 
-        alert(message);
-      }
-    } catch (err) {
-      let errorMessage = 'Error checking graduation status';
-      
-      if (axios.isAxiosError(err)) {
-        errorMessage = err.response?.data?.detail || err.message;
-        
-        if (err.response?.status === 400) {
-          errorMessage += "\n(Please check the study plan)";
+        let successCount = 0;
+        let errorCount = 0;
+        const errors: string[] = [];
+
+        // 逐条创建学生
+        for (let i = 0; i < jsonData.length; i++) {
+          const row = jsonData[i];
+          try {
+            // 处理不同的列名格式
+            const studentData = {
+              graduation_status: false,
+              student_name: row.Name || row.name || row.StudentName || '',
+              student_id: parseInt(String(row.Id || row.id || row.StudentID || row.StudentId || '0')),
+              student_email: row.Email || row.email || row.StudentEmail || '',
+              student_course: row.Course || row.course || row.StudentCourse || '',
+              student_major: row.Major || row.major || row.StudentMajor || '',
+              intake_term: row['Intake Term'] || row.intake_term || row.IntakeTerm || '',
+              intake_year: String(row['Intake Year'] || row.intake_year || row.IntakeYear || ''),
+              credit_point: 0
+            };
+
+            // 验证必需字段
+            if (!studentData.student_name || !studentData.student_email || 
+                !studentData.student_course || !studentData.student_major) {
+              throw new Error('Missing required fields');
+            }
+
+            if (studentData.student_id === 0) {
+              throw new Error('Invalid student ID');
+            }
+
+            // 使用现有的创建学生接口
+            await axios.post(`${API_URL}/students`, studentData);
+            successCount++;
+            
+            // 添加小延迟避免服务器过载
+            if (i % 5 === 0) {
+              await new Promise(resolve => setTimeout(resolve, 100));
+            }
+            
+          } catch (err: any) {
+            errorCount++;
+            const studentName = row.Name || row.name || row.StudentName || `Row ${i + 2}`;
+            let errorMsg = `${studentName}: `;
+            
+            if (axios.isAxiosError(err)) {
+              if (err.response?.status === 400) {
+                errorMsg += 'Student already exists or invalid data';
+              } else {
+                errorMsg += err.response?.data?.detail || err.message;
+              }
+            } else {
+              errorMsg += err.message;
+            }
+            
+            errors.push(errorMsg);
+            console.error(`Error creating student ${studentName}:`, err);
+          }
         }
+
+        // 显示结果
+        let message = `Processed ${jsonData.length} students.\n\n`;
+        message += `✅ Successfully created: ${successCount}\n`;
+        message += `❌ Failed: ${errorCount}\n\n`;
+        
+        if (errors.length > 0) {
+          message += `Errors (first 5):\n${errors.slice(0, 5).join('\n')}`;
+          if (errors.length > 5) {
+            message += `\n... and ${errors.length - 5} more errors`;
+          }
+        }
+
+        // 使用确认对话框显示结果
+        alert(message);
+        
+        if (successCount > 0) {
+          toast.success(`Successfully created ${successCount} new students`);
+          await fetchStudents(); // 刷新列表
+        } else if (errorCount > 0) {
+          toast.error('No students were created due to errors');
+        }
+        
+      } catch (err) {
+        console.error('Error processing Excel file:', err);
+        toast.error('Error reading Excel file. Please check the format.');
+      } finally {
+        setUploadingStudents(false);
+        if (e.target) e.target.value = '';
       }
-      
-      alert(errorMessage);
-    }
-  };
+    };
+
+    reader.onerror = () => {
+      toast.error('Error reading file');
+      setUploadingStudents(false);
+      if (e.target) e.target.value = '';
+    };
+
+    reader.readAsArrayBuffer(file);
+    
+  } catch (err) {
+    console.error('Upload error:', err);
+    toast.error('Upload failed');
+    setUploadingStudents(false);
+    if (e.target) e.target.value = '';
+  }
+};
 
   // Handle file upload (Excel) for unit records
   const handleFileUpload = async (
@@ -354,6 +549,33 @@ export default function StudentsPage() {
           {editingId ? 'Update Student' : 'Add Student'}
         </button>
       </form>
+
+       <div className="bg-white p-6 rounded-lg shadow-md mb-6">
+      <h2 className="text-xl font-semibold mb-4">Upload Students from Excel</h2>
+      <div className="flex gap-4 items-center">
+        <div className="relative flex-grow">
+          <input
+            type="file"
+            accept=".xlsx,.xls"
+            onChange={handleUploadStudents}
+            disabled={uploadingStudents}
+            className="hidden"
+            id="upload-students-file"
+          />
+          <label
+            htmlFor="upload-students-file"
+            className={`block w-full p-2 border rounded cursor-pointer ${
+              uploadingStudents ? 'bg-gray-200 cursor-not-allowed' : 'bg-white hover:bg-gray-50'
+            }`}
+          >
+            {uploadingStudents ? 'Uploading...' : 'Choose Excel File'}
+          </label>
+        </div>
+        <div className="text-sm text-gray-600">
+          <p>Required columns: Name, Id, Email, Course, Major, Intake Term, Intake Year</p>
+        </div>
+      </div>
+    </div>
 
       {/* Search Section */}
       <div className="bg-white p-6 rounded-lg shadow-md mb-6">
