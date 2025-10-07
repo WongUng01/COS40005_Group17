@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { supabase } from '../lib/supabaseClient';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   FaBook,
   FaClipboardList,
@@ -36,6 +36,17 @@ export default function Sidebar() {
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [expandedMenus, setExpandedMenus] = useState<Record<string, boolean>>({});
 
+  // Automatically expand menu containing the active path
+  useEffect(() => {
+    const newExpanded: Record<string, boolean> = {};
+    navItems.forEach((item) => {
+      if (item.children?.some((child) => child.href === pathname)) {
+        newExpanded[item.label] = true;
+      }
+    });
+    setExpandedMenus(newExpanded);
+  }, [pathname]);
+
   const handleLogout = async () => {
     const { error } = await supabase.auth.signOut();
     if (error) {
@@ -49,6 +60,16 @@ export default function Sidebar() {
     setExpandedMenus((prev) => ({ ...prev, [label]: !prev[label] }));
   };
 
+  const handleTopLevelClick = (item: typeof navItems[number]) => {
+    // If it's a top-level with no children, close other menus
+    if (!item.children) {
+      const newExpanded: Record<string, boolean> = {};
+      setExpandedMenus(newExpanded);
+    } else {
+      toggleMenu(item.label);
+    }
+  };
+
   const renderNavItem = (item: typeof navItems[number]) => {
     const isActive = item.href && pathname === item.href;
 
@@ -57,7 +78,7 @@ export default function Sidebar() {
       return (
         <div key={item.label} className="flex flex-col">
           <button
-            onClick={() => toggleMenu(item.label)}
+            onClick={() => handleTopLevelClick(item)}
             className={`flex items-center justify-between gap-3 px-5 py-3 text-sm font-medium w-full transition-all duration-150 rounded-none border-l-4 ${
               isExpanded ? 'bg-red-50 border-[#cc0000] text-[#cc0000]' : 'border-transparent text-gray-700 hover:bg-gray-50 hover:text-[#cc0000]'
             }`}
@@ -96,6 +117,7 @@ export default function Sidebar() {
       <Link
         key={item.href}
         href={item.href!}
+        onClick={() => handleTopLevelClick(item)}
         className={`flex items-center gap-3 px-5 py-3 text-sm font-medium transition-all duration-150 rounded-none border-l-4 ${
           isActive ? 'bg-red-50 border-[#cc0000] text-[#cc0000]' : 'border-transparent text-gray-700 hover:bg-gray-50 hover:text-[#cc0000]'
         }`}
