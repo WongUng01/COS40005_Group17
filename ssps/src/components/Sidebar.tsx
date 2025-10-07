@@ -12,13 +12,21 @@ import {
   FaUserGraduate,
   FaFileUpload,
   FaEye,
+  FaChevronDown,
+  FaChevronUp,
 } from 'react-icons/fa';
 
 const navItems = [
   { label: 'Units', href: '/units', icon: <FaBook /> },
-  { label: 'Upload Study Planner', href: '/study-planner-upload', icon: <FaFileUpload /> },
-  { label: 'Create Study Planner', href: '/create-study-planner', icon: <FaClipboardList /> },
-  { label: 'View Study Planner', href: '/study-planner', icon: <FaEye /> },
+  {
+    label: 'Study Planners',
+    icon: <FaClipboardList />,
+    children: [
+      { label: 'Upload Study Planner', href: '/study-planner-upload', icon: <FaFileUpload /> },
+      { label: 'Create Study Planner', href: '/create-study-planner', icon: <FaClipboardList /> },
+      { label: 'View Study Planner', href: '/study-planner', icon: <FaEye /> },
+    ],
+  },
   { label: 'Students', href: '/students', icon: <FaUserGraduate /> },
 ];
 
@@ -26,6 +34,7 @@ export default function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
   const [showProfileMenu, setShowProfileMenu] = useState(false);
+  const [expandedMenus, setExpandedMenus] = useState<Record<string, boolean>>({});
 
   const handleLogout = async () => {
     const { error } = await supabase.auth.signOut();
@@ -34,6 +43,67 @@ export default function Sidebar() {
     } else {
       router.push('/');
     }
+  };
+
+  const toggleMenu = (label: string) => {
+    setExpandedMenus((prev) => ({ ...prev, [label]: !prev[label] }));
+  };
+
+  const renderNavItem = (item: typeof navItems[number]) => {
+    const isActive = item.href && pathname === item.href;
+
+    if (item.children) {
+      const isExpanded = expandedMenus[item.label];
+      return (
+        <div key={item.label} className="flex flex-col">
+          <button
+            onClick={() => toggleMenu(item.label)}
+            className={`flex items-center justify-between gap-3 px-5 py-3 text-sm font-medium w-full transition-all duration-150 rounded-none border-l-4 ${
+              isExpanded ? 'bg-red-50 border-[#cc0000] text-[#cc0000]' : 'border-transparent text-gray-700 hover:bg-gray-50 hover:text-[#cc0000]'
+            }`}
+          >
+            <span className="flex items-center gap-3">
+              <span className="text-lg text-gray-600">{item.icon}</span>
+              {item.label}
+            </span>
+            {isExpanded ? <FaChevronUp className="text-gray-600" /> : <FaChevronDown className="text-gray-600" />}
+          </button>
+
+          {/* Submenu */}
+          {isExpanded &&
+            item.children.map((child) => {
+              const isChildActive = pathname === child.href;
+              return (
+                <Link
+                  key={child.href}
+                  href={child.href}
+                  className={`flex items-center gap-3 pl-12 pr-5 py-2 text-sm font-medium transition-all duration-150 rounded-none border-l-4 ${
+                    isChildActive
+                      ? 'bg-red-50 border-[#cc0000] text-[#cc0000]'
+                      : 'border-transparent text-gray-700 hover:bg-gray-50 hover:text-[#cc0000]'
+                  }`}
+                >
+                  <span className={`text-lg ${isChildActive ? 'text-[#cc0000]' : 'text-gray-600'}`}>{child.icon}</span>
+                  <span>{child.label}</span>
+                </Link>
+              );
+            })}
+        </div>
+      );
+    }
+
+    return (
+      <Link
+        key={item.href}
+        href={item.href!}
+        className={`flex items-center gap-3 px-5 py-3 text-sm font-medium transition-all duration-150 rounded-none border-l-4 ${
+          isActive ? 'bg-red-50 border-[#cc0000] text-[#cc0000]' : 'border-transparent text-gray-700 hover:bg-gray-50 hover:text-[#cc0000]'
+        }`}
+      >
+        <span className={`text-lg ${isActive ? 'text-[#cc0000]' : 'text-gray-600'}`}>{item.icon}</span>
+        <span>{item.label}</span>
+      </Link>
+    );
   };
 
   return (
@@ -68,27 +138,7 @@ export default function Sidebar() {
       </div>
 
       {/* Navigation */}
-      <nav className="flex flex-col mt-4">
-        {navItems.map(({ label, href, icon }) => {
-          const isActive = pathname === href;
-          return (
-            <Link
-              key={href}
-              href={href}
-              className={`flex items-center gap-3 px-5 py-3 text-sm font-medium transition-all duration-150 rounded-none border-l-4 ${
-                isActive
-                  ? 'bg-red-50 border-[#cc0000] text-[#cc0000]'
-                  : 'border-transparent text-gray-700 hover:bg-gray-50 hover:text-[#cc0000]'
-              }`}
-            >
-              <span className={`text-lg ${isActive ? 'text-[#cc0000]' : 'text-gray-600'}`}>
-                {icon}
-              </span>
-              <span>{label}</span>
-            </Link>
-          );
-        })}
-      </nav>
+      <nav className="flex flex-col mt-4">{navItems.map(renderNavItem)}</nav>
 
       {/* Footer */}
       <div className="mt-auto py-3 text-center text-xs text-gray-400 border-t border-gray-100">
