@@ -2,7 +2,6 @@
 import type { Metadata } from "next";
 import "@/styles/globals.css";
 import { Providers } from "./providers";
-import Sidebar from "@/components/Sidebar"; // adjust path
 
 export const metadata: Metadata = {
   title: "Student Study Planner",
@@ -16,13 +15,12 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className="min-h-screen flex bg-blue-50 text-gray-800">
+      <body className="min-h-screen flex bg-red-50 text-gray-800">
         <Providers>
-          <Sidebar />
 
           {/* Main content area with left margin to avoid overlap */}
-          <main className="flex-1 ml-64 flex flex-col min-h-screen">
-            {children}
+            <main className="flex-1 flex flex-col">            
+              {children}
           </main>
         </Providers>
       </body>
