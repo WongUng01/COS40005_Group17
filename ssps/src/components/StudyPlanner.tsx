@@ -215,9 +215,16 @@ const ViewStudyPlannerTabs: React.FC = () => {
   const handleSavePlanner = async (plannerId: number) => {
     try {
       const draftUnits = draftUnitsMap[plannerId] || [];
-      const missingUnits = draftUnits.filter((u) => !u.unit_code || u.unit_code.trim() === "");
+      const missingUnits = draftUnits.filter(
+        (u: any) =>
+          (!u.unit_code || u.unit_code.trim() === "") &&
+          u.unit_type?.toLowerCase() !== "elective"
+      );
+
       if (missingUnits.length > 0) {
-        alert(`Please select a unit for all rows. Missing in ${missingUnits.length} row(s).`);
+        alert(
+          `Please select a unit for all non-elective rows. Missing in ${missingUnits.length} row(s).`
+        );
         return;
       }
 
@@ -584,7 +591,7 @@ const ViewStudyPlannerTabs: React.FC = () => {
                                               return { ...prev, [planner.id]: newUnits };
                                             });
                                           }} className="px-2 py-1 border rounded text-sm w-20">
-                                            {["1", "2", "3", "4"].map((y) => <option key={y} value={y}>{y}</option>)}
+                                            {["1", "2", "3", "4", "5"].map((y) => <option key={y} value={y}>{y}</option>)}
                                           </select>
                                         ) : (
                                           <span className="text-sm">{unit.year}</span>
@@ -601,7 +608,7 @@ const ViewStudyPlannerTabs: React.FC = () => {
                                               return { ...prev, [planner.id]: newUnits };
                                             });
                                           }} className="px-2 py-1 border rounded text-sm w-28">
-                                            {["1", "2", "Summer", "Winter", "Term 1", "Term 2"].map((s) => <option key={s} value={s}>{s}</option>)}
+                                            {["1", "2", "3", "4", "Summer", "Winter", "Term 1", "Term 2", "Term 3", "Term 4"].map((s) => <option key={s} value={s}>{s}</option>)}
                                           </select>
                                         ) : (
                                           <span className="text-sm">{unit.semester}</span>
@@ -611,6 +618,10 @@ const ViewStudyPlannerTabs: React.FC = () => {
                                       <td className="px-3 py-2 align-top text-sm w-48">
                                         {editPlannerId === planner.id ? (
                                           <Select
+                                          menuPortalTarget={document.body} // ⬅️ makes dropdown render outside scroll container
+                                          styles={{
+                                            menuPortal: (base) => ({ ...base, zIndex: 9999 }), // ⬅️ ensures it's visible above everything
+                                          }}
                                             value={unit.unit_code ? { value: unit.unit_code, label: `${unit.unit_code} ${unit.unit_name ? `- ${unit.unit_name}` : ""}` } : null}
                                             onChange={(selectedOption: any) => {
                                               const newCode = selectedOption?.value || "";

@@ -365,25 +365,22 @@ async def update_study_planner_unit(request: Request):
             "unit_name": data.get("unit_name"),
         }
 
-        updates = {k: v for k, v in updates.items() if v is not None}
-
         print("=== Incoming Update ===")
         print(data)
-        print("=== Processed Updates ===")
-        print(updates)
 
-        # --- Handle electives or invalid codes ---
+        # Handle electives or invalid codes
         unit_code_value = str(updates.get("unit_code", "")).strip().lower()
 
         if unit_code_value in ["nan", "", "none", "null"]:
-            # If this is an elective, don't try to fetch from "units"
-            # Just ensure clean placeholders
+            # If this is an elective, keep fields clean but valid
             updates["unit_code"] = None
             updates["unit_name"] = updates.get("unit_name") or "Elective"
             updates["prerequisites"] = None
 
+            print("Detected elective or blank unit code — skipping unit lookup.")
+
         else:
-            # Only fetch from "units" if the code is valid
+            # Fetch from 'units' if valid
             try:
                 unit_res = (
                     supabase_client.table("units")
@@ -392,16 +389,25 @@ async def update_study_planner_unit(request: Request):
                     .maybe_single()
                     .execute()
                 )
+
                 if unit_res.data:
                     updates["unit_name"] = unit_res.data.get("unit_name")
                     updates["prerequisites"] = unit_res.data.get("prerequisites")
+
             except Exception as e:
                 print("Unit fetch failed:", e)
 
-        # --- Safety patch: never send invalid None values to Supabase ---
-        safe_updates = {k: v for k, v in updates.items() if v is not None}
+        # --- Keep explicit nulls for electives ---
+        safe_updates = {}
+        for k, v in updates.items():
+            # Only skip None for non-electives
+            if v is not None or updates.get("unit_type", "").lower() == "elective":
+                safe_updates[k] = v
 
-        # Execute the update
+        print("=== Final safe updates ===")
+        print(safe_updates)
+
+        # Execute update
         response = (
             supabase_client.table("study_planner_units")
             .update(safe_updates)

@@ -69,6 +69,18 @@ const CreateStudyPlanner = () => {
 
   const years = ["2026", "2025", "2024", "2023", "2022", "2021"];
   const semesters = ["Feb/Mar", "Aug/Sep"];
+  const studyPlannerSemesters = [
+    "1",
+    "2",
+    "3",
+    "4",
+    "Summer",
+    "Winter",
+    "Term 1",
+    "Term 2",
+    "Term 3",
+    "Term 4",
+  ];
   const studyYears = ["1", "2", "3", "4"];
   const unitTypes = ["Major", "Core", "Elective", "MPU", "WIL"];
 
@@ -353,7 +365,7 @@ const CreateStudyPlanner = () => {
                         className="border p-1 rounded w-full"
                       >
                         <option value="">Semester</option>
-                        {semesters.map((s) => (
+                        {studyPlannerSemesters.map((s) => (
                           <option key={s} value={s}>
                             {s}
                           </option>
