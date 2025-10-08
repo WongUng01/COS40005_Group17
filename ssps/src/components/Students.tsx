@@ -68,7 +68,7 @@ export default function StudentsPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [searchResults, setSearchResults] = useState<Student[]>([]);
   const [isSearching, setIsSearching] = useState(false);
-  const API_URL = 'https://cos40005-group17.onrender.com';
+  const API_URL = 'http://localhost:8000';
   const [uploadingStudents, setUploadingStudents] = useState(false);
 
   useEffect(() => {
@@ -86,60 +86,92 @@ type GraduationStatus = {
   major_completed: number;
   missing_core_units: string[];
   missing_major_units: string[];
-  planner_info?: string;
+  planner_info: string;
 };
 
 // Check graduation eligibility for a student
 const checkGraduation = async (studentId: number) => {
   try {
     const response = await axios.put(`${API_URL}/students/${studentId}/graduate`);
-    const result: GraduationStatus = response.data;
+    const data = response.data;
+    console.log('DEBUG: graduation PUT response raw:', data);
 
-    // Refresh student list
-    await fetchStudents();
+    // 兼容两种后端返回格式：
+    // 1) { graduation_result: {...}, updated_student: {...} }
+    // 2) { can_graduate, total_credits, ... }  <- 旧格式
+    const gradResult = data?.graduation_result ?? data;
+    const updatedStudent = data?.updated_student ?? null;
 
-    if (result.can_graduate) {
-      alert(`✅ Graduation Approved!\n
-        Study Plan: ${result.planner_info || 'Unknown'}\n
-        Total Credits: ${result.total_credits}/300\n
-        Core Units Completed: ${result.core_completed}\n
-        Major Units Completed: ${result.major_completed}`);
+    if (!gradResult) {
+      console.warn('DEBUG: graduation result missing in response', data);
+      toast.error('毕业检查返回格式异常，请查看控制台。');
+      return;
+    }
+
+    // 用后端返回的真实 student（如果存在）更新本地 state
+    if (updatedStudent && typeof updatedStudent === 'object') {
+      setStudents(prev =>
+        prev.map(s =>
+          s.student_id === studentId
+            ? { ...s, credit_point: updatedStudent.credit_point, graduation_status: updatedStudent.graduation_status }
+            : s
+        )
+      );
+      console.log('DEBUG: Local state updated from updated_student:', updatedStudent);
+    } else {
+      // 没有返回 updated_student：用 gradResult 填回页面（回退方案）
+      setStudents(prev =>
+        prev.map(s =>
+          s.student_id === studentId
+            ? { ...s, credit_point: gradResult.total_credits ?? s.credit_point, graduation_status: !!gradResult.can_graduate }
+            : s
+        )
+      );
+      console.log('DEBUG: Local state updated from graduation_result:', {
+        credit_point: gradResult.total_credits,
+        graduation_status: gradResult.can_graduate
+      });
+    }
+
+    // 显示信息（使用 gradResult，不管是哪种格式）
+    if (gradResult.can_graduate) {
+      toast.success('Graduation Approved');
+      alert(`✅ Graduation Approved!\nStudy Plan: ${gradResult.planner_info || 'Unknown'}\nTotal Credits: ${gradResult.total_credits}/300`);
     } else {
       let message = `❌ Not Eligible for Graduation\n\n`;
-      message += `Study Plan: ${result.planner_info || 'Unknown'}\n\n`;
-      message += `Total Credits: ${result.total_credits}/300\n`;
-      message += `Core Units Completed: ${result.core_completed}\n`;
-      message += `Major Units Completed: ${result.major_completed}\n\n`;
-      
-      if (result.missing_core_units.length > 0) {
-        message += `Missing Core Units (${result.missing_core_units.length}):\n${result.missing_core_units.join(', ')}\n\n`;
+      message += `Study Plan: ${gradResult.planner_info || 'Unknown'}\n\n`;
+      message += `Total Credits: ${gradResult.total_credits ?? 'N/A'}/300\n`;
+      message += `Core Units Completed: ${gradResult.core_completed ?? 'N/A'}\n`;
+      message += `Major Units Completed: ${gradResult.major_completed ?? 'N/A'}\n\n`;
+
+      if (Array.isArray(gradResult.missing_core_units) && gradResult.missing_core_units.length > 0) {
+        message += `Missing Core Units (${gradResult.missing_core_units.length}):\n${gradResult.missing_core_units.join(', ')}\n\n`;
       } else {
         message += `✅ All Core Units Completed\n\n`;
       }
-      
-      if (result.missing_major_units.length > 0) {
-        message += `Missing Major Units (${result.missing_major_units.length}):\n${result.missing_major_units.join(', ')}`;
+
+      if (Array.isArray(gradResult.missing_major_units) && gradResult.missing_major_units.length > 0) {
+        message += `Missing Major Units (${gradResult.missing_major_units.length}):\n${gradResult.missing_major_units.join(', ')}`;
       } else {
         message += `✅ All Major Units Completed`;
       }
 
       alert(message);
     }
+
+    // （可选）再次 fetch 整个学生列表以保证完全同步（视情况取消注释）
+    // await fetchStudents();
+
   } catch (err) {
-    let errorMessage = 'Error checking graduation status';
-    
+    console.error('Graduation check error (frontend):', err);
     if (axios.isAxiosError(err)) {
-      errorMessage = err.response?.data?.detail || err.message;
-      
-      if (err.response?.status === 400) {
-        errorMessage += "\n(Please check the study plan)";
-      }
+      console.log('DEBUG: error.response:', err.response?.status, err.response?.data);
     }
-    
-    alert(errorMessage);
-    console.error('Graduation check error:', err);
+    toast.error('Graduation check failed. See console/network for details.');
   }
 };
+
+
 
 const handleUploadStudents = async (e: React.ChangeEvent<HTMLInputElement>) => {
   const file = e.target.files?.[0];

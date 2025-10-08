@@ -12,6 +12,8 @@ import traceback
 from fastapi.responses import JSONResponse
 from postgrest.exceptions import APIError
 import logging
+from fastapi import Request
+
 logger = logging.getLogger("uvicorn.error")
 
 app = FastAPI()
@@ -770,7 +772,7 @@ async def process_graduation(student_id: int):
 
         # 1. Get student information
         student_res = client.from_('students') \
-            .select('student_course, student_major, intake_year, intake_term') \
+            .select('student_course, student_major, intake_year, intake_term, credit_point, graduation_status') \
             .eq('student_id', student_id) \
             .execute()
 
@@ -782,8 +784,11 @@ async def process_graduation(student_id: int):
         student_major = student.get('student_major')
         intake_year = student.get('intake_year')
         intake_term = student.get('intake_term')
+        current_credit_point = student.get('credit_point', 0)
+        current_graduation_status = student.get('graduation_status', False)
         
         print(f"DEBUG: Student data - Course: '{student_course}', Major: '{student_major}', Year: '{intake_year}', Term: '{intake_term}'")
+        print(f"DEBUG: Current credit_point: {current_credit_point}, graduation_status: {current_graduation_status}")
 
         # 2. Get student's completed units
         completed_units_res = client.from_('student_units') \
@@ -823,6 +828,9 @@ async def process_graduation(student_id: int):
 
         print(f"DEBUG: Matched planners after normalization: {matched_planners}")
 
+        # 计算总学分（无论是否有匹配的学习计划）
+        total_credits = len(passed_codes_norm) * 12.5
+        
         if not matched_planners:
             print(f"DEBUG: NO EXACT PLANNER MATCH FOUND!")
             print(f"DEBUG: Looking for - Course: '{student_course}', Major: '{student_major}', Year: {intake_year}, Term: '{intake_term}'")
@@ -832,9 +840,20 @@ async def process_graduation(student_id: int):
                                    if normalize_course_name(p.get('major')) == normalize_course_name('Cybersecurity')]
             print(f"DEBUG: All Cybersecurity planners: {cybersecurity_planners}")
             
+            # 更新学分但不能毕业（因为没有学习计划）
+            update_data = {
+                'credit_point': total_credits,
+                'graduation_status': False  # 没有学习计划不能毕业
+            }
+            client.from_('students') \
+                .update(update_data) \
+                .eq('student_id', student_id) \
+                .execute()
+            print(f"DEBUG: Updated credit_point to {total_credits}, graduation_status to False")
+            
             return {
                 "can_graduate": False,
-                "total_credits": len(passed_codes_norm) * 12.5,
+                "total_credits": total_credits,
                 "core_credits": 0.0,
                 "major_credits": 0.0,
                 "core_completed": 0,
@@ -908,36 +927,51 @@ async def process_graduation(student_id: int):
         print(f"DEBUG: Missing core: {missing_core}")
         print(f"DEBUG: Missing major: {missing_major}")
 
-        # 7. Calculate credits
-        total_credits = len(passed_codes_norm) * 12.5
+        # 7. Calculate specific credits
         core_credits = len(completed_core) * 12.5
         major_credits = len(completed_major) * 12.5
 
         # 8. Check graduation eligibility
         can_graduate = (total_credits >= 300 and not missing_core and not missing_major)
 
-        # 9. Update graduation status if eligible
-        if can_graduate:
-            client.from_('students') \
-                .update({'graduation_status': True}) \
-                .eq('student_id', student_id) \
-                .execute()
-
-        print(f"DEBUG: SUCCESS - Using correct course: {actual_course}")
-        print(f"DEBUG: Graduation result - Can graduate: {can_graduate}")
-        print("=== DEBUG: End graduation check ===")
-
-        return {
-            "can_graduate": can_graduate,
-            "total_credits": total_credits,
-            "core_credits": core_credits,
-            "major_credits": major_credits,
-            "core_completed": len(completed_core),
-            "major_completed": len(completed_major),
-            "missing_core_units": missing_core,
-            "missing_major_units": missing_major,
-            "planner_info": f"{actual_course} - {actual_major} (入学: {intake_year} {intake_term})"
+        # 9. Update student record with new credit_point and graduation_status
+        update_data = {
+            "credit_point": float(total_credits),
+            "graduation_status": bool(can_graduate)
         }
+        try:
+            updated_student = supabase_update_student(student_id, update_data)
+            print(f"DEBUG: supabase_update_student returned: {updated_student}")
+        except HTTPException as he:
+            print(f"DEBUG: supabase_update_student failed: {he.detail}")
+            # 将失败也返回给前端（非 200）
+            raise he
+        
+        # 10. Create planner_info for the response
+        if matched_planners:
+            planner = matched_planners[0]
+            planner_info = f"{planner.get('program', 'Unknown Program')} - {planner.get('major', 'Unknown Major')} (Intake: {intake_year} {intake_term})"
+        else:
+            planner_info = f"No matching study plan found for {student_course} - {student_major}"
+
+        print(f"DEBUG: Planner info: {planner_info}")
+
+        # 最终返回：包含计算结果 + DB 返回的最新 student 行
+        return JSONResponse(status_code=200, content={
+            "graduation_result": {
+                "can_graduate": can_graduate,
+                "total_credits": total_credits,
+                "core_credits": core_credits,
+                "major_credits": major_credits,
+                "core_completed": len(completed_core),
+                "major_completed": len(completed_major),
+                "missing_core_units": missing_core,
+                "missing_major_units": missing_major,
+                "planner_info": planner_info
+            },
+            "updated_student": updated_student
+        })
+
 
     except HTTPException as he:
         print(f"DEBUG: HTTP Exception: {he}")
@@ -947,6 +981,35 @@ async def process_graduation(student_id: int):
         traceback.print_exc()
         raise HTTPException(500, f"Server error: {str(e)}")
     
+    
+
+def supabase_update_student(student_id: int, payload: dict):
+    upd_res = client.from_('students') \
+        .update(payload) \
+        .eq('student_id', student_id) \
+        .select('id, student_id, credit_point, graduation_status') \
+        .execute()
+
+    # robust checks for different supabase client responses
+    # case: object with .error and .data
+    if hasattr(upd_res, 'error') and upd_res.error:
+        print(f"DEBUG: Supabase update error (obj): {upd_res.error}")
+        raise HTTPException(status_code=500, detail=f"DB update error: {upd_res.error}")
+
+    # case: dict-like response
+    if isinstance(upd_res, dict) and upd_res.get('error'):
+        print(f"DEBUG: Supabase update error (dict): {upd_res.get('error')}")
+        raise HTTPException(status_code=500, detail=f"DB update error: {upd_res.get('error')}")
+
+    updated_rows = getattr(upd_res, 'data', None) or (upd_res.get('data') if isinstance(upd_res, dict) else None)
+    if not updated_rows:
+        print(f"DEBUG: Supabase update returned no rows: {upd_res}")
+        # 返回 500 并把整个返回对象放到 detail（便于前端调试）
+        raise HTTPException(status_code=500, detail={"message": "DB update did not return row", "raw": str(upd_res)})
+
+    return updated_rows[0]
+
+
 @app.get("/")
 def read_root():
     return {"message": "FastAPI backend is running"}
