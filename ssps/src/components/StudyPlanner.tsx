@@ -384,7 +384,7 @@ const ViewStudyPlannerTabs: React.FC = () => {
   const displayValue = (val: any) => (val === null || val === undefined || val === "nan" ? "" : val);
 
   return (
-    <div className="p-6 max-w-7xl mx-auto">
+    <div className="p-6 max-w-screen-2xl mx-30">
       <header className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
         <div>
           <h2 className="text-2xl font-bold">Study Planners</h2>
@@ -409,21 +409,24 @@ const ViewStudyPlannerTabs: React.FC = () => {
       <section className="mb-6 grid grid-cols-1 md:grid-cols-3 gap-4">
         <div className="col-span-1">
           <div className="mb-2 text-sm font-medium">Year</div>
-          <div className="flex flex-wrap gap-2">
-            {years.map((year) => (
-              <button
-                key={year}
-                onClick={() => setSelectedYears((prev) => (prev.includes(String(year)) ? prev.filter((y) => y !== String(year)) : [...prev, String(year)]))}
-                className={classNames(
-                  "px-3 py-1 rounded text-sm border",
-                  selectedYears.includes(String(year)) ? "bg-red-600 text-white border-red-600" : "bg-white text-red-600 hover:bg-gray-100"
-                )}
-                type="button"
-              >
-                {year}
-              </button>
-            ))}
-          </div>
+          <Select
+            styles={swinburneStyles}
+            value={
+              selectedYears.length > 0
+                ? { value: selectedYears[0], label: selectedYears[0] }
+                : null
+            }
+            onChange={(option) => {
+              const value = option?.value || null;
+              setSelectedYears(value ? [value] : []);
+            }}
+            options={[
+              { value: "", label: "All years" },
+              ...years.map((year) => ({ value: String(year), label: String(year) })),
+            ]}
+            placeholder="Select a year..."
+            isClearable
+          />
         </div>
 
         <div className="col-span-1">

@@ -137,11 +137,11 @@ supabase_client = supabase.create_client(SUPABASE_URL, SUPABASE_KEY)
 
 client = get_supabase_client()
 
-#testing redeploy
 @app.post("/api/upload-study-planner")
 async def upload_study_planner(
     file: UploadFile = File(...),
     program: str = Form(...),
+    program_code: str = Form(...),  # ✅ new field
     major: str = Form(...),
     intake_year: int = Form(...),
     intake_semester: str = Form(...),
@@ -151,8 +151,17 @@ async def upload_study_planner(
 
     try:
         overwrite = overwrite.lower() == "true"
+
+        # --- Read and normalize Excel headers ---
+        import re
         df = pd.read_excel(file.file)
-        df.columns = [col.strip().title() for col in df.columns]
+        df.columns = [
+            re.sub(r"\s+", " ", str(col)).strip().title()
+            for col in df.columns
+        ]
+
+
+        print("DEBUG columns from Excel:", df.columns.tolist(), flush=True)
 
         expected_cols = {"Year", "Semester", "Unit Code", "Unit Name", "Prerequisites", "Unit Type"}
         if not expected_cols.issubset(set(df.columns)):
@@ -162,7 +171,7 @@ async def upload_study_planner(
                 detail=f"Excel format incorrect. Missing columns: {', '.join(missing)}"
             )
 
-        # Check if a planner already exists
+        # --- Check if planner already exists ---
         existing = (
             supabase_client.table("study_planners")
             .select("id")
@@ -187,24 +196,24 @@ async def upload_study_planner(
                 supabase_client.table("study_planner_units").delete().eq("planner_id", existing_id).execute()
                 supabase_client.table("study_planners").delete().eq("id", existing_id).execute()
 
-        # Insert planner
-        planner_id = str(uuid.uuid4())
-
-        program_code = PROGRAM_CODES.get(program)
+        # --- Validate program_code from frontend ---
         if not program_code:
-            raise HTTPException(status_code=400, detail=f"Unknown program: {program}")
+            raise HTTPException(status_code=400, detail="Missing program code.")
 
+        # --- Insert planner record ---
+        planner_id = str(uuid.uuid4())
         planner_data = {
             "id": planner_id,
             "program": program,
-            "program_code": program_code,
+            "program_code": program_code,  # ✅ use value from frontend
             "major": major,
             "intake_year": intake_year,
             "intake_semester": intake_semester,
         }
+
         supabase_client.table("study_planners").insert(planner_data).execute()
 
-        # Build all units
+        # --- Prepare all units ---
         units_to_insert = []
         for idx, row in df.iterrows():
             unit = {
@@ -218,15 +227,14 @@ async def upload_study_planner(
                 "prerequisites": str(row["Prerequisites"]),
                 "unit_type": str(row["Unit Type"]),
             }
-            print("DEBUG row:", unit, flush=True)   # print each row
+            print("DEBUG row:", unit, flush=True)
             units_to_insert.append(unit)
 
-        # Debug first row
         if units_to_insert:
             print("DEBUG first row full:", units_to_insert[0], flush=True)
             print("DEBUG keys:", list(units_to_insert[0].keys()), flush=True)
 
-        # Insert all rows
+        # --- Bulk insert all units ---
         supabase_client.table("study_planner_units").insert(units_to_insert).execute()
 
         return {"message": "Study planner uploaded successfully."}
@@ -234,8 +242,8 @@ async def upload_study_planner(
     except HTTPException as http_err:
         raise http_err
     except Exception as e:
-        print("Internal Error:", str(e), flush=True)
-        raise HTTPException(status_code=500, detail="Internal server error")
+        print("Internal Error:", repr(e), flush=True)
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/view-study-planner")
 def view_study_planner(
@@ -484,23 +492,30 @@ def create_study_planner(data: PlannerPayload = Body(...)):
                 # Delete existing planner
                 supabase_client.table("study_planners").delete().eq("id", existing_id).execute()
 
-        program_code = PROGRAM_CODES.get(data.program)
+        # ✅ Determine program_code
+        program_code = None
+        if getattr(data, "program_code", None):
+            program_code = data.program_code
+        elif "PROGRAM_CODES" in globals():
+            program_code = PROGRAM_CODES.get(data.program)
+
+        # Allow null program_code for new programs
         if not program_code:
-            raise HTTPException(status_code=400, detail=f"Unknown program: {data.program}")
+            print(f"[INFO] No program_code found for '{data.program}', storing as NULL.")
 
         # Insert new planner metadata
         planner_id = str(uuid.uuid4())
         planner_data = {
             "id": planner_id,
             "program": data.program,
-            "program_code": program_code,
+            "program_code": program_code,  # ✅ may be null
             "major": data.major,
             "intake_year": data.intake_year,
             "intake_semester": data.intake_semester
         }
         supabase_client.table("study_planners").insert(planner_data).execute()
 
-       # Insert each planner row
+        # Insert each planner row
         for idx, row in enumerate(data.planner, start=1):
             unit = {
                 "id": str(uuid.uuid4()),
@@ -515,7 +530,6 @@ def create_study_planner(data: PlannerPayload = Body(...)):
             }
             supabase_client.table("study_planner_units").insert(unit).execute()
 
-
         return {"message": "Study planner created successfully."}
 
     except HTTPException as http_err:
@@ -523,6 +537,65 @@ def create_study_planner(data: PlannerPayload = Body(...)):
     except Exception as e:
         print("Internal Server Error:", str(e))
         raise HTTPException(status_code=500, detail="Internal server error")
+    
+@app.get("/api/programs")
+async def get_programs():
+    print("✅ /api/programs called")
+    res = supabase_client.table("programs").select("*").execute()
+    print("✅ Supabase response:", res)
+    return res.data
+
+@app.post("/api/programs")
+async def create_program(request: Request):
+    data = await request.json()
+    name = data.get("program_name")
+    code = data.get("program_code")
+    if not name or not code:
+        raise HTTPException(status_code=400, detail="Program name and code required")
+
+    # Prevent duplicates
+    existing = supabase_client.table("programs").select("*").eq("program_name", name).execute()
+    if existing.data:
+        raise HTTPException(status_code=409, detail="Program already exists")
+
+    supabase_client.table("programs").insert({
+        "program_name": name,
+        "program_code": code
+    }).execute()
+
+    return {"message": "Program created"}
+
+@app.get("/api/majors/{program_id}")
+async def get_majors(program_id: str):
+    res = supabase_client.table("majors").select("*").eq("program_id", program_id).execute()
+    return res.data
+
+@app.post("/api/majors")
+async def create_major(request: Request):
+    data = await request.json()
+    program_id = data.get("program_id")
+    major_name = data.get("major_name")
+    if not program_id or not major_name:
+        raise HTTPException(status_code=400, detail="Program and major required")
+    supabase_client.table("majors").insert({
+        "program_id": program_id,
+        "major_name": major_name
+    }).execute()
+    return {"message": "Major added"}
+
+@app.get("/api/intake-years")
+async def get_intake_years():
+    res = supabase_client.table("intake_years").select("*").order("intake_year").execute()
+    return [y["intake_year"] for y in res.data]
+
+@app.post("/api/intake-years")
+async def add_intake_year(request: Request):
+    data = await request.json()
+    try:
+        res = supabase_client.table("intake_years").insert({"intake_year": data["intake_year"]}).execute()
+        return {"success": True}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail="Year already exists or invalid.")
     
 @app.delete("/api/delete-study-planner-unit/{unit_id}")
 def delete_study_planner_unit(unit_id: str):

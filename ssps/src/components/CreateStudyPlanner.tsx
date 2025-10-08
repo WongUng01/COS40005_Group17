@@ -2,10 +2,9 @@
 
 import React, { useEffect, useState } from "react";
 import axios from "axios";
-import toast from "react-hot-toast";
-import Select from "react-select";
 import { Plus, Save } from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
+import Select from "react-select";
+import toast from "react-hot-toast";
 
 const API = "http://127.0.0.1:8000";
 
@@ -15,73 +14,63 @@ type Unit = {
   prerequisites: string | null;
 };
 
-type PlannerRow = {
-  year: string;
-  semester: string;
-  unit_code: string;
-  unit_name: string;
-  prerequisites: string;
-  unit_type: string;
+const semesters = ["Feb/Mar", "Aug/Sep"];
+
+const swinburneStyles = {
+  control: (base: any, state: any) => ({
+    ...base,
+    backgroundColor: "#fff",
+    borderColor: state.isFocused ? "#b71c1c" : "#ccc",
+    boxShadow: state.isFocused ? "0 0 0 2px rgba(183,28,28,0.2)" : "none",
+    borderWidth: "1.5px",
+    borderRadius: "6px",
+    minHeight: "38px",
+    fontSize: "14px",
+    "&:hover": { borderColor: "#d32f2f" },
+  }),
+  option: (base: any, state: any) => ({
+    ...base,
+    backgroundColor: state.isSelected
+      ? "#b71c1c"
+      : state.isFocused
+      ? "#ffcdd2"
+      : "#fff",
+    color: state.isSelected ? "#fff" : "#333",
+    cursor: "pointer",
+  }),
+  singleValue: (base: any) => ({ ...base, color: "#212121", fontWeight: 500 }),
+  placeholder: (base: any) => ({ ...base, color: "#757575" }),
+  menu: (base: any) => ({ ...base, borderRadius: "6px", zIndex: 9999 }),
+  menuPortal: (base: any) => ({ ...base, zIndex: 9999 }),
 };
 
-const CreateStudyPlanner = () => {
+const CreateStudyPlanner: React.FC = () => {
+  const [programs, setPrograms] = useState<any[]>([]);
+  const [majors, setMajors] = useState<any[]>([]);
+  type IntakeYear = { intake_year: number }; // define a proper type
+
   const [program, setProgram] = useState("");
+  const [programCode, setProgramCode] = useState("");
+  const [programId, setProgramId] = useState("");
   const [major, setMajor] = useState("");
-  const [intakeYear, setIntakeYear] = useState("");
   const [intakeSemester, setIntakeSemester] = useState("");
-  const [plannerRows, setPlannerRows] = useState<PlannerRow[]>([]);
   const [units, setUnits] = useState<Unit[]>([]);
+  const [addingProgram, setAddingProgram] = useState(false);
+  const [addingMajor, setAddingMajor] = useState(false);
+  const [addingYear, setAddingYear] = useState(false);
+  const [intakeYears, setIntakeYears] = useState<number[]>([]); // <-- array of numbers
+  const [newYear, setNewYear] = useState(""); // string input
+  const [intakeYear, setIntakeYear] = useState<number | "">(""); // selected year
+  const [plannerRows, setPlannerRows] = useState<any[]>([
+    { year: "", semester: "", unit_code: "", unit_name: "", prerequisites: "", unit_type: "" },
+  ]);
+
   const [loading, setLoading] = useState(false);
 
-  // Alert modal state
-  const [showAlert, setShowAlert] = useState(false);
-  const [alertMessage, setAlertMessage] = useState("");
-
-  const programs = [
-    "Bachelor of Computer Science",
-    "Bachelor of Engineering",
-    "Bachelor of Information and Communication Technology",
-    "Diploma of Information Technology",
-    "Master of Information Technology",
-  ];
-
-  const majors: Record<string, string[]> = {
-    "Bachelor of Computer Science": [
-      "Artificial Intelligence",
-      "Cybersecurity",
-      "Data Science",
-      "Internet of Things",
-      "Software Development",
-    ],
-    "Bachelor of Information and Communication Technology": [
-      "Network Technology",
-      "Software Technology",
-    ],
-    "Bachelor of Engineering": ["Software"],
-    "Diploma of Information Technology": ["Cybersecurity", "Data Science"],
-    "Master of Information Technology": [
-      "Specialisation in Cybersecurity (Cognate Entry)",
-      "Specialisation in Cybersecurity (Non-Cognate Entry)",
-      "Specialisation in Data Science (Cognate Entry)",
-      "Specialisation in Data Science (Non-Cognate Entry)",
-    ],
-  };
-
-  const years = ["2026", "2025", "2024", "2023", "2022", "2021"];
-  const semesters = ["Feb/Mar", "Aug/Sep"];
-  const studyPlannerSemesters = [
-    "1",
-    "2",
-    "3",
-    "4",
-    "Summer",
-    "Winter",
-    "Term 1",
-    "Term 2",
-    "Term 3",
-    "Term 4",
-  ];
   const studyYears = ["1", "2", "3", "4"];
+  const studyPlannerSemesters = [
+    "1", "2", "3", "4", "Summer", "Winter", "Term 1", "Term 2", "Term 3", "Term 4",
+  ];
   const unitTypes = ["Major", "Core", "Elective", "MPU", "WIL"];
 
   const unitTypeColors: Record<string, string> = {
@@ -92,84 +81,113 @@ const CreateStudyPlanner = () => {
     WIL: "bg-purple-100 text-purple-800",
   };
 
-  const swinburneStyles = {
-    control: (base: any, state: any) => ({
-      ...base,
-      backgroundColor: "white",
-      borderColor: state.isFocused ? "#b71c1c" : "#ccc",
-      boxShadow: state.isFocused ? "0 0 0 2px rgba(183, 28, 28, 0.2)" : "none",
-      borderWidth: "1.5px",
-      borderRadius: "8px",
-      padding: "2px",
-      "&:hover": { borderColor: "#d32f2f" },
-    }),
-    option: (base: any, state: any) => ({
-      ...base,
-      backgroundColor: state.isSelected
-        ? "#d32f2f"
-        : state.isFocused
-        ? "#ffcdd2"
-        : "white",
-      color: state.isSelected ? "white" : "#333",
-      cursor: "pointer",
-    }),
-    singleValue: (base: any) => ({
-      ...base,
-      color: "#212121",
-      fontWeight: 500,
-    }),
-    placeholder: (base: any) => ({
-      ...base,
-      color: "#757575",
-    }),
-    menu: (base: any) => ({
-      ...base,
-      borderRadius: "8px",
-      boxShadow: "0 4px 8px rgba(0,0,0,0.1)",
-      zIndex: 9999,
-    }),
-    menuPortal: (base: any) => ({ ...base, zIndex: 9999 }),
-  };
+  const unitOptions = units.map((u) => ({ value: u.unit_code, code: u.unit_code, name: u.unit_name }));
 
-  const unitOptions = units.map((u) => ({
-    value: u.unit_code,
-    code: u.unit_code,
-    name: u.unit_name,
-  }));
-
+  // Fetch data
   useEffect(() => {
     const fetchUnits = async () => {
       try {
         const res = await axios.get<Unit[]>(`${API}/api/units`);
-        const sorted = res.data.sort((a, b) =>
-          a.unit_code.localeCompare(b.unit_code, "en", { numeric: true })
-        );
-        setUnits(sorted);
+        setUnits(res.data.sort((a, b) => a.unit_code.localeCompare(b.unit_code, "en", { numeric: true })));
       } catch {
         toast.error("Failed to fetch units.");
       }
     };
     fetchUnits();
+    fetchPrograms();
   }, []);
 
-  const handleAddRow = () =>
-    setPlannerRows([
-      ...plannerRows,
-      {
-        year: "",
-        semester: "",
-        unit_code: "",
-        unit_name: "",
-        prerequisites: "",
-        unit_type: "",
-      },
-    ]);
+  const fetchPrograms = async () => {
+    try {
+      const res = await axios.get(`${API}/api/programs`);
+      const sortedPrograms = (res.data || []).sort((a: any, b: any) =>
+        a.program_name.localeCompare(b.program_name)
+      );
+      setPrograms(sortedPrograms);
+    } catch (err) {
+      console.error(err);
+    }
+  };
 
-  const handleChange = (
-    index: number,
-    field: keyof PlannerRow,
-    value: string
-  ) => {
+  const fetchMajors = async (program_id: string) => {
+    try {
+      const res = await axios.get(`${API}/api/majors/${program_id}`);
+      setMajors(res.data || []);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const fetchIntakeYears = async () => {
+  const res = await axios.get(`${API}/api/intake-years`);
+  setIntakeYears(res.data || []);
+};
+
+
+  const handleProgramSelect = async (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const selectedProgram = e.target.value;
+    setProgram(selectedProgram);
+    const selected = programs.find((p) => p.program_name === selectedProgram);
+    if (selected) {
+      setProgramId(selected.id);
+      setProgramCode(selected.program_code || "");
+      fetchMajors(selected.id);
+      fetchIntakeYears();
+    }
+  };
+
+  const handleAddProgram = async () => {
+    if (!program || !programCode) return alert("Enter program name and code.");
+    try {
+      // 1️⃣ Add the program
+      await axios.post(`${API}/api/programs`, { program_name: program, program_code: programCode });
+
+      // 2️⃣ Fetch updated program list
+      const res = await axios.get(`${API}/api/programs`);
+      setPrograms(res.data || []);
+
+      // 3️⃣ Automatically select the newly added program
+      const newProgram = res.data.find((p: any) => p.program_name === program);
+      if (newProgram) {
+        setProgram(newProgram.program_name);
+        setProgramId(newProgram.id);
+        setProgramCode(newProgram.program_code || "");
+        fetchMajors(newProgram.id);
+        fetchIntakeYears();
+      }
+
+      // 4️⃣ Hide the add program form
+      setAddingProgram(false);
+      toast.success("Program added!");
+    } catch (err: any) {
+      alert(err.response?.status === 409 ? "Program already exists." : "Failed to add program.");
+    }
+  };
+
+
+  const handleAddMajor = async () => {
+    if (!programId || !major) return alert("Select program and enter major.");
+    try {
+      await axios.post(`${API}/api/majors`, { program_id: programId, major_name: major });
+      setAddingMajor(false);
+      await fetchMajors(programId);
+      alert("Major added!");
+    } catch {
+      alert("Failed to add major.");
+    }
+  };
+
+  const handleAddRow = () => {
+    setPlannerRows([...plannerRows, { year: "", semester: "", unit_code: "", unit_name: "", prerequisites: "", unit_type: "" }]);
+  };
+
+  const handleRemoveRow = (index: number) => {
+    const updated = [...plannerRows];
+    updated.splice(index, 1);
+    setPlannerRows(updated);
+  };
+
+  const handleChange = (index: number, field: string, value: string) => {
     const updated = [...plannerRows];
     updated[index][field] = value;
     if (field === "unit_code") {
@@ -180,327 +198,246 @@ const CreateStudyPlanner = () => {
     setPlannerRows(updated);
   };
 
-  const handleRemoveRow = (index: number) => {
-    const updated = [...plannerRows];
-    updated.splice(index, 1);
-    setPlannerRows(updated);
-  };
+  const handleSave = async () => {
+    if (!program || !major || !intakeYear || !intakeSemester)
+      return alert("Fill all required fields before saving.");
 
-  const handleSave = async (overwrite = false) => {
-    if (!program || !major || !intakeYear || !intakeSemester) {
-      setAlertMessage(
-        "Please complete all program, major, year, and semester fields before saving."
-      );
-      setShowAlert(true);
-      return;
-    }
-    if (plannerRows.length === 0) {
-      setAlertMessage("Please add at least one planner row before saving.");
-      setShowAlert(true);
-      return;
-    }
+    const payload = {
+      program,
+      program_code: programCode || null,
+      major,
+      intake_year: intakeYear,
+      intake_semester: intakeSemester,
+      planner: plannerRows,
+    };
 
-    for (let i = 0; i < plannerRows.length; i++) {
-      const row = plannerRows[i];
-      if (
-        !row.year ||
-        !row.semester ||
-        !row.unit_code ||
-        !row.unit_name ||
-        !row.prerequisites ||
-        !row.unit_type
-      ) {
-        setAlertMessage(`Please complete all fields in row ${i + 1}.`);
-        setShowAlert(true);
-        return;
-      }
-    }
-
+    setLoading(true);
     try {
-      setLoading(true);
-      await axios.post(`${API}/api/create-study-planner`, {
-        program,
-        major,
-        intake_year: intakeYear,
-        intake_semester: intakeSemester,
-        overwrite,
-        planner: plannerRows,
-      });
-      toast.success("Study planner saved.");
-      setProgram("");
-      setMajor("");
-      setIntakeYear("");
-      setIntakeSemester("");
-      setPlannerRows([]);
-    } catch (err: any) {
-      if (err.response?.status === 409 && err.response.data?.detail?.existing) {
-        const confirm = window.confirm("Planner already exists. Overwrite?");
-        if (confirm) await handleSave(true);
-        else toast("Save canceled.");
-        return;
-      }
-      toast.error("Failed to save planner.");
+      await axios.post(`${API}/api/create-study-planner`, payload);
+      alert("Study planner created!");
+    } catch {
+      alert("Failed to create study planner.");
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-gray-50 to-gray-100 py-10 px-4">
-      {/* HEADER */}
-      <div className="bg-gradient-to-r from-[#a00000] to-[#e60028] text-white py-5 px-6 rounded-t-2xl shadow-md max-w-6xl mx-auto">
-        <h1 className="text-3xl font-bold text-center tracking-wide">
-          Create Study Planner
-        </h1>
-      </div>
+    <div className="p-6 max-w-6xl mx-auto bg-white/95 backdrop-blur-md rounded-xl shadow-lg space-y-6">
+      <h1 className="text-3xl font-bold text-[#b71c1c] mb-4">Create Study Planner</h1>
 
-      {/* MAIN CARD */}
-      <div className="max-w-6xl mx-auto bg-white/90 backdrop-blur-sm shadow-lg rounded-b-2xl p-8 space-y-6 border border-gray-200">
-        {/* Metadata Inputs */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
-          {/* Program */}
-          <Select
-            value={program ? { value: program, label: program } : null}
-            onChange={(option) => {
-              setProgram(option?.value || "");
-              setMajor("");
-            }}
-            options={programs.map((p) => ({ value: p, label: p }))}
-            placeholder="Select Program"
-            styles={swinburneStyles}
-            menuPortalTarget={document.body}
-          />
-
-          {/* Major */}
-          <Select
-            value={major ? { value: major, label: major } : null}
-            onChange={(option) => setMajor(option?.value || "")}
-            options={
-              (majors[program] || []).map((m) => ({ value: m, label: m })) || []
-            }
-            placeholder="Select Major"
-            isDisabled={!majors[program]}
-            styles={swinburneStyles}
-            menuPortalTarget={document.body}
-          />
-
-          {/* Year */}
-          <Select
-            value={intakeYear ? { value: intakeYear, label: intakeYear } : null}
-            onChange={(option) => setIntakeYear(option?.value || "")}
-            options={years.map((y) => ({ value: y, label: y }))}
-            placeholder="Select Year"
-            styles={swinburneStyles}
-            menuPortalTarget={document.body}
-          />
-
-          {/* Semester */}
-          <Select
-            value={
-              intakeSemester
-                ? { value: intakeSemester, label: intakeSemester }
-                : null
-            }
-            onChange={(option) => setIntakeSemester(option?.value || "")}
-            options={semesters.map((s) => ({ value: s, label: s }))}
-            placeholder="Select Semester"
-            styles={swinburneStyles}
-            menuPortalTarget={document.body}
-          />
+      {/* Program & Major */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {/* Program */}
+        <div>
+          <label className="font-semibold text-gray-700 mb-1 block">Program</label>
+          <div className="flex gap-2 items-center">
+            <select
+              className="border border-gray-300 rounded-lg p-2 flex-1 hover:border-[#b71c1c] focus:ring-2 focus:ring-[#b71c1c]"
+              value={program}
+              onChange={handleProgramSelect}
+            >
+              <option value="">Select Program</option>
+              {programs.map((p) => <option key={p.id} value={p.program_name}>{p.program_name}</option>)}
+            </select>
+            <button
+              className="text-[#b71c1c] font-medium hover:underline text-sm"
+              onClick={() => setAddingProgram(!addingProgram)}
+            >
+              ➕ Add
+            </button>
+          </div>
+          {addingProgram && (
+            <div className="flex gap-2 mt-2">
+              <input className="border p-2 rounded flex-1" placeholder="Program Name" value={program} onChange={(e) => setProgram(e.target.value)} />
+              <input className="border p-2 rounded flex-1" placeholder="Program Code" value={programCode} onChange={(e) => setProgramCode(e.target.value)} />
+              <button className="bg-[#b71c1c] text-white px-4 py-1 rounded hover:bg-[#a00000]" onClick={handleAddProgram}>Add</button>
+              <button className="bg-gray-200 text-gray-700 px-4 py-1 rounded hover:bg-gray-300" onClick={() => setAddingProgram(false)}>Cancel</button>
+            </div>
+          )}
         </div>
 
-        {/* Table */}
-        <div className="overflow-auto rounded-lg border border-gray-200 shadow-sm">
-          <table className="w-full text-sm border-collapse">
-            <thead className="bg-gray-100 sticky top-0 z-10 text-gray-700">
-              <tr>
-                {[
-                  "Year",
-                  "Semester",
-                  "Unit Code",
-                  "Unit Name",
-                  "Prerequisites",
-                  "Unit Type",
-                  "Actions",
-                ].map((h) => (
-                  <th key={h} className="p-3 border font-semibold">
-                    {h}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {plannerRows.length === 0 ? (
-                <tr>
-                  <td
-                    colSpan={7}
-                    className="text-center text-gray-500 p-4 italic"
-                  >
-                    No rows added yet.
+        {/* Major */}
+        <div>
+          <label className="font-semibold text-gray-700 mb-1 block">Major</label>
+          <div className="flex gap-2 items-center">
+            <select
+              className="border border-gray-300 rounded-lg p-2 flex-1 hover:border-[#b71c1c] focus:ring-2 focus:ring-[#b71c1c]"
+              value={major}
+              onChange={(e) => setMajor(e.target.value)}
+              disabled={!programId}
+            >
+              <option value="">Select Major</option>
+              {majors.map((m, idx) => <option key={idx} value={m.major_name}>{m.major_name}</option>)}
+            </select>
+            <button
+              className="text-[#b71c1c] font-medium hover:underline text-sm"
+              onClick={() => setAddingMajor(!addingMajor)}
+              disabled={!programId}
+            >
+              ➕ Add
+            </button>
+          </div>
+          {addingMajor && (
+            <div className="flex gap-2 mt-2">
+              <input className="border p-2 rounded flex-1" placeholder="Major Name" value={major} onChange={(e) => setMajor(e.target.value)} />
+              <button className="bg-[#b71c1c] text-white px-3 py-1 rounded hover:bg-[#a00000]" onClick={handleAddMajor}>Add</button>
+              <button className="bg-gray-200 text-gray-700 px-3 py-1 rounded hover:bg-gray-300" onClick={() => setAddingMajor(false)}>Cancel</button>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Intake Year & Semester */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div>
+          <label className="font-semibold text-gray-700 mb-1 block">Intake Year</label>
+          <div className="flex gap-2 items-center">
+            <select
+              className="border border-gray-300 rounded-lg p-2 flex-1 hover:border-[#b71c1c] focus:ring-2 focus:ring-[#b71c1c]"
+              value={intakeYear}
+              onChange={(e) => setIntakeYear(Number(e.target.value))}
+            >
+              <option value="">Select Year</option>
+              {intakeYears.map((y) => (
+                <option key={y} value={y}>
+                  {y}
+                </option>
+              ))}
+            </select>
+            <button
+              className="text-[#b71c1c] font-medium hover:underline text-sm"
+              onClick={() => setAddingYear(!addingYear)}
+            >
+              ➕ Add
+            </button>
+          </div>
+
+          {addingYear && (
+            <div className="flex gap-2 mt-2">
+              <input
+                className="border p-2 rounded flex-1"
+                placeholder="New Year"
+                value={newYear}
+                onChange={(e) => setNewYear(e.target.value)}
+              />
+              <button
+                className="bg-[#b71c1c] text-white px-3 py-1 rounded hover:bg-[#a00000]"
+                onClick={async () => {
+                  if (!newYear) return alert("Enter a year.");
+                  const yearNumber = Number(newYear);
+                  if (intakeYears.includes(yearNumber)) return alert("Year already exists.");
+
+                  try {
+                    // Save to backend
+                    await axios.post(`${API}/api/intake-years`, { intake_year: yearNumber });
+
+                    // Update local list
+                    setIntakeYears((prev) => [...prev, yearNumber].sort((a, b) => a - b));
+                    setIntakeYear(yearNumber); // auto-select
+                    setNewYear("");
+                    setAddingYear(false);
+                    toast.success("Year added!");
+                  } catch {
+                    toast.error("Failed to add year.");
+                  }
+                }}
+              >
+                Add
+              </button>
+              <button
+                className="bg-gray-200 text-gray-700 px-3 py-1 rounded hover:bg-gray-300"
+                onClick={() => { setAddingYear(false); setNewYear(""); }}
+              >
+                Cancel
+              </button>
+            </div>
+          )}
+        </div>
+
+        <div>
+          <label className="font-semibold text-gray-700 mb-1 block">Intake Semester</label>
+          <select
+            className="border border-gray-300 rounded-lg p-2 w-full hover:border-[#b71c1c] focus:ring-2 focus:ring-[#b71c1c]"
+            value={intakeSemester}
+            onChange={(e) => setIntakeSemester(e.target.value)}
+          >
+            <option value="">Select Semester</option>
+            {semesters.map((s) => (
+              <option key={s} value={s}>
+                {s}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      {/* Planner Table */}
+      <div className="overflow-auto rounded-lg border border-gray-200 shadow-md">
+        <table className="w-full text-sm border-collapse">
+          <thead className="bg-[#f7f7f7] sticky top-0 z-10 text-gray-700">
+            <tr>
+              {["Year", "Semester", "Unit Code", "Unit Name", "Prerequisites", "Unit Type", "Actions"].map((h) => (
+                <th key={h} className="p-3 border font-semibold text-left">{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {plannerRows.length === 0 ? (
+              <tr><td colSpan={7} className="text-center text-gray-500 p-4 italic">No rows added yet.</td></tr>
+            ) : (
+              plannerRows.map((row, i) => (
+                <tr key={i} className="even:bg-gray-50 hover:bg-gray-100">
+                  <td className="p-2 border">
+                    <select className="border p-1 rounded w-full" value={row.year} onChange={(e) => handleChange(i, "year", e.target.value)}>
+                      <option value="">Year</option>
+                      {studyYears.map((y) => <option key={y} value={y}>{y}</option>)}
+                    </select>
+                  </td>
+                  <td className="p-2 border">
+                    <select className="border p-1 rounded w-full" value={row.semester} onChange={(e) => handleChange(i, "semester", e.target.value)}>
+                      <option value="">Semester</option>
+                      {studyPlannerSemesters.map((s) => <option key={s} value={s}>{s}</option>)}
+                    </select>
+                  </td>
+                  <td className="p-2 border w-48">
+                    <Select
+                      options={unitOptions}
+                      value={row.unit_code ? { value: row.unit_code, code: row.unit_code, name: row.unit_name } : null}
+                      onChange={(selected) => handleChange(i, "unit_code", selected?.value || "")}
+                      menuPortalTarget={document.body}
+                      styles={swinburneStyles}
+                      getOptionLabel={(option) => `${option.code} - ${option.name}`}
+                      formatOptionLabel={(option, { context }) => context === "menu" ? `${option.code} - ${option.name}` : option.code}
+                    />
+                  </td>
+                  <td className="p-2 border">{row.unit_name}</td>
+                  <td className="p-2 border">{row.prerequisites}</td>
+                  <td className="p-2 border">
+                    <select className={`border p-1 rounded w-full text-center ${unitTypeColors[row.unit_type] || ""}`} value={row.unit_type} onChange={(e) => handleChange(i, "unit_type", e.target.value)}>
+                      <option value="">Type</option>
+                      {unitTypes.map((type) => <option key={type} value={type}>{type}</option>)}
+                    </select>
+                  </td>
+                  <td className="p-2 border text-center">
+                    <button onClick={() => handleRemoveRow(i)} className="text-red-600 hover:underline font-medium">Remove</button>
                   </td>
                 </tr>
-              ) : (
-                plannerRows.map((row, i) => (
-                  <tr key={i} className="even:bg-gray-50 hover:bg-gray-100">
-                    <td className="p-2 border">
-                      <select
-                        value={row.year}
-                        onChange={(e) => handleChange(i, "year", e.target.value)}
-                        className="border p-1 rounded w-full"
-                      >
-                        <option value="">Year</option>
-                        {studyYears.map((y) => (
-                          <option key={y} value={y}>
-                            {y}
-                          </option>
-                        ))}
-                      </select>
-                    </td>
-                    <td className="p-2 border">
-                      <select
-                        value={row.semester}
-                        onChange={(e) =>
-                          handleChange(i, "semester", e.target.value)
-                        }
-                        className="border p-1 rounded w-full"
-                      >
-                        <option value="">Semester</option>
-                        {studyPlannerSemesters.map((s) => (
-                          <option key={s} value={s}>
-                            {s}
-                          </option>
-                        ))}
-                      </select>
-                    </td>
-                    <td className="p-2 border w-48">
-                      <Select
-                        options={unitOptions}
-                        value={
-                          row.unit_code
-                            ? {
-                                value: row.unit_code,
-                                code: row.unit_code,
-                                name: row.unit_name,
-                              }
-                            : null
-                        }
-                        onChange={(selected) =>
-                          handleChange(i, "unit_code", selected?.value || "")
-                        }
-                        menuPortalTarget={document.body}
-                        styles={{
-                          control: (base) => ({
-                            ...base,
-                            minHeight: "32px",
-                            fontSize: "13px",
-                          }),
-                          menuPortal: (base) => ({ ...base, zIndex: 9999 }),
-                        }}
-                        getOptionLabel={(option) =>
-                          `${option.code} - ${option.name}`
-                        }
-                        formatOptionLabel={(option, { context }) =>
-                          context === "menu"
-                            ? `${option.code} - ${option.name}`
-                            : option.code
-                        }
-                      />
-                    </td>
-                    <td className="p-2 border">{row.unit_name}</td>
-                    <td className="p-2 border">{row.prerequisites}</td>
-                    <td className="p-2 border">
-                      <select
-                        value={row.unit_type}
-                        onChange={(e) =>
-                          handleChange(i, "unit_type", e.target.value)
-                        }
-                        className={`border p-1 rounded w-full text-center ${
-                          unitTypeColors[row.unit_type] || ""
-                        }`}
-                      >
-                        <option value="">Type</option>
-                        {unitTypes.map((type) => (
-                          <option key={type} value={type}>
-                            {type}
-                          </option>
-                        ))}
-                      </select>
-                    </td>
-                    <td className="p-2 border text-center">
-                      <button
-                        onClick={() => handleRemoveRow(i)}
-                        className="text-red-600 hover:underline font-medium"
-                      >
-                        Remove
-                      </button>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-
-        {/* Footer Buttons */}
-        <div className="flex justify-between items-center pt-4">
-          <button
-            onClick={handleAddRow}
-            className="flex items-center gap-2 bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 transition"
-          >
-            <Plus size={16} /> Add Row
-          </button>
-          <button
-            onClick={() => handleSave()}
-            disabled={loading}
-            className={`flex items-center gap-2 px-6 py-2 rounded-md font-semibold text-white transition ${
-              loading
-                ? "bg-gray-400 cursor-not-allowed"
-                : "bg-[#e60028] hover:bg-[#cc0023]"
-            }`}
-          >
-            <Save size={18} />
-            {loading ? "Saving..." : "Save Planner"}
-          </button>
-        </div>
+              ))
+            )}
+          </tbody>
+        </table>
       </div>
 
-      {/* Animated Alert Modal */}
-      <AnimatePresence>
-        {showAlert && (
-          <motion.div
-            className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.2 }}
-            onClick={() => setShowAlert(false)}
-          >
-            <motion.div
-              className="bg-white rounded-xl shadow-lg max-w-md w-full overflow-hidden"
-              initial={{ scale: 0.9, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.9, opacity: 0 }}
-              transition={{ type: "spring", stiffness: 250, damping: 20 }}
-              onClick={(e) => e.stopPropagation()} // Prevent close on modal click
-            >
-              <div className="bg-[#e60028] text-white px-5 py-3 font-semibold text-lg text-center">
-                Alert
-              </div>
-              <div className="p-6 text-gray-700 text-center">
-                <p className="text-base font-medium">{alertMessage}</p>
-              </div>
-              <div className="flex justify-center border-t border-gray-200 py-4">
-                <button
-                  onClick={() => setShowAlert(false)}
-                  className="bg-[#e60028] text-white px-6 py-2 rounded-md hover:bg-[#cc0023] transition font-semibold shadow-sm hover:shadow-md"
-                >
-                  OK
-                </button>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {/* Buttons */}
+      <div className="flex justify-between items-center mt-4 flex-wrap gap-2">
+        <button className="bg-[#b71c1c] hover:bg-[#a00000] text-white px-4 py-2 rounded-lg flex items-center gap-2 shadow-md" onClick={handleAddRow}>
+          <Plus size={16} /> Add Row
+        </button>
+        <button className={`flex items-center gap-2 px-6 py-2 rounded-lg shadow-md text-white ${loading ? "bg-gray-400 cursor-not-allowed" : "bg-green-700 hover:bg-green-800"}`} onClick={handleSave} disabled={loading}>
+          <Save size={18} /> {loading ? "Saving..." : "Save Planner"}
+        </button>
+      </div>
     </div>
   );
 };
