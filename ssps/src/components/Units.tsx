@@ -35,7 +35,7 @@ export default function Units() {
     fetchUnits();
   }, []);
 
-  const API = "https://cos40005-group17.onrender.com";
+  const API = "http://localhost:8000";
 
   const fetchUnits = async () => {
     try {
