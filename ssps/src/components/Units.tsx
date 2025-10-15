@@ -35,11 +35,12 @@ export default function Units() {
     fetchUnits();
   }, []);
 
-  const API = "http://localhost:8000";
+  //const API = "http://localhost:8000";
+  const API = "http://127.0.0.1:8000";
 
   const fetchUnits = async () => {
     try {
-      const res = await fetch(`${API}/units`);
+      const res = await fetch(`${API}/api/units`);
       const data = await res.json();
       setUnits(Array.isArray(data) ? data : []);
     } catch (err) {

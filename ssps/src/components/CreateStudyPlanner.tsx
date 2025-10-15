@@ -95,6 +95,7 @@ const CreateStudyPlanner: React.FC = () => {
     };
     fetchUnits();
     fetchPrograms();
+    fetchIntakeYears();
   }, []);
 
   const fetchPrograms = async () => {
@@ -119,10 +120,9 @@ const CreateStudyPlanner: React.FC = () => {
   };
 
   const fetchIntakeYears = async () => {
-  const res = await axios.get(`${API}/api/intake-years`);
-  setIntakeYears(res.data || []);
-};
-
+    const res = await axios.get(`${API}/api/intake-years`);
+    setIntakeYears(res.data || []);
+  };
 
   const handleProgramSelect = async (e: React.ChangeEvent<HTMLSelectElement>) => {
     const selectedProgram = e.target.value;
@@ -331,7 +331,7 @@ const CreateStudyPlanner: React.FC = () => {
                   try {
                     // Save to backend
                     await axios.post(`${API}/api/intake-years`, { intake_year: yearNumber });
-
+                    
                     // Update local list
                     setIntakeYears((prev) => [...prev, yearNumber].sort((a, b) => a - b));
                     setIntakeYear(yearNumber); // auto-select

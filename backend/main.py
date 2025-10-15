@@ -830,7 +830,7 @@ async def delete_unit(unit_id: int):
 async def get_students():
     try:
         response = (
-            client.from_('students')
+            supabase_client.from_('students')
             .select('*')
             .order('created_at', desc=True)
             .execute()
@@ -844,7 +844,7 @@ async def create_student(student: StudentBase):
     try:
         # Check if student ID or email already exists
         existing = (
-            client.from_('students')
+            supabase_client.from_('students')
             .select('*')
             .or_(
                 f"student_id.eq.{student.student_id},student_email.eq.{student.student_email}"
