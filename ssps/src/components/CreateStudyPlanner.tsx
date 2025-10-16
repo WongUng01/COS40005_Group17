@@ -45,6 +45,12 @@ const swinburneStyles = {
 };
 
 const CreateStudyPlanner: React.FC = () => {
+  const [copyProgram, setCopyProgram] = useState("");
+  const [copyMajor, setCopyMajor] = useState("");
+  const [copyYear, setCopyYear] = useState<number | "">("");
+  const [copySemester, setCopySemester] = useState("");
+  const [copyMajors, setCopyMajors] = useState<any[]>([]);
+
   const [programs, setPrograms] = useState<any[]>([]);
   const [majors, setMajors] = useState<any[]>([]);
   type IntakeYear = { intake_year: number }; // define a proper type
@@ -90,7 +96,7 @@ const CreateStudyPlanner: React.FC = () => {
         const res = await axios.get<Unit[]>(`${API}/api/units`);
         setUnits(res.data.sort((a, b) => a.unit_code.localeCompare(b.unit_code, "en", { numeric: true })));
       } catch {
-        toast.error("Failed to fetch units.");
+        
       }
     };
     fetchUnits();
@@ -222,224 +228,405 @@ const CreateStudyPlanner: React.FC = () => {
     }
   };
 
+  const fetchCopyMajors = async (program_id: string) => {
+    try {
+      const res = await axios.get(`${API}/api/majors/${program_id}`);
+      setCopyMajors(res.data || []);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleCopyPlanner = async () => {
+    if (!copyProgram || !copyMajor || !copyYear || !copySemester) {
+      toast.error("Please select all fields before copying.");
+      return;
+    }
+
+    try {
+      const res = await axios.get(`${API}/api/view-study-planner`, {
+        params: {
+          program: copyProgram,
+          major: copyMajor,
+          intake_year: copyYear,
+          intake_semester: copySemester,
+        },
+        validateStatus: () => true, // ✅ Prevent axios from throwing automatically
+      });
+
+      // 🟥 Handle missing planner (404)
+      if (res.status === 404) {
+        toast((t) => (
+          <div className="p-3">
+            <p className="font-semibold text-red-700 mb-1">No Planner Found</p>
+            <p className="text-sm text-gray-700 mb-2">
+              There is no existing study planner for the selected program, major, intake year, and semester.
+            </p>
+            <button
+              onClick={() => toast.dismiss(t.id)}
+              className="bg-red-600 text-white px-3 py-1 rounded text-sm hover:bg-red-700"
+            >
+              OK
+            </button>
+          </div>
+        ), { duration: 8000 });
+        return;
+      }
+
+      // 🟩 Handle success
+      if (res.status === 200 && res.data?.units?.length) {
+        setPlannerRows(res.data.units);
+        toast.success("✅ Study planner copied! You can now edit it.");
+        return;
+      }
+
+      // 🟨 Handle any other unexpected case
+      toast.error("Unexpected response. Please check if the planner data is valid.");
+    } catch (err) {
+      toast.error("Failed to copy planner. Please check your connection.");
+    }
+  };
+
   return (
-    <div className="p-6 max-w-6xl mx-auto bg-white/95 backdrop-blur-md rounded-xl shadow-lg space-y-6">
-      <h1 className="text-3xl font-bold text-[#b71c1c] mb-4">Create Study Planner</h1>
-
-      {/* Program & Major */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {/* Program */}
+    <div className="p-8 max-w-7xl mx-auto">
+      {/* 🟥 Swinburne Header */}
+      <div className="flex items-center justify-between mb-8">
         <div>
-          <label className="font-semibold text-gray-700 mb-1 block">Program</label>
-          <div className="flex gap-2 items-center">
-            <select
-              className="border border-gray-300 rounded-lg p-2 flex-1 hover:border-[#b71c1c] focus:ring-2 focus:ring-[#b71c1c]"
-              value={program}
-              onChange={handleProgramSelect}
-            >
-              <option value="">Select Program</option>
-              {programs.map((p) => <option key={p.id} value={p.program_name}>{p.program_name}</option>)}
-            </select>
-            <button
-              className="text-[#b71c1c] font-medium hover:underline text-sm"
-              onClick={() => setAddingProgram(!addingProgram)}
-            >
-              ➕ Add
-            </button>
-          </div>
-          {addingProgram && (
-            <div className="flex gap-2 mt-2">
-              <input className="border p-2 rounded flex-1" placeholder="Program Name" value={program} onChange={(e) => setProgram(e.target.value)} />
-              <input className="border p-2 rounded flex-1" placeholder="Program Code" value={programCode} onChange={(e) => setProgramCode(e.target.value)} />
-              <button className="bg-[#b71c1c] text-white px-4 py-1 rounded hover:bg-[#a00000]" onClick={handleAddProgram}>Add</button>
-              <button className="bg-gray-200 text-gray-700 px-4 py-1 rounded hover:bg-gray-300" onClick={() => setAddingProgram(false)}>Cancel</button>
-            </div>
-          )}
-        </div>
-
-        {/* Major */}
-        <div>
-          <label className="font-semibold text-gray-700 mb-1 block">Major</label>
-          <div className="flex gap-2 items-center">
-            <select
-              className="border border-gray-300 rounded-lg p-2 flex-1 hover:border-[#b71c1c] focus:ring-2 focus:ring-[#b71c1c]"
-              value={major}
-              onChange={(e) => setMajor(e.target.value)}
-              disabled={!programId}
-            >
-              <option value="">Select Major</option>
-              {majors.map((m, idx) => <option key={idx} value={m.major_name}>{m.major_name}</option>)}
-            </select>
-            <button
-              className="text-[#b71c1c] font-medium hover:underline text-sm"
-              onClick={() => setAddingMajor(!addingMajor)}
-              disabled={!programId}
-            >
-              ➕ Add
-            </button>
-          </div>
-          {addingMajor && (
-            <div className="flex gap-2 mt-2">
-              <input className="border p-2 rounded flex-1" placeholder="Major Name" value={major} onChange={(e) => setMajor(e.target.value)} />
-              <button className="bg-[#b71c1c] text-white px-3 py-1 rounded hover:bg-[#a00000]" onClick={handleAddMajor}>Add</button>
-              <button className="bg-gray-200 text-gray-700 px-3 py-1 rounded hover:bg-gray-300" onClick={() => setAddingMajor(false)}>Cancel</button>
-            </div>
-          )}
+          <h1 className="text-3xl font-bold text-[#b71c1c]">Create Study Planner</h1>
+          <p className="text-gray-600 mt-1">
+            Design or copy an academic study planner for your program intake.
+          </p>
         </div>
       </div>
 
-      {/* Intake Year & Semester */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div>
-          <label className="font-semibold text-gray-700 mb-1 block">Intake Year</label>
-          <div className="flex gap-2 items-center">
+      {/* 📋 Copy Existing Planner */}
+      <div className="p-5 rounded-xl border border-red-200 bg-red-50/70 shadow-sm mb-6">
+        <h2 className="text-lg font-semibold text-[#b71c1c] flex items-center gap-2">
+          📋 Copy From Existing Planner
+        </h2>
+        <p className="text-sm text-gray-600 mb-4">
+          Quickly start by copying an existing study planner’s structure.
+        </p>
+
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          {/* Program */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Program</label>
             <select
-              className="border border-gray-300 rounded-lg p-2 flex-1 hover:border-[#b71c1c] focus:ring-2 focus:ring-[#b71c1c]"
-              value={intakeYear}
-              onChange={(e) => setIntakeYear(Number(e.target.value))}
+              className="border border-gray-300 rounded-lg p-2 w-full focus:ring-2 focus:ring-[#b71c1c]"
+              value={copyProgram}
+              onChange={(e) => {
+                const val = e.target.value;
+                setCopyProgram(val);
+                const selected = programs.find((p) => p.program_name === val);
+                if (selected) fetchCopyMajors(selected.id);
+              }}
+            >
+              <option value="">Select Program</option>
+              {programs.map((p) => (
+                <option key={p.id} value={p.program_name}>{p.program_name}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Major */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Major</label>
+            <select
+              className="border border-gray-300 rounded-lg p-2 w-full focus:ring-2 focus:ring-[#b71c1c]"
+              value={copyMajor}
+              onChange={(e) => setCopyMajor(e.target.value)}
+              disabled={!copyProgram}
+            >
+              <option value="">Select Major</option>
+              {copyMajors.map((m, idx) => (
+                <option key={idx} value={m.major_name}>{m.major_name}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Year */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Intake Year</label>
+            <select
+              className="border border-gray-300 rounded-lg p-2 w-full focus:ring-2 focus:ring-[#b71c1c]"
+              value={copyYear}
+              onChange={(e) => setCopyYear(Number(e.target.value))}
             >
               <option value="">Select Year</option>
               {intakeYears.map((y) => (
-                <option key={y} value={y}>
-                  {y}
-                </option>
+                <option key={y} value={y}>{y}</option>
               ))}
             </select>
-            <button
-              className="text-[#b71c1c] font-medium hover:underline text-sm"
-              onClick={() => setAddingYear(!addingYear)}
-            >
-              ➕ Add
-            </button>
           </div>
 
-          {addingYear && (
-            <div className="flex gap-2 mt-2">
-              <input
-                className="border p-2 rounded flex-1"
-                placeholder="New Year"
-                value={newYear}
-                onChange={(e) => setNewYear(e.target.value)}
-              />
-              <button
-                className="bg-[#b71c1c] text-white px-3 py-1 rounded hover:bg-[#a00000]"
-                onClick={async () => {
-                  if (!newYear) return alert("Enter a year.");
-                  const yearNumber = Number(newYear);
-                  if (intakeYears.includes(yearNumber)) return alert("Year already exists.");
-
-                  try {
-                    // Save to backend
-                    await axios.post(`${API}/api/intake-years`, { intake_year: yearNumber });
-                    
-                    // Update local list
-                    setIntakeYears((prev) => [...prev, yearNumber].sort((a, b) => a - b));
-                    setIntakeYear(yearNumber); // auto-select
-                    setNewYear("");
-                    setAddingYear(false);
-                    toast.success("Year added!");
-                  } catch {
-                    toast.error("Failed to add year.");
-                  }
-                }}
+          {/* Semester + Button */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Intake Semester</label>
+            <div className="flex gap-2">
+              <select
+                className="border border-gray-300 rounded-lg p-2 flex-1 focus:ring-2 focus:ring-[#b71c1c]"
+                value={copySemester}
+                onChange={(e) => setCopySemester(e.target.value)}
               >
-                Add
-              </button>
+                <option value="">Select</option>
+                {semesters.map((s) => (
+                  <option key={s} value={s}>{s}</option>
+                ))}
+              </select>
               <button
-                className="bg-gray-200 text-gray-700 px-3 py-1 rounded hover:bg-gray-300"
-                onClick={() => { setAddingYear(false); setNewYear(""); }}
+                className="bg-[#b71c1c] hover:bg-[#a00000] text-white px-4 py-2 rounded-lg shadow-sm font-medium"
+                onClick={handleCopyPlanner}
               >
-                Cancel
+                Copy
               </button>
             </div>
-          )}
-        </div>
-
-        <div>
-          <label className="font-semibold text-gray-700 mb-1 block">Intake Semester</label>
-          <select
-            className="border border-gray-300 rounded-lg p-2 w-full hover:border-[#b71c1c] focus:ring-2 focus:ring-[#b71c1c]"
-            value={intakeSemester}
-            onChange={(e) => setIntakeSemester(e.target.value)}
-          >
-            <option value="">Select Semester</option>
-            {semesters.map((s) => (
-              <option key={s} value={s}>
-                {s}
-              </option>
-            ))}
-          </select>
+          </div>
         </div>
       </div>
 
-      {/* Planner Table */}
-      <div className="overflow-auto rounded-lg border border-gray-200 shadow-md">
-        <table className="w-full text-sm border-collapse">
-          <thead className="bg-[#f7f7f7] sticky top-0 z-10 text-gray-700">
-            <tr>
-              {["Year", "Semester", "Unit Code", "Unit Name", "Prerequisites", "Unit Type", "Actions"].map((h) => (
-                <th key={h} className="p-3 border font-semibold text-left">{h}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {plannerRows.length === 0 ? (
-              <tr><td colSpan={7} className="text-center text-gray-500 p-4 italic">No rows added yet.</td></tr>
-            ) : (
-              plannerRows.map((row, i) => (
-                <tr key={i} className="even:bg-gray-50 hover:bg-gray-100">
-                  <td className="p-2 border">
-                    <select className="border p-1 rounded w-full" value={row.year} onChange={(e) => handleChange(i, "year", e.target.value)}>
-                      <option value="">Year</option>
-                      {studyYears.map((y) => <option key={y} value={y}>{y}</option>)}
-                    </select>
-                  </td>
-                  <td className="p-2 border">
-                    <select className="border p-1 rounded w-full" value={row.semester} onChange={(e) => handleChange(i, "semester", e.target.value)}>
-                      <option value="">Semester</option>
-                      {studyPlannerSemesters.map((s) => <option key={s} value={s}>{s}</option>)}
-                    </select>
-                  </td>
-                  <td className="p-2 border w-48">
-                    <Select
-                      options={unitOptions}
-                      value={row.unit_code ? { value: row.unit_code, code: row.unit_code, name: row.unit_name } : null}
-                      onChange={(selected) => handleChange(i, "unit_code", selected?.value || "")}
-                      menuPortalTarget={document.body}
-                      styles={swinburneStyles}
-                      getOptionLabel={(option) => `${option.code} - ${option.name}`}
-                      formatOptionLabel={(option, { context }) => context === "menu" ? `${option.code} - ${option.name}` : option.code}
-                    />
-                  </td>
-                  <td className="p-2 border">{row.unit_name}</td>
-                  <td className="p-2 border">{row.prerequisites}</td>
-                  <td className="p-2 border">
-                    <select className={`border p-1 rounded w-full text-center ${unitTypeColors[row.unit_type] || ""}`} value={row.unit_type} onChange={(e) => handleChange(i, "unit_type", e.target.value)}>
-                      <option value="">Type</option>
-                      {unitTypes.map((type) => <option key={type} value={type}>{type}</option>)}
-                    </select>
-                  </td>
-                  <td className="p-2 border text-center">
-                    <button onClick={() => handleRemoveRow(i)} className="text-red-600 hover:underline font-medium">Remove</button>
-                  </td>
-                </tr>
-              ))
+      {/* 🎓 Program Details Section */}
+      <div className="bg-white rounded-xl shadow-md border border-gray-100 p-6 space-y-6 mb-6">
+        <h2 className="text-lg font-semibold text-gray-800">Program Details</h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {/* Program Dropdown */}
+          <div>
+            <label className="block font-medium text-gray-700 mb-1">Program</label>
+            <div className="flex gap-2">
+              <select
+                className="border border-gray-300 rounded-lg p-2 flex-1 focus:ring-2 focus:ring-[#b71c1c]"
+                value={program}
+                onChange={handleProgramSelect}
+              >
+                <option value="">Select Program</option>
+                {programs.map((p) => <option key={p.id} value={p.program_name}>{p.program_name}</option>)}
+              </select>
+              <button
+                className="text-[#b71c1c] hover:underline font-medium text-sm"
+                onClick={() => setAddingProgram(!addingProgram)}
+              >
+                ➕ Add
+              </button>
+            </div>
+
+            {addingProgram && (
+              <div className="flex gap-2 mt-2">
+                <input
+                  className="border p-2 rounded flex-1"
+                  placeholder="Program Name"
+                  value={program}
+                  onChange={(e) => setProgram(e.target.value)}
+                />
+                <input
+                  className="border p-2 rounded flex-1"
+                  placeholder="Program Code"
+                  value={programCode}
+                  onChange={(e) => setProgramCode(e.target.value)}
+                />
+                <button className="bg-[#b71c1c] text-white px-3 py-1 rounded hover:bg-[#a00000]" onClick={handleAddProgram}>Add</button>
+                <button className="bg-gray-200 px-3 py-1 rounded" onClick={() => setAddingProgram(false)}>Cancel</button>
+              </div>
             )}
-          </tbody>
-        </table>
+          </div>
+
+          {/* Major Dropdown */}
+          <div>
+            <label className="block font-medium text-gray-700 mb-1">Major</label>
+            <div className="flex gap-2">
+              <select
+                className="border border-gray-300 rounded-lg p-2 flex-1 focus:ring-2 focus:ring-[#b71c1c]"
+                value={major}
+                onChange={(e) => setMajor(e.target.value)}
+                disabled={!programId}
+              >
+                <option value="">Select Major</option>
+                {majors.map((m, idx) => <option key={idx} value={m.major_name}>{m.major_name}</option>)}
+              </select>
+              <button
+                className="text-[#b71c1c] hover:underline font-medium text-sm"
+                onClick={() => setAddingMajor(!addingMajor)}
+                disabled={!programId}
+              >
+                ➕ Add
+              </button>
+            </div>
+
+            {addingMajor && (
+              <div className="flex gap-2 mt-2">
+                <input className="border p-2 rounded flex-1" placeholder="Major Name" value={major} onChange={(e) => setMajor(e.target.value)} />
+                <button className="bg-[#b71c1c] text-white px-3 py-1 rounded hover:bg-[#a00000]" onClick={handleAddMajor}>Add</button>
+                <button className="bg-gray-200 px-3 py-1 rounded" onClick={() => setAddingMajor(false)}>Cancel</button>
+              </div>
+            )}
+          </div>
+        </div>
       </div>
 
-      {/* Buttons */}
-      <div className="flex justify-between items-center mt-4 flex-wrap gap-2">
-        <button className="bg-[#b71c1c] hover:bg-[#a00000] text-white px-4 py-2 rounded-lg flex items-center gap-2 shadow-md" onClick={handleAddRow}>
-          <Plus size={16} /> Add Row
-        </button>
-        <button className={`flex items-center gap-2 px-6 py-2 rounded-lg shadow-md text-white ${loading ? "bg-gray-400 cursor-not-allowed" : "bg-green-700 hover:bg-green-800"}`} onClick={handleSave} disabled={loading}>
+      {/* 📅 Intake Details */}
+      <div className="bg-white rounded-xl shadow-md border border-gray-100 p-6 space-y-6 mb-6">
+        <h2 className="text-lg font-semibold text-gray-800">Intake Details</h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {/* Year */}
+          <div>
+            <label className="block font-medium text-gray-700 mb-1">Intake Year</label>
+            <div className="flex gap-2 items-center">
+              <select
+                className="border border-gray-300 rounded-lg p-2 flex-1 focus:ring-2 focus:ring-[#b71c1c]"
+                value={intakeYear}
+                onChange={(e) => setIntakeYear(Number(e.target.value))}
+              >
+                <option value="">Select Year</option>
+                {intakeYears.map((y) => (
+                  <option key={y} value={y}>{y}</option>
+                ))}
+              </select>
+              <button
+                className="text-[#b71c1c] hover:underline font-medium text-sm"
+                onClick={() => setAddingYear(!addingYear)}
+              >
+                ➕ Add
+              </button>
+            </div>
+            {addingYear && (
+              <div className="flex gap-2 mt-2">
+                <input
+                  className="border p-2 rounded flex-1"
+                  placeholder="New Year"
+                  value={newYear}
+                  onChange={(e) => setNewYear(e.target.value)}
+                />
+                <button
+                  className="bg-[#b71c1c] text-white px-3 py-1 rounded hover:bg-[#a00000]"
+                  onClick={async () => {
+                    if (!newYear) return alert("Enter a year.");
+                    const yearNumber = Number(newYear);
+                    if (intakeYears.includes(yearNumber)) return alert("Year already exists.");
+                    try {
+                      await axios.post(`${API}/api/intake-years`, { intake_year: yearNumber });
+                      setIntakeYears((prev) => [...prev, yearNumber].sort((a, b) => a - b));
+                      setIntakeYear(yearNumber);
+                      setNewYear("");
+                      setAddingYear(false);
+                      toast.success("Year added!");
+                    } catch {
+                      toast.error("Failed to add year.");
+                    }
+                  }}
+                >
+                  Add
+                </button>
+                <button className="bg-gray-200 px-3 py-1 rounded" onClick={() => setAddingYear(false)}>Cancel</button>
+              </div>
+            )}
+          </div>
+
+          {/* Semester */}
+          <div>
+            <label className="block font-medium text-gray-700 mb-1">Intake Semester</label>
+            <select
+              className="border border-gray-300 rounded-lg p-2 w-full focus:ring-2 focus:ring-[#b71c1c]"
+              value={intakeSemester}
+              onChange={(e) => setIntakeSemester(e.target.value)}
+            >
+              <option value="">Select Semester</option>
+              {semesters.map((s) => (
+                <option key={s} value={s}>{s}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+      </div>
+
+      {/* 📘 Planner Table */}
+      <div className="bg-white rounded-xl shadow-md border border-gray-100 p-4">
+        <div className="flex justify-between items-center mb-3">
+          <h2 className="text-lg font-semibold text-gray-800">Study Planner</h2>
+          <button
+            className="bg-[#b71c1c] hover:bg-[#a00000] text-white px-4 py-2 rounded-lg flex items-center gap-2"
+            onClick={handleAddRow}
+          >
+            <Plus size={16} /> Add Row
+          </button>
+        </div>
+
+        <div className="overflow-auto rounded-lg border border-gray-200">
+          <table className="w-full text-sm border-collapse">
+            <thead className="bg-[#fafafa] sticky top-0 text-gray-700">
+              <tr>
+                {["Year", "Semester", "Unit Code", "Unit Name", "Prerequisites", "Unit Type", "Actions"].map((h) => (
+                  <th key={h} className="p-3 border font-semibold text-left">{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {plannerRows.length === 0 ? (
+                <tr><td colSpan={7} className="text-center text-gray-500 p-4 italic">No rows added yet.</td></tr>
+              ) : (
+                plannerRows.map((row, i) => (
+                  <tr key={i} className="even:bg-gray-50 hover:bg-gray-100 transition">
+                    <td className="p-2 border">
+                      <select className="border p-1 rounded w-full" value={row.year} onChange={(e) => handleChange(i, "year", e.target.value)}>
+                        <option value="">Year</option>
+                        {studyYears.map((y) => <option key={y} value={y}>{y}</option>)}
+                      </select>
+                    </td>
+                    <td className="p-2 border">
+                      <select className="border p-1 rounded w-full" value={row.semester} onChange={(e) => handleChange(i, "semester", e.target.value)}>
+                        <option value="">Semester</option>
+                        {studyPlannerSemesters.map((s) => <option key={s} value={s}>{s}</option>)}
+                      </select>
+                    </td>
+                    <td className="p-2 border w-48">
+                      <Select
+                        options={unitOptions}
+                        value={row.unit_code ? { value: row.unit_code, code: row.unit_code, name: row.unit_name } : null}
+                        onChange={(selected) => handleChange(i, "unit_code", selected?.value || "")}
+                        menuPortalTarget={document.body}
+                        styles={swinburneStyles}
+                        getOptionLabel={(option) => `${option.code} - ${option.name}`}
+                        formatOptionLabel={(option, { context }) => context === "menu" ? `${option.code} - ${option.name}` : option.code}
+                      />
+                    </td>
+                    <td className="p-2 border">{row.unit_name}</td>
+                    <td className="p-2 border">{row.prerequisites}</td>
+                    <td className="p-2 border text-center">
+                      <select
+                        className={`border p-1 rounded w-full ${unitTypeColors[row.unit_type] || ""}`}
+                        value={row.unit_type}
+                        onChange={(e) => handleChange(i, "unit_type", e.target.value)}
+                      >
+                        <option value="">Type</option>
+                        {unitTypes.map((type) => <option key={type} value={type}>{type}</option>)}
+                      </select>
+                    </td>
+                    <td className="p-2 border text-center">
+                      <button onClick={() => handleRemoveRow(i)} className="text-red-600 hover:underline font-medium">
+                        Remove
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* 💾 Save Button */}
+      <div className="flex justify-end mt-6">
+        <button
+          className={`flex items-center gap-2 px-6 py-2 rounded-lg text-white font-medium shadow-md ${
+            loading ? "bg-gray-400 cursor-not-allowed" : "bg-green-700 hover:bg-green-800"
+          }`}
+          onClick={handleSave}
+          disabled={loading}
+        >
           <Save size={18} /> {loading ? "Saving..." : "Save Planner"}
         </button>
       </div>
     </div>
   );
+
 };
 
 export default CreateStudyPlanner;

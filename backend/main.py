@@ -275,35 +275,38 @@ def view_study_planner(
                 "intake_year": intake_year,
                 "intake_semester": intake_semester,
             })
-            .single()
             .execute()
         )
-        planner = planner_res.data
 
-        if not planner:
-            raise HTTPException(status_code=404, detail="No matching study planner found.")
+        # ✅ If no data, return 404 instead of crashing
+        if not planner_res.data or len(planner_res.data) == 0:
+            return JSONResponse(
+                status_code=404,
+                content={"message": "No study planner found for the selected intake."},
+            )
 
-        # Fetch the related units in the same order as Excel (row_index)
+        # Grab the first planner
+        planner = planner_res.data[0]
+
+        # Fetch related units
         units_res = (
             supabase_client.table("study_planner_units")
             .select("*")
             .eq("planner_id", planner["id"])
-            .order("row_index", desc=False)   # ascending
+            .order("row_index", desc=False)
             .execute()
         )
 
         units = units_res.data or []
 
-        print("Row order:", [u["row_index"] for u in units])
+        print("✅ Planner found. Row order:", [u["row_index"] for u in units])
 
-        return {
-            "planner": planner,
-            "units": units
-        }
+        return {"planner": planner, "units": units}
 
     except Exception as e:
-        print("Error:", str(e))
+        print("❌ Error in view-study-planner:", str(e))
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+
 
 @app.get("/api/study-planner-tabs")
 def get_study_planner_tabs():
