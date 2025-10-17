@@ -381,7 +381,10 @@ const ViewStudyPlannerTabs: React.FC = () => {
   };
 
   // Add this helper somewhere at the top of your component
-  const displayValue = (val: any) => (val === null || val === undefined || val === "nan" ? "" : val);
+  const displayValue = (val: any) =>
+    val === null || val === undefined || val === "nan" || val === "0" || val === 0
+      ? ""
+      : val;
 
   return (
     <div className="p-6 max-w-screen-2xl mx-30">
