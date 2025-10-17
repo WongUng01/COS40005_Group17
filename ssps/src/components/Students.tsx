@@ -89,26 +89,30 @@ export default function StudentsPage() {
   };
 
 // Check graduation eligibility for a student
+// Replace your existing checkGraduation with this
 const checkGraduation = async (studentId: number) => {
   try {
-    const response = await axios.put(`${API_URL}/students/${studentId}/graduate`);
-    const data = response.data;
-    console.log('DEBUG: graduation PUT response raw:', data);
+    const response = await axios.put(`${API_URL}/students/${studentId}/graduate`, null, {
+      headers: { Accept: "application/json" },
+      // optional: extend timeout if your server sometimes runs slowly
+      timeout: 30000
+    });
 
-    // 兼容两种后端返回格式：
-    // 1) { graduation_result: {...}, updated_student: {...} }
-    // 2) { can_graduate, total_credits, ... }  <- 旧格式
+    const data = response.data;
+    console.log("DEBUG: graduation PUT response raw:", data);
+
+    // existing handling (your code used this earlier and is fine)
     const gradResult = data?.graduation_result ?? data;
     const updatedStudent = data?.updated_student ?? null;
 
     if (!gradResult) {
-      console.warn('DEBUG: graduation result missing in response', data);
-      toast.error('毕业检查返回格式异常，请查看控制台。');
+      console.warn("DEBUG: graduation result missing in response", data);
+      toast.error("Graduation check returned unexpected shape; see console.");
       return;
     }
 
-    // 用后端返回的真实 student（如果存在）更新本地 state
-    if (updatedStudent && typeof updatedStudent === 'object') {
+    // update local state (same as your original code)
+    if (updatedStudent && typeof updatedStudent === "object") {
       setStudents(prev =>
         prev.map(s =>
           s.student_id === studentId
@@ -116,9 +120,8 @@ const checkGraduation = async (studentId: number) => {
             : s
         )
       );
-      console.log('DEBUG: Local state updated from updated_student:', updatedStudent);
+      console.log("DEBUG: Local state updated from updated_student:", updatedStudent);
     } else {
-      // 没有返回 updated_student：用 gradResult 填回页面（回退方案）
       setStudents(prev =>
         prev.map(s =>
           s.student_id === studentId
@@ -126,49 +129,50 @@ const checkGraduation = async (studentId: number) => {
             : s
         )
       );
-      console.log('DEBUG: Local state updated from graduation_result:', {
+      console.log("DEBUG: Local state updated from graduation_result:", {
         credit_point: gradResult.total_credits,
         graduation_status: gradResult.can_graduate
       });
     }
 
-    // 显示信息（使用 gradResult，不管是哪种格式）
+    // show messages
     if (gradResult.can_graduate) {
-      toast.success('Graduation Approved');
-      alert(`✅ Graduation Approved!\nStudy Plan: ${gradResult.planner_info || 'Unknown'}\nTotal Credits: ${gradResult.total_credits}/300`);
+      toast.success("Graduation Approved");
+      alert(`✅ Graduation Approved!\nTotal Credits: ${gradResult.total_credits}/300\nPlanner: ${gradResult.planner_info ?? "Unknown"}`);
     } else {
       let message = `❌ Not Eligible for Graduation\n\n`;
-      message += `Study Plan: ${gradResult.planner_info || 'Unknown'}\n\n`;
-      message += `Total Credits: ${gradResult.total_credits ?? 'N/A'}/300\n`;
-      message += `Core Units Completed: ${gradResult.core_completed ?? 'N/A'}\n`;
-      message += `Major Units Completed: ${gradResult.major_completed ?? 'N/A'}\n\n`;
-
-      if (Array.isArray(gradResult.missing_core_units) && gradResult.missing_core_units.length > 0) {
-        message += `Missing Core Units (${gradResult.missing_core_units.length}):\n${gradResult.missing_core_units.join(', ')}\n\n`;
-      } else {
-        message += `✅ All Core Units Completed\n\n`;
-      }
-
-      if (Array.isArray(gradResult.missing_major_units) && gradResult.missing_major_units.length > 0) {
-        message += `Missing Major Units (${gradResult.missing_major_units.length}):\n${gradResult.missing_major_units.join(', ')}`;
-      } else {
-        message += `✅ All Major Units Completed`;
-      }
-
+      message += `Total Credits: ${gradResult.total_credits ?? "N/A"}/300\n`;
+      message += `Missing Core: ${Array.isArray(gradResult.missing_core_units) ? gradResult.missing_core_units.join(", ") : "N/A"}\n`;
+      message += `Missing Major: ${Array.isArray(gradResult.missing_major_units) ? gradResult.missing_major_units.join(", ") : "N/A"}\n`;
       alert(message);
     }
 
-    // （可选）再次 fetch 整个学生列表以保证完全同步（视情况取消注释）
-    // await fetchStudents();
-
   } catch (err) {
-    console.error('Graduation check error (frontend):', err);
+    console.error("Graduation check error (frontend):", err);
+
+    // Axios error details
     if (axios.isAxiosError(err)) {
-      console.log('DEBUG: error.response:', err.response?.status, err.response?.data);
+      console.log("DEBUG: error.toJSON():", err.toJSON ? err.toJSON() : err);
+      console.log("DEBUG: error.response:", err.response);
+      console.log("DEBUG: error.request:", err.request);
+      const status = err.response?.status;
+      const respData = err.response?.data;
+      const respHeaders = err.response?.headers;
+      console.log("DEBUG: status:", status);
+      console.log("DEBUG: response data:", respData);
+      console.log("DEBUG: response headers:", respHeaders);
+
+      // If backend returned JSON with `detail` (our endpoint does on exceptions), show it
+      const serverMsg = respData?.detail ?? respData?.message ?? JSON.stringify(respData);
+      toast.error(`Graduation check failed (status ${status}).`);
+      // show the server message in an alert for immediate visibility
+      alert(`Graduation check failed (status ${status})\n\nServer message:\n${serverMsg}`);
+    } else {
+      toast.error("Graduation check failed (non-Axios error). See console.");
     }
-    toast.error('Graduation check failed. See console/network for details.');
   }
 };
+
 
   // 替代的批量上传函数 - 使用现有的批量上传接口
   const handleUploadStudents = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -245,112 +249,112 @@ const checkGraduation = async (studentId: number) => {
   };
 
   // 改进的文件上传函数 - 支持更新现有数据
-  const handleFileUpload = async (
-    e: React.ChangeEvent<HTMLInputElement>,
-    studentId: number
-  ) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  // const handleFileUpload = async (
+  //   e: React.ChangeEvent<HTMLInputElement>,
+  //   studentId: number
+  // ) => {
+  //   const file = e.target.files?.[0];
+  //   if (!file) return;
 
-    try {
-      // 显示上传状态
-      toast.loading('Uploading units file...');
+  //   try {
+  //     // 显示上传状态
+  //     toast.loading('Uploading units file...');
 
-      // 1. 验证学生存在性
-      const studentCheck = await axios.get(`${API_URL}/students/${studentId}`);
-      if (!studentCheck.data) {
-        toast.dismiss();
-        toast.error('Student does not exist. Please create the profile first.');
-        return;
-      }
+  //     // 1. 验证学生存在性
+  //     const studentCheck = await axios.get(`${API_URL}/students/${studentId}`);
+  //     if (!studentCheck.data) {
+  //       toast.dismiss();
+  //       toast.error('Student does not exist. Please create the profile first.');
+  //       return;
+  //     }
 
-      const studentName = studentCheck.data.student_name;
+  //     const studentName = studentCheck.data.student_name;
 
-      // 2. 验证文件类型和大小
-      if (!file.name.match(/\.(xlsx|xls)$/i)) {
-        toast.dismiss();
-        toast.error('Only Excel files (.xlsx, .xls) are supported.');
-        return;
-      }
+  //     // 2. 验证文件类型和大小
+  //     if (!file.name.match(/\.(xlsx|xls)$/i)) {
+  //       toast.dismiss();
+  //       toast.error('Only Excel files (.xlsx, .xls) are supported.');
+  //       return;
+  //     }
 
-      if (file.size > MAX_FILE_SIZE_MB * 1024 * 1024) {
-        toast.dismiss();
-        toast.error('File exceeds 10MB size limit.');
-        return;
-      }
+  //     if (file.size > MAX_FILE_SIZE_MB * 1024 * 1024) {
+  //       toast.dismiss();
+  //       toast.error('File exceeds 10MB size limit.');
+  //       return;
+  //     }
 
-      // 3. 询问用户如何处理现有数据
-      const overwrite = window.confirm(
-        `Upload units for ${studentName} (ID: ${studentId})?\n\n` +
-        'This will REPLACE all existing units for this student.\n\n' +
-        'Click OK to continue, Cancel to abort.'
-      );
+  //     // 3. 询问用户如何处理现有数据
+  //     const overwrite = window.confirm(
+  //       `Upload units for ${studentName} (ID: ${studentId})?\n\n` +
+  //       'This will REPLACE all existing units for this student.\n\n' +
+  //       'Click OK to continue, Cancel to abort.'
+  //     );
 
-      if (!overwrite) {
-        toast.dismiss();
-        toast(`Found ${unmatchedFiles.length} file(s) that need manual student assignment`);
-        return;
-      }
+  //     if (!overwrite) {
+  //       toast.dismiss();
+  //       toast(`Found ${unmatchedFiles.length} file(s) that need manual student assignment`);
+  //       return;
+  //     }
 
-      // 4. 上传文件
-      const formData = new FormData();
-      formData.append('file', file);
-      formData.append('overwrite', 'true');
+  //     // 4. 上传文件
+  //     const formData = new FormData();
+  //     formData.append('file', file);
+  //     formData.append('overwrite', 'true');
 
-      const response = await axios.post(
-        `${API_URL}/students/${studentId}/upload-units`,
-        formData,
-        { 
-          headers: { 'Content-Type': 'multipart/form-data' }, 
-          timeout: 30000,
-          onUploadProgress: (progressEvent) => {
-            if (progressEvent.total) {
-              const percentCompleted = Math.round(
-                (progressEvent.loaded * 100) / progressEvent.total
-              );
-              toast.loading(`Uploading: ${percentCompleted}%`);
-            }
-          }
-        }
-      );
+  //     const response = await axios.post(
+  //       `${API_URL}/students/${studentId}/upload-units`,
+  //       formData,
+  //       { 
+  //         headers: { 'Content-Type': 'multipart/form-data' }, 
+  //         timeout: 30000,
+  //         onUploadProgress: (progressEvent) => {
+  //           if (progressEvent.total) {
+  //             const percentCompleted = Math.round(
+  //               (progressEvent.loaded * 100) / progressEvent.total
+  //             );
+  //             toast.loading(`Uploading: ${percentCompleted}%`);
+  //           }
+  //         }
+  //       }
+  //     );
 
-      toast.dismiss();
-      toast.success(response.data.message);
+  //     toast.dismiss();
+  //     toast.success(response.data.message);
       
-      // 显示详细信息
-      const unitCount = response.data.message.match(/\d+/)?.[0] || 'some';
-      alert(`✅ Successfully uploaded ${unitCount} units for ${studentName}`);
+  //     // 显示详细信息
+  //     const unitCount = response.data.message.match(/\d+/)?.[0] || 'some';
+  //     alert(`✅ Successfully uploaded ${unitCount} units for ${studentName}`);
 
-      // 5. 刷新学生列表和学分
-      await fetchStudents();
+  //     // 5. 刷新学生列表和学分
+  //     await fetchStudents();
 
-    } catch (err) {
-      toast.dismiss();
+  //   } catch (err) {
+  //     toast.dismiss();
       
-      let errorMessage = 'Upload failed';
+  //     let errorMessage = 'Upload failed';
       
-      if (axios.isAxiosError(err)) {
-        const serverMessage = err.response?.data?.detail || err.message;
-        errorMessage = `Upload failed: ${serverMessage}`;
+  //     if (axios.isAxiosError(err)) {
+  //       const serverMessage = err.response?.data?.detail || err.message;
+  //       errorMessage = `Upload failed: ${serverMessage}`;
 
-        if (err.response?.status === 404) {
-          errorMessage = 'Associated student not found';
-        } else if (err.response?.status === 400) {
-          errorMessage = 'Invalid data format in Excel file';
-        } else if (err.response?.status === 413) {
-          errorMessage = 'File too large: Please upload a file smaller than 10MB';
-        } else if (err.code === 'ECONNABORTED') {
-          errorMessage = 'Upload timeout: Please try again with a smaller file';
-        }
-      }
+  //       if (err.response?.status === 404) {
+  //         errorMessage = 'Associated student not found';
+  //       } else if (err.response?.status === 400) {
+  //         errorMessage = 'Invalid data format in Excel file';
+  //       } else if (err.response?.status === 413) {
+  //         errorMessage = 'File too large: Please upload a file smaller than 10MB';
+  //       } else if (err.code === 'ECONNABORTED') {
+  //         errorMessage = 'Upload timeout: Please try again with a smaller file';
+  //       }
+  //     }
 
-      toast.error(errorMessage);
-      console.error('File upload error:', err);
-    } finally {
-      // 重置文件输入
-      if (e.target) e.target.value = '';
-    }
-  };
+  //     toast.error(errorMessage);
+  //     console.error('File upload error:', err);
+  //   } finally {
+  //     // 重置文件输入
+  //     if (e.target) e.target.value = '';
+  //   }
+  // };
 
   // Fetch all students from backend
   const fetchStudents = async () => {
@@ -504,245 +508,91 @@ const checkGraduation = async (studentId: number) => {
   };
 
   // 多文件批量上传单元
-  const handleBulkUnitsUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (!files || files.length === 0) return;
+  // 统一的批量上传函数
+  // 更新批量上传函数
+// 更新批量上传函数 - 使用适配的批量上传端点
+const handleBulkUnitsUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const files = e.target.files;
+  if (!files || files.length === 0) return;
 
-    try {
-      setUploadingBulkUnits(true);
-      setBulkUnitsResults([]);
-      setUnmatchedFiles([]);
+  try {
+    setUploadingBulkUnits(true);
+    toast.loading('Starting bulk upload...');
 
-      const formData = new FormData();
-      const fileStudentMapping: { [filename: string]: string } = {};
-
-      // 第一步：收集文件并尝试从文件名提取学生ID
-      for (let i = 0; i < files.length; i++) {
-        const file = files[i];
-        formData.append('files', file);
-        
-        // 从文件名提取学生ID
-        const extractedId = extractStudentIdFromFilename(file.name);
-        fileStudentMapping[file.name] = extractedId;
-      }
-
-      // 发送到后端进行解析
-      const response = await axios.post(
-        `${API_URL}/students/bulk-upload-units`,
-        formData,
-        { 
-          headers: { 'Content-Type': 'multipart/form-data' },
-          timeout: 60000 
-        }
-      );
-
-      console.log('DEBUG: Bulk upload response:', response.data);
-      setBulkUnitsResults(response.data.results);
-
-      // 处理匹配逻辑
-      const successfulFiles = response.data.results.filter((r: any) => r.status === 'success');
-      const unmatched: Array<{ filename: string; extractedStudentId: string; units: any[] }> = [];
-      const matchedAssignments: Array<{ studentId: number; units: any[] }> = [];
-
-      for (const fileResult of successfulFiles) {
-        const filename = fileResult.filename;
-        const extractedId = fileStudentMapping[filename];
-        const fileUnits = fileResult.data?.units || [];
-
-        if (extractedId) {
-          // 尝试查找匹配的学生
-          const matchedStudent = students.find(s => 
-            s.student_id.toString() === extractedId
-          );
-
-          if (matchedStudent) {
-            // 自动匹配成功
-            matchedAssignments.push({
-              studentId: matchedStudent.student_id,
-              units: fileUnits
-            });
-            console.log(`DEBUG: Auto-matched file ${filename} to student ${matchedStudent.student_id}`);
-          } else {
-            // 没有找到匹配的学生
-            unmatched.push({
-              filename,
-              extractedStudentId: extractedId,
-              units: fileUnits
-            });
-          }
-        } else {
-          // 无法从文件名提取学生ID
-          unmatched.push({
-            filename,
-            extractedStudentId: '',
-            units: fileUnits
-          });
-        }
-      }
-
-      // 处理自动匹配的文件
-      if (matchedAssignments.length > 0) {
-        let totalAssigned = 0;
-        for (const assignment of matchedAssignments) {
-          try {
-            await assignUnitsToStudentDirect(assignment.studentId, assignment.units);
-            totalAssigned += assignment.units.length;
-          } catch (error) {
-            console.error(`Failed to assign units to student ${assignment.studentId}:`, error);
-          }
-        }
-        toast.success(`Automatically assigned ${totalAssigned} units to ${matchedAssignments.length} student(s)`);
-      }
-
-      // 处理未匹配的文件
-      if (unmatched.length > 0) {
-        setUnmatchedFiles(unmatched);
-        setShowUnitAssignment(true);
-        
-        // 收集所有未匹配的单元用于显示
-        const allPendingUnits = unmatched.flatMap(file => file.units);
-        setPendingUnits(allPendingUnits);
-        
-        toast(`Found ${unmatched.length} file(s) that need manual student assignment`);
-      }
-
-      // 显示汇总结果
-      const data = response.data;
-      let message = `📊 Bulk Upload Completed!\n\n`;
-      message += `📁 Total Files: ${data.summary.total_files}\n`;
-      message += `✅ Successful: ${data.summary.successful_files}\n`;
-      message += `❌ Failed: ${data.summary.failed_files}\n`;
-      message += `🎯 Auto-matched: ${matchedAssignments.length} files\n`;
-      message += `❓ Need Manual Assignment: ${unmatched.length} files\n`;
-      message += `📚 Total Units Processed: ${data.summary.total_units_processed}\n\n`;
-
-      if (unmatched.length === 0 && data.summary.successful_files > 0) {
-        toast.success('All files were automatically matched and assigned!');
-      }
-
-    } catch (err: any) {
-      console.error('Bulk upload error:', err);
-      let errorMessage = 'Bulk upload failed';
-      if (axios.isAxiosError(err)) {
-        errorMessage = err.response?.data?.detail || err.message;
-      }
-      toast.error(errorMessage);
-    } finally {
-      setUploadingBulkUnits(false);
-      if (e.target) e.target.value = '';
+    const formData = new FormData();
+    
+    // 添加所有文件
+    for (let i = 0; i < files.length; i++) {
+      formData.append('files', files[i]);
     }
-  };
+    
+    formData.append('overwrite', 'true');
 
-  // 直接分配单元到学生的函数（不通过模态框）
-  const assignUnitsToStudentDirect = async (studentId: number, units: any[]) => {
-    try {
-      const response = await axios.post(
-        `${API_URL}/students/${studentId}/assign-bulk-units`,
-        {
-          units: units,
-          overwrite: true
-        }
-      );
-      return response.data;
-    } catch (err: any) {
-      console.error('Direct unit assignment error:', err);
-      throw err;
-    }
-  };
+    console.log('DEBUG: Uploading', files.length, 'files to adapted endpoint');
 
-  // 手动分配未匹配文件的单元
-  const assignUnmatchedFilesToStudent = async () => {
-    if (!selectedStudentForUnits) {
-      toast.error('Please select a student first');
-      return;
-    }
+    // 使用适配的批量上传端点
+    const response = await axios.post(
+      `${API_URL}/students/bulk-upload-units-adapted`,  // 使用适配的批量端点
+      formData,
+      { 
+        headers: { 'Content-Type': 'multipart/form-data' },
+        timeout: 60000 
+      }
+    );
 
-    if (unmatchedFiles.length === 0) {
-      toast.error('No unmatched files to assign');
-      return;
-    }
+    toast.dismiss();
+    console.log('DEBUG: Bulk upload response:', response.data);
 
-    try {
-      setUploadingBulkUnits(true);
-      
-      // 收集所有未匹配文件的单元
-      const allUnits = unmatchedFiles.flatMap(file => file.units);
-      
-      // 数据验证和清理
-      const validatedUnits = allUnits
-        .filter(unit => unit.unit_code && unit.unit_code.toString().trim() !== '')
-        .map(unit => ({
-          unit_code: unit.unit_code.toString().trim(),
-          unit_name: unit.unit_name?.toString().trim() || `Unit ${unit.unit_code}`,
-          grade: (unit.grade?.toString().trim() || '').toUpperCase(),
-          completed: Boolean(unit.completed),
-          credits: Number(unit.credits) || 12.5,
-          earned_credits: Number(unit.earned_credits) || (unit.completed ? (Number(unit.credits) || 12.5) : 0),
-          term: unit.term?.toString().trim() || '',
-          status: unit.status?.toString().trim() || ''
-        }));
-      
-      console.log('DEBUG: Validated units data:', {
-        studentId: selectedStudentForUnits,
-        originalCount: allUnits.length,
-        validatedCount: validatedUnits.length,
-        sampleUnit: validatedUnits[0]
-      });
-      
-      const response = await axios.post(
-        `${API_URL}/students/${selectedStudentForUnits}/assign-bulk-units`,
-        {
-          units: validatedUnits,
-          overwrite: true
-        },
-        {
-          timeout: 120000, // 增加到2分钟超时
-          headers: {
-            'Content-Type': 'application/json'
-          }
-        }
-      );
+    // 处理结果显示
+    const data = response.data;
+    let successCount = 0;
+    let errorCount = 0;
 
-      console.log('DEBUG: Manual units assignment result:', response.data);
-      
-      if (response.data.insertion_errors && response.data.insertion_errors.length > 0) {
-        toast.success(`Assigned ${response.data.inserted_count} units (with ${response.data.insertion_errors.length} batch errors)`);
-        console.warn('DEBUG: Batch insertion errors:', response.data.insertion_errors);
+    let message = `📊 Bulk Upload Completed!\n\n`;
+    message += `📁 Total Files: ${data.summary.total_files}\n`;
+    message += `✅ Successful: ${data.summary.successful_files}\n`;
+    message += `❌ Failed: ${data.summary.failed_files}\n\n`;
+
+    // 显示每个文件的结果
+    data.results.forEach((result: any) => {
+      if (result.status === 'success') {
+        successCount++;
+        message += `✅ ${result.filename}\n`;
+        message += `   Student ID: ${result.student_id}, Units: ${result.units_processed}\n\n`;
       } else {
-        toast.success(`Successfully assigned ${response.data.inserted_count} units to student`);
+        errorCount++;
+        message += `❌ ${result.filename}: ${result.message}\n\n`;
       }
-      
-      // 重置状态
-      setShowUnitAssignment(false);
-      setSelectedStudentForUnits(null);
-      setPendingUnits([]);
-      setUnmatchedFiles([]);
-      setBulkUnitsResults([]);
-      
-      // 刷新学生列表
-      await fetchStudents();
-      
-    } catch (err: any) {
-      console.error('Manual unit assignment error:', err);
-      
-      let errorMessage = 'Failed to assign units to student';
-      if (axios.isAxiosError(err)) {
-        const serverMessage = err.response?.data?.detail || err.message;
-        errorMessage = `Assignment failed: ${serverMessage}`;
-        
-        // 显示更详细的错误信息
-        if (err.response?.status === 500) {
-          errorMessage += ' - Check backend console for detailed error logs';
-        }
-        
-        console.error('DEBUG: Full error response:', err.response?.data);
-      }
-      
-      toast.error(errorMessage);
-    } finally {
-      setUploadingBulkUnits(false);
+    });
+
+    message += `Total Units Processed: ${data.summary.total_units_processed || 0}`;
+
+    alert(message);
+
+    if (successCount > 0) {
+      toast.success(`Successfully processed ${successCount} files`);
+      await fetchStudents(); // 刷新学生列表
     }
-  };
+
+    if (errorCount > 0) {
+      toast.error(`${errorCount} files failed to process`);
+    }
+
+  } catch (err: any) {
+    toast.dismiss();
+    console.error('Bulk upload error:', err);
+    
+    let errorMessage = 'Bulk upload failed';
+    if (axios.isAxiosError(err)) {
+      errorMessage = err.response?.data?.detail || err.message;
+    }
+    
+    toast.error(errorMessage);
+  } finally {
+    setUploadingBulkUnits(false);
+    if (e.target) e.target.value = '';
+  }
+};
 
   // 批量更新所有学生的单元数据
 // 批量更新所有学生的单元数据
@@ -834,134 +684,196 @@ const handleBulkUpdateAllStudents = async (e: React.ChangeEvent<HTMLInputElement
     }
   };
 
+  const handleBulkUnitsUploadFixed = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const files = e.target.files;
+  if (!files || files.length === 0) return;
+
+  try {
+    setUploadingBulkUnits(true);
+    toast.loading('Uploading files with fixed processor...');
+
+    const formData = new FormData();
+    for (let i = 0; i < files.length; i++) {
+      formData.append('files', files[i]);
+    }
+    formData.append('overwrite', 'true');
+
+    const response = await axios.post(
+      `${API_URL}/students/bulk-upload-units-fixed`,
+      formData,
+      { 
+        headers: { 'Content-Type': 'multipart/form-data' },
+        timeout: 60000 
+      }
+    );
+
+    toast.dismiss();
+    console.log('DEBUG: Fixed upload response:', response.data);
+
+    // 处理结果显示
+    const data = response.data;
+    let message = `Fixed Bulk Upload Results:\n\n`;
+    
+    data.results.forEach((result: any) => {
+      if (result.status === 'success') {
+        message += `✅ ${result.filename}: ${result.message}\n`;
+        message += `   Student: ${result.student_id}, Units: ${result.units_processed}, Credits: ${result.total_credits}\n`;
+      } else if (result.status === 'partial') {
+        message += `⚠️ ${result.filename}: ${result.message}\n`;
+        message += `   Student: ${result.student_id}, Units: ${result.units_processed}\n`;
+      } else {
+        message += `❌ ${result.filename}: ${result.message}\n`;
+      }
+    });
+
+    message += `\nSummary: ${data.message}`;
+    
+    alert(message);
+
+    if (data.summary.successful_files > 0) {
+      toast.success(`Successfully processed ${data.summary.successful_files} files`);
+      await fetchStudents();
+    }
+
+  } catch (err: any) {
+    toast.dismiss();
+    console.error('Fixed upload error:', err);
+    
+    let errorMessage = 'Upload failed';
+    if (axios.isAxiosError(err)) {
+      errorMessage = err.response?.data?.detail || err.message;
+    }
+    
+    toast.error(errorMessage);
+  } finally {
+    setUploadingBulkUnits(false);
+    if (e.target) e.target.value = '';
+  }
+};
+
+// 更新前端的 handleFileUpload 函数
+const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, studentId: number) => {
+  const file = e.target.files?.[0];
+  if (!file) return;
+
+  try {
+    toast.loading('Uploading units file...');
+
+    // 验证学生存在
+    const studentCheck = await axios.get(`${API_URL}/students/${studentId}`);
+    if (!studentCheck.data) {
+      toast.dismiss();
+      toast.error('Student does not exist. Please create the profile first.');
+      return;
+    }
+
+    const studentName = studentCheck.data.student_name;
+
+    // 验证文件类型和大小
+    if (!file.name.match(/\.(xlsx|xls)$/i)) {
+      toast.dismiss();
+      toast.error('Only Excel files (.xlsx, .xls) are supported.');
+      return;
+    }
+
+    if (file.size > MAX_FILE_SIZE_MB * 1024 * 1024) {
+      toast.dismiss();
+      toast.error('File exceeds 10MB size limit.');
+      return;
+    }
+
+    // 确认上传
+    const overwrite = window.confirm(
+      `Upload units for ${studentName} (ID: ${studentId})?\n\n` +
+      'This will REPLACE all existing units for this student.\n\n' +
+      'Click OK to continue, Cancel to abort.'
+    );
+
+    if (!overwrite) {
+      toast.dismiss();
+      return;
+    }
+
+    // 使用适配的上传端点
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('overwrite', 'true');
+
+    const response = await axios.post(
+      `${API_URL}/students/${studentId}/upload-units-adapted`,  // 使用适配端点
+      formData,
+      { 
+        headers: { 'Content-Type': 'multipart/form-data' }, 
+        timeout: 30000,
+        onUploadProgress: (progressEvent) => {
+          if (progressEvent.total) {
+            const percentCompleted = Math.round(
+              (progressEvent.loaded * 100) / progressEvent.total
+            );
+            toast.loading(`Uploading: ${percentCompleted}%`);
+          }
+        }
+      }
+    );
+
+    toast.dismiss();
+    
+    // 显示成功信息
+    const data = response.data;
+    toast.success(data.message);
+    
+    alert(`✅ ${data.message}\nStudent: ${data.student_name}\nTotal Credits: ${data.total_credits}`);
+
+    // 刷新学生列表和学分
+    await fetchStudents();
+
+  } catch (err) {
+    toast.dismiss();
+    
+    let errorMessage = 'Upload failed';
+    
+    if (axios.isAxiosError(err)) {
+      const serverMessage = err.response?.data?.detail || err.message;
+      errorMessage = `Upload failed: ${serverMessage}`;
+
+      if (err.response?.status === 404) {
+        errorMessage = 'Student not found';
+      } else if (err.response?.status === 400) {
+        errorMessage = 'Invalid data format in Excel file';
+      } else if (err.response?.status === 413) {
+        errorMessage = 'File too large';
+      } else if (err.code === 'ECONNABORTED') {
+        errorMessage = 'Upload timeout';
+      }
+    }
+
+    toast.error(errorMessage);
+    console.error('File upload error:', err);
+  } finally {
+    if (e.target) e.target.value = '';
+  }
+};
+
   // 把你组件里的 `return ( ... )` 整段替换为下面内容
 return (
-  <div className="max-w-6xl mx-auto p-6">
-    <h1 className="text-3xl font-extrabold mb-6 text-black">Student Management</h1>
+  <div className="max-w-7xl mx-auto p-6 bg-gray-50 min-h-screen">
+    <h1 className="text-3xl font-bold mb-6 text-[#E31C25]">Student Management</h1>
 
-    {/* Student Form */}
-    {/* <form onSubmit={handleSubmit} className="bg-white p-6 rounded-lg shadow-md mb-8 border-2 border-red-600">
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div className="flex items-center">
-          <input
-            type="checkbox"
-            checked={formData.graduation_status || false}
-            onChange={(e) => setFormData({ ...formData, graduation_status: e.target.checked })}
-            className="mr-2 accent-red-600"
-          />
-          <label className="text-black">Graduation Status</label>
-        </div>
-
-        <input
-          type="text"
-          placeholder="Full Name"
-          value={formData.student_name}
-          onChange={(e) => setFormData({ ...formData, student_name: e.target.value })}
-          className="p-2 border rounded border-gray-300 focus:outline-none focus:ring-2 focus:ring-red-300 text-black"
-          required
-        />
-        <input
-          type="number"
-          placeholder="Student ID"
-          value={formData.student_id}
-          onChange={(e) => setFormData({ ...formData, student_id: Number(e.target.value) })}
-          className="p-2 border rounded border-gray-300 focus:outline-none focus:ring-2 focus:ring-red-300 text-black"
-          required
-          disabled={!!editingId}
-        />
-        <input
-          type="email"
-          placeholder="Email"
-          value={formData.student_email}
-          onChange={(e) => setFormData({ ...formData, student_email: e.target.value })}
-          className="p-2 border rounded border-gray-300 focus:outline-none focus:ring-2 focus:ring-red-300 text-black"
-          required
-        />
-        <input
-          type="text"
-          placeholder="Course"
-          value={formData.student_course}
-          onChange={(e) => setFormData({ ...formData, student_course: e.target.value })}
-          className="p-2 border rounded border-gray-300 focus:outline-none focus:ring-2 focus:ring-red-300 text-black"
-          required
-        />
-        <input
-          type="text"
-          placeholder="Major"
-          value={formData.student_major}
-          onChange={(e) => setFormData({ ...formData, student_major: e.target.value })}
-          className="p-2 border rounded border-gray-300 focus:outline-none focus:ring-2 focus:ring-red-300 text-black"
-          required
-        />
-        <input
-          type="text"
-          placeholder="Intake Term"
-          value={formData.intake_term}
-          onChange={(e) => setFormData({ ...formData, intake_term: e.target.value })}
-          className="p-2 border rounded border-gray-300 focus:outline-none focus:ring-2 focus:ring-red-300 text-black"
-          required
-        />
-        <input
-          type="text"
-          placeholder="Intake Year"
-          value={formData.intake_year}
-          onChange={(e) => setFormData({ ...formData, intake_year: e.target.value })}
-          className="p-2 border rounded border-gray-300 focus:outline-none focus:ring-2 focus:ring-red-300 text-black"
-          required
-        />
-        <input
-          type="number"
-          step="0.5"
-          placeholder="Credit Points"
-          value={formData.credit_point}
-          onChange={(e) => setFormData({ ...formData, credit_point: Number(e.target.value) })}
-          className="p-2 border rounded border-gray-300 focus:outline-none focus:ring-2 focus:ring-red-300 text-black"
-          required
-        />
-      </div>
-
-      <div className="mt-4 flex items-center gap-3">
-        <button
-          type="submit"
-          className="px-4 py-2 bg-red-700 text-white rounded shadow hover:bg-red-800 transition"
-        >
-          {editingId ? 'Update Student' : 'Add Student'}
-        </button>
-
-        <button
-          type="button"
-          onClick={() => { setFormData({
-             graduation_status: false,
-             student_name: '',
-             student_id: 0,
-             student_email: '',
-             student_course: '',
-             student_major: '',
-             intake_term: '',
-             intake_year: '',
-             credit_point: 0
-           }); setEditingId(null); }}
-          className="px-4 py-2 bg-black text-white rounded shadow hover:brightness-90 transition"
-        >
-          Reset
-        </button>
-      </div>
-    </form>Bulk Update All Students Section */}
     {/* Search Section */}
-    <div className="bg-white p-6 rounded-lg shadow-md mb-6 border border-red-100">
-      <h2 className="text-xl font-semibold mb-4 text-black">Search Student by ID</h2>
-      <div className="flex gap-4">
+    <div className="bg-white p-6 rounded-lg shadow-md mb-6 border border-[#E31C25]/40">
+      <h2 className="text-xl font-semibold mb-4 text-[#E31C25]">Search Student by ID</h2>
+      <div className="flex gap-4 flex-wrap">
         <input
           type="number"
           placeholder="Enter Student ID"
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
-          className="p-2 border rounded flex-grow border-gray-300 focus:ring-2 focus:ring-red-300 text-black"
+          className="p-2 border rounded flex-grow border-gray-300 focus:ring-2 focus:ring-[#E31C25] text-black"
         />
         <button
           onClick={handleSearch}
           disabled={isSearching}
-          className="px-4 py-2 bg-red-700 text-white rounded hover:bg-red-800 disabled:opacity-60"
+          className="px-4 py-2 bg-[#E31C25] text-white rounded hover:bg-[#B71C1C] disabled:opacity-60"
         >
           {isSearching ? 'Searching...' : 'Search'}
         </button>
@@ -975,330 +887,127 @@ return (
         )}
       </div>
     </div>
+
     {/* Students Table */}
     <div className="bg-white rounded-lg shadow-md overflow-x-auto border border-gray-200">
-      <table className="min-w-full">
-        <thead className="bg-black">
+      <table className="min-w-full divide-y divide-gray-200">
+        <thead className="bg-[#E31C25]">
           <tr>
-            <th className="px-6 py-3 text-left text-white">Graduated</th>
-            <th className="px-6 py-3 text-left text-white">Name</th>
-            <th className="px-6 py-3 text-left text-white">Student ID</th>
-            <th className="px-6 py-3 text-left text-white">Email</th>
-            <th className="px-6 py-3 text-left text-white">Course</th>
-            <th className="px-6 py-3 text-left text-white">Major</th>
-            <th className="px-6 py-3 text-left text-white">Intake Term</th>
-            <th className="px-6 py-3 text-left text-white">Intake Year</th>
-            <th className="px-6 py-3 text-left text-white">Credit Points</th>
-            <th className="px-6 py-3 text-left text-white">Actions</th>
+            <th className="px-6 py-3 text-left text-white font-medium">Graduated</th>
+            <th className="px-6 py-3 text-left text-white font-medium">Name</th>
+            <th className="px-6 py-3 text-left text-white font-medium">Student ID</th>
+            <th className="px-6 py-3 text-left text-white font-medium">Email</th>
+            <th className="px-6 py-3 text-left text-white font-medium">Course</th>
+            <th className="px-6 py-3 text-left text-white font-medium">Major</th>
+            <th className="px-6 py-3 text-left text-white font-medium">Intake Term</th>
+            <th className="px-6 py-3 text-left text-white font-medium">Intake Year</th>
+            <th className="px-6 py-3 text-left text-white font-medium">Credits</th>
+            <th className="px-6 py-3 text-left text-white font-medium">Actions</th>
           </tr>
         </thead>
-        <tbody className="divide-y divide-gray-200 bg-white">
+        <tbody className="bg-white divide-y divide-gray-200">
           {(searchResults.length > 0 ? searchResults : students).map((student) => (
-            <tr key={student.id} className="hover:bg-red-50 transition">
-              <td className="px-6 py-4 text-black">{student.graduation_status ? '✅' : '❌'}</td>
-              <td className="px-6 py-4 text-black">{student.student_name}</td>
-              <td className="px-6 py-4 text-black">{student.student_id}</td>
-              <td className="px-6 py-4 text-black">{student.student_email}</td>
-              <td className="px-6 py-4 text-black">{student.student_course}</td>
-              <td className="px-6 py-4 text-black">{student.student_major}</td>
-              <td className="px-6 py-4 text-black">{student.intake_term}</td>
-              <td className="px-6 py-4 text-black">{student.intake_year}</td>
-              <td className="px-6 py-4 text-black">{student.credit_point}</td>
-              <td className="px-6 py-4 space-x-2">
-                <div className="relative inline-block">
-                  <input
-                    type="file"
-                    accept=".xlsx,.xls"
-                    onChange={(e) => handleFileUpload(e, student.student_id)}
-                    className="hidden"
-                    id={`upload-${student.student_id}`}
-                  />
-                  <label
-                    htmlFor={`upload-${student.student_id}`}
-                    className="text-red-700 hover:underline cursor-pointer"
-                  >
-                    Upload Units
-                  </label>
-                </div>
-
-                <button
-                  onClick={() => checkGraduation(student.student_id)}
-                  className="text-black bg-white px-2 py-1 rounded border border-gray-200 hover:bg-red-50"
+            <tr key={student.student_id} className="hover:bg-gray-50">
+              <td className="px-6 py-4">
+                <span
+                  className={`px-2 py-1 rounded text-white text-sm font-semibold ${
+                    student.graduation_status ? 'bg-green-600' : 'bg-gray-400'
+                  }`}
                 >
-                  Check
-                </button>
-
-                <Link
-                  href={`/student-units/${student.student_id}`}
-                  className="text-black underline"
-                >
-                  Details
-                </Link>
-
-                <button
-                  onClick={() => {
-                    setEditingId(student.id);
-                    setFormData({
-                      graduation_status: student.graduation_status,
-                      student_name: student.student_name,
-                      student_id: student.student_id,
-                      student_email: student.student_email,
-                      student_course: student.student_course,
-                      student_major: student.student_major,
-                      intake_term: student.intake_term,
-                      intake_year: student.intake_year,
-                      credit_point: student.credit_point
-                    });
-                  }}
-                  className="text-black px-2 py-1 rounded border border-gray-200 hover:bg-red-50"
-                >
+                  {student.graduation_status ? 'Yes' : 'No'}
+                </span>
+              </td>
+              <td className="px-6 py-4">{student.student_name}</td>
+              <td className="px-6 py-4">{student.student_id}</td>
+              <td className="px-6 py-4">{student.student_email}</td>
+              <td className="px-6 py-4">{student.student_course}</td>
+              <td className="px-6 py-4">{student.student_major}</td>
+              <td className="px-6 py-4">{student.intake_term}</td>
+              <td className="px-6 py-4">{student.intake_year}</td>
+              <td className="px-6 py-4">{student.credit_point}</td>
+              <td className="px-6 py-4 flex gap-2">
+                <button onClick={() => { setEditingId(student.id); setFormData({ graduation_status: student.graduation_status, student_name: student.student_name, student_id: student.student_id, student_email: student.student_email, student_course: student.student_course, student_major: student.student_major, intake_term: student.intake_term, intake_year: student.intake_year, credit_point: student.credit_point }); }} className="text-black px-2 py-1 rounded border border-gray-200 hover:bg-red-50" >
                   Edit
                 </button>
-
                 <button
-                  onClick={() => handleDelete(student.id)}
-                  className="text-white bg-red-700 px-2 py-1 rounded hover:bg-red-800"
+                  onClick={() => handleDelete(student.student_id)}
+                  className="px-3 py-1 bg-gray-700 text-white rounded hover:bg-gray-800 text-sm"
                 >
                   Delete
+                </button>
+                <button
+                  onClick={() => checkGraduation(student.student_id)}
+                  className="px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700 text-sm"
+                >
+                  Check Grad
                 </button>
               </td>
             </tr>
           ))}
         </tbody>
       </table>
-
-      {searchResults.length > 0 && (
-        <div className="p-4 text-center text-black/70">
-          Showing {searchResults.length} search result(s)
-        </div>
-      )}
-    </div>
-    {/* Bulk Update All Students Section */}
-    <div className="bg-white p-6 rounded-lg shadow-md mb-6 border border-red-100">
-      <h2 className="text-xl font-semibold mb-4 text-black">Bulk Update All Students' Units</h2>
-      <div className="flex gap-4 items-center">
-        <div className="relative flex-grow">
-          <input
-            type="file"
-            accept=".xlsx,.xls"
-            onChange={handleBulkUpdateAllStudents}
-            disabled={uploadingBulkUnits}
-            className="hidden"
-            id="bulk-update-all-students"
-            multiple
-          />
-          <label
-            htmlFor="bulk-update-all-students"
-            className={`block w-full p-2 rounded cursor-pointer border ${uploadingBulkUnits ? 'bg-gray-100 text-gray-500' : 'bg-white hover:bg-red-50'} text-black`}
-          >
-            {uploadingBulkUnits ? 'Updating...' : 'Update All Students from Excel Files'}
-          </label>
-        </div>
-        <div className="text-sm text-black/80">
-          <p><strong>Note:</strong> Files will be automatically matched to students by filename</p>
-          <p><strong>Format:</strong> StudentID.xlsx or StudentID_Name.xlsx</p>
-        </div>
-      </div>
     </div>
 
-    {/* Bulk Upload Completed Units Section */}
-    <div className="bg-white p-6 rounded-lg shadow-md mb-6 border border-red-100">
-      <h2 className="text-xl font-semibold mb-4 text-black">Bulk Upload Completed Units (Multiple Files)</h2>
-      <div className="flex gap-4 items-center">
-        <div className="relative flex-grow">
-          <input
-            type="file"
-            accept=".xlsx,.xls"
-            onChange={handleBulkUnitsUpload}
-            disabled={uploadingBulkUnits}
-            className="hidden"
-            id="bulk-units-upload-multi"
-            multiple
-          />
-          <label
-            htmlFor="bulk-units-upload-multi"
-            className={`block w-full p-2 rounded cursor-pointer border ${uploadingBulkUnits ? 'bg-gray-100 text-gray-500' : 'bg-white hover:bg-red-50'} text-black`}
-          >
-            {uploadingBulkUnits ? 'Uploading...' : 'Choose Multiple Excel Files for Bulk Units Upload'}
-          </label>
-        </div>
-
+    {/* Bulk Upload Section */}
+    <div className="bg-white p-6 rounded-lg shadow-md mt-6 border border-[#E31C25]/40">
+      <h2 className="text-xl font-semibold mb-4 text-[#E31C25]">Bulk Upload Students</h2>
+      <div className="flex flex-col md:flex-row gap-4 items-start">
+        <input
+          type="file"
+          accept=".xlsx, .xls"
+          onChange={handleUploadStudents}
+          disabled={uploadingStudents}
+          className="p-2 border rounded border-gray-300 focus:ring-2 focus:ring-[#E31C25] text-black"
+        />
         <button
-          onClick={checkStudentUnitsTable}
-          className="px-4 py-2 bg-black text-white rounded hover:opacity-95 transition"
+          onClick={() => document.getElementById('bulk-file-input')?.click()}
+          className="px-4 py-2 bg-[#E31C25] text-white rounded hover:bg-[#B71C1C]"
         >
-          Check Database
+          Upload
         </button>
       </div>
-
-      {/* 文件命名提示 */}
-      <div className="mt-4 p-4 bg-red-50 rounded border border-red-200">
-        <h4 className="font-semibold text-red-800 mb-2">File Naming Tips for Automatic Matching:</h4>
-        <ul className="text-sm text-red-700 space-y-1">
-          <li>• Use student ID as filename: <code className="bg-white px-1 rounded text-black">12345.xlsx</code></li>
-          <li>• Or include student ID: <code className="bg-white px-1 rounded text-black">12345_John_Doe.xlsx</code></li>
-          <li>• Supported formats: numbers only or letters+numbers</li>
-          <li>• Files without student IDs will require manual assignment</li>
-        </ul>
-      </div>
-
-      <div className="text-sm text-black/75 mt-3">
-        <p><strong>Supported columns:</strong> Course, Course Title, Status, Grade, Term, Credits, Earned</p>
-        <p><strong>Required:</strong> Course, Status</p>
-      </div>
-
-      {/* Upload Results */}
-      {bulkUnitsResults.length > 0 && (
-        <div className="mt-4 p-4 bg-white rounded border border-gray-200">
-          <h3 className="font-semibold mb-2 text-black">Upload Results:</h3>
-          <div className="space-y-2 max-h-40 overflow-y-auto">
-            {bulkUnitsResults.map((result, index) => (
-              <div key={index} className={`p-2 rounded text-sm ${result.status === 'success' ? 'bg-white border border-green-200 text-black' : 'bg-white border border-red-200 text-black'}`}>
-                <strong className="text-black">{result.filename}:</strong> <span className="text-black/80">{result.message}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
     </div>
 
-    {/* Unit Assignment Modal */}
-    {showUnitAssignment && (
-      <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center p-4 z-50">
-        <div className="bg-white rounded-lg p-6 max-w-4xl w-full max-h-[90vh] overflow-y-auto border-2 border-red-600">
-          <h2 className="text-xl font-bold mb-4 text-black">Assign Units to Student</h2>
-          
-          <div className="mb-6">
-            <h3 className="font-semibold mb-3 text-black">Unmatched Files ({unmatchedFiles.length} files):</h3>
-            <div className="space-y-2 mb-4">
-              {unmatchedFiles.map((file, index) => (
-                <div key={index} className="p-3 bg-white rounded border">
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <strong className="text-black">{file.filename}</strong>
-                      {file.extractedStudentId && (
-                        <span className="ml-2 text-sm text-black/70">(Extracted ID: {file.extractedStudentId})</span>
-                      )}
-                      {!file.extractedStudentId && (
-                        <span className="ml-2 text-sm text-red-600">(No student ID in filename)</span>
-                      )}
-                    </div>
-                    <span className="text-sm text-black/60">{file.units.length} units</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="mb-4">
-            <label className="block text-sm font-medium mb-2 text-black">Select Student for All Unmatched Files:</label>
-            <select
-              value={selectedStudentForUnits || ''}
-              onChange={(e) => setSelectedStudentForUnits(Number(e.target.value))}
-              className="w-full p-2 border rounded border-gray-300 text-black"
-            >
-              <option value="">Choose a student...</option>
-              {students.map((student) => (
-                <option key={student.student_id} value={student.student_id}>
-                  {student.student_name} (ID: {student.student_id})
-                </option>
-              ))}
-            </select>
-            <p className="text-sm text-black/60 mt-1">
-              All {unmatchedFiles.length} unmatched files will be assigned to the selected student.
-            </p>
-          </div>
-
-          <div className="mb-4">
-            <h3 className="font-semibold mb-2 text-black">Units to Assign ({pendingUnits.length} units total):</h3>
-            <div className="max-h-60 overflow-y-auto border rounded">
-              <table className="min-w-full text-sm">
-                <thead className="bg-white border-b">
-                  <tr>
-                    <th className="px-3 py-2 text-left text-black">Code</th>
-                    <th className="px-3 py-2 text-left text-black">Name</th>
-                    <th className="px-3 py-2 text-left text-black">Status</th>
-                    <th className="px-3 py-2 text-left text-black">Grade</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {pendingUnits.slice(0, 20).map((unit, index) => (
-                    <tr key={index} className="border-t">
-                      <td className="px-3 py-1 text-black">{unit.unit_code}</td>
-                      <td className="px-3 py-1 text-black">{unit.unit_name}</td>
-                      <td className="px-3 py-1">
-                        <span className={`px-2 py-1 rounded text-xs ${unit.completed ? 'bg-black text-white' : 'bg-red-100 text-red-800'}`}>
-                          {unit.completed ? 'Completed' : 'Not Completed'}
-                        </span>
-                      </td>
-                      <td className="px-3 py-1 text-black">{unit.grade || '-'}</td>
-                    </tr>
-                  ))}
-                  {pendingUnits.length > 20 && (
-                    <tr>
-                      <td colSpan={4} className="px-3 py-2 text-center text-black/60">
-                        ... and {pendingUnits.length - 20} more units
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          <div className="flex justify-end gap-3">
-            <button
-              onClick={() => {
-                setShowUnitAssignment(false);
-                setSelectedStudentForUnits(null);
-                setPendingUnits([]);
-                setUnmatchedFiles([]);
-              }}
-              className="px-4 py-2 bg-black text-white rounded hover:opacity-95"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={assignUnmatchedFilesToStudent}
-              disabled={!selectedStudentForUnits || uploadingBulkUnits}
-              className="px-4 py-2 bg-red-700 text-white rounded hover:bg-red-800 disabled:opacity-60"
-            >
-              {uploadingBulkUnits ? 'Assigning...' : `Assign ${unmatchedFiles.length} Files to Student`}
-            </button>
-          </div>
-        </div>
-      </div>
-    )}
-
-    {/* Upload Students Section */}
-    <div className="bg-white p-6 rounded-lg shadow-md mb-6 border border-red-100">
-      <h2 className="text-xl font-semibold mb-4 text-black">Upload Students from Excel</h2>
-      <div className="flex gap-4 items-center">
-        <div className="relative flex-grow">
-          <input
-            type="file"
-            accept=".xlsx,.xls"
-            onChange={handleUploadStudents}
-            disabled={uploadingStudents}
-            className="hidden"
-            id="upload-students-file"
-          />
-          <label
-            htmlFor="upload-students-file"
-            className={`block w-full p-2 rounded cursor-pointer border ${uploadingStudents ? 'bg-gray-100 text-gray-500' : 'bg-white hover:bg-red-50'} text-black`}
-          >
-            {uploadingStudents ? 'Uploading...' : 'Choose Excel File'}
-          </label>
-        </div>
-        <div className="text-sm text-black/70">
-          <p>Required columns: Name, Id, Email, Course, Major, Intake Term, Intake Year</p>
-        </div>
-      </div>
+        {/* 统一的批量上传部分 */}
+<div className="bg-white p-6 rounded-lg shadow-md mb-6 border border-[#E31C25]/20">
+  <h2 className="text-xl font-semibold mb-4 text-[#E31C25]">Bulk Upload Student Units</h2>
+  
+  <div className="flex gap-4 items-center mb-4">
+    <div className="relative flex-grow">
+      <input
+        type="file"
+        accept=".xlsx,.xls"
+        onChange={handleBulkUnitsUpload}
+        disabled={uploadingBulkUnits}
+        className="hidden"
+        id="bulk-units-upload"
+        multiple
+      />
+      <label
+        htmlFor="bulk-units-upload"
+        className={`block w-full p-3 rounded cursor-pointer border-2 border-dashed ${
+          uploadingBulkUnits 
+            ? 'bg-gray-100 border-gray-300 text-gray-500' 
+            : 'bg-white border-[#E31C25]/60 hover:border-[#E31C25] hover:bg-[#FDECEA] text-black'
+        } transition-colors text-center`}
+      >
+        {uploadingBulkUnits ? 'Uploading...' : 'Choose Multiple Excel Files for Bulk Upload'}
+      </label>
     </div>
+  </div>
 
-    
+  {/* 文件命名指南 */}
+  <div className="mt-4 p-4 bg-[#FDECEA] rounded border border-[#E31C25]/30">
+    <h4 className="font-semibold text-[#E31C25] mb-2">✅ File Requirements (Adapted for Current Database):</h4>
+    <ul className="text-sm text-[#B71C1C] space-y-1">
+      <li>• <strong>Required columns:</strong> Course, Status</li>
+      <li>• <strong>Optional columns:</strong> Course Title, Grade, Credits, Earned, Term</li>
+      <li>• <strong>Student ID:</strong> Must be included in filename (e.g., <code className="bg-white px-1 rounded">12345.xlsx</code>)</li>
+      <li>• <strong>Database compatibility:</strong> Uses only existing columns: student_id, unit_code, unit_name, grade, completed</li>
+    </ul>
+  </div>
+</div>
 
-    
   </div>
 );
 }

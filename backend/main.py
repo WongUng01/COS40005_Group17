@@ -21,6 +21,7 @@ from uuid import UUID
 
 app = FastAPI()
 
+
 planners_db: Dict[str, List[dict]] = {}
 
 app.add_middleware(
@@ -937,261 +938,134 @@ async def search_student(student_id: int):
 async def process_graduation(student_id: int):
     try:
         def normalize_code(s):
-            if s is None:
-                return ""
-            return str(s).strip().upper()
+            return "" if s is None else str(s).strip().upper()
 
         def normalize_type(s):
-            if s is None:
-                return ""
-            return str(s).strip().lower()
+            return "" if s is None else str(s).strip().lower()
 
         def normalize_course_name(s):
-            if s is None:
-                return ""
-            # 标准化课程名称，移除多余空格并转为小写进行比较
-            return str(s).strip().lower()
+            return "" if s is None else str(s).strip().lower()
 
         print(f"=== DEBUG: Checking graduation for student {student_id} ===")
 
-        # 1. Get student information
-        student_res = client.from_('students') \
-            .select('student_course, student_major, intake_year, intake_term, credit_point, graduation_status') \
-            .eq('student_id', student_id) \
+        # 1. Load student info
+        student_res = supabase_client.from_("students") \
+            .select("student_course, student_major, intake_year, intake_term, credit_point, graduation_status") \
+            .eq("student_id", student_id) \
             .execute()
 
         if not student_res.data:
             raise HTTPException(404, "Student not found")
 
         student = student_res.data[0]
-        student_course = student.get('student_course')
-        student_major = student.get('student_major')
-        intake_year = student.get('intake_year')
-        intake_term = student.get('intake_term')
-        current_credit_point = student.get('credit_point', 0)
-        current_graduation_status = student.get('graduation_status', False)
-        
-        print(f"DEBUG: Student data - Course: '{student_course}', Major: '{student_major}', Year: '{intake_year}', Term: '{intake_term}'")
-        print(f"DEBUG: Current credit_point: {current_credit_point}, graduation_status: {current_graduation_status}")
+        student_course = student["student_course"]
+        student_major = student["student_major"]
+        intake_year = student["intake_year"]
+        intake_term = student["intake_term"]
 
-        # 2. Get student's completed units
-        completed_units_res = client.from_('student_units') \
-            .select('unit_code') \
-            .eq('student_id', student_id) \
-            .eq('completed', True) \
-            .neq('grade', 'F') \
+        # 2. Completed units
+        completed_units_res = supabase_client.from_("student_units") \
+            .select("unit_code") \
+            .eq("student_id", student_id) \
+            .eq("completed", True) \
+            .neq("grade", "F") \
             .execute()
 
-        passed_raw = [u.get('unit_code') for u in (completed_units_res.data or [])]
-        passed_codes_norm = {normalize_code(c) for c in passed_raw if c is not None}
+        passed_codes_norm = {
+            normalize_code(u["unit_code"]) for u in (completed_units_res.data or []) if u.get("unit_code")
+        }
 
-        print(f"DEBUG: Raw passed units: {passed_raw}")
-        print(f"DEBUG: Normalized passed unit set: {passed_codes_norm}")
-
-        # 3. 获取所有学习计划进行调试
-        all_planners_res = client.from_('study_planners') \
-            .select('id, program, major, intake_year, intake_semester') \
-            .execute()
-
-        print(f"DEBUG: All available planners: {all_planners_res.data}")
-
-        # 4. 查找精确匹配的学习计划
-        matched_planners = []
-        for planner in all_planners_res.data:
-            planner_course = planner.get('program')
-            planner_major = planner.get('major')
-            planner_year = planner.get('intake_year')
-            planner_semester = planner.get('intake_semester')
-            
-            # 标准化比较
-            if (normalize_course_name(planner_course) == normalize_course_name(student_course) and
-                normalize_course_name(planner_major) == normalize_course_name(student_major) and
-                str(planner_year) == str(intake_year) and
-                str(planner_semester) == str(intake_term)):
-                matched_planners.append(planner)
-
-        print(f"DEBUG: Matched planners after normalization: {matched_planners}")
-
-        # 计算总学分（无论是否有匹配的学习计划）
         total_credits = len(passed_codes_norm) * 12.5
-        
+
+        # 3. All planners
+        all_planners_res = supabase_client.from_("study_planners") \
+            .select("id, program, major, intake_year, intake_semester") \
+            .execute()
+
+        all_planners = all_planners_res.data or []
+
+        # 4. Match planner
+        matched_planners = [
+            p for p in all_planners
+            if normalize_course_name(p["program"]) == normalize_course_name(student_course)
+            and normalize_course_name(p["major"]) == normalize_course_name(student_major)
+            and str(p["intake_year"]) == str(intake_year)
+            and str(p["intake_semester"]) == str(intake_term)
+        ]
+
         if not matched_planners:
-            print(f"DEBUG: NO EXACT PLANNER MATCH FOUND!")
-            print(f"DEBUG: Looking for - Course: '{student_course}', Major: '{student_major}', Year: {intake_year}, Term: '{intake_term}'")
-            
-            # 显示所有相关的学习计划用于调试
-            cybersecurity_planners = [p for p in all_planners_res.data 
-                                   if normalize_course_name(p.get('major')) == normalize_course_name('Cybersecurity')]
-            print(f"DEBUG: All Cybersecurity planners: {cybersecurity_planners}")
-            
-            # 更新学分但不能毕业（因为没有学习计划）
-            update_data = {
-                'credit_point': total_credits,
-                'graduation_status': False  # 没有学习计划不能毕业
-            }
-            client.from_('students') \
-                .update(update_data) \
-                .eq('student_id', student_id) \
-                .execute()
-            print(f"DEBUG: Updated credit_point to {total_credits}, graduation_status to False")
-            
-            return {
-                "can_graduate": False,
-                "total_credits": total_credits,
-                "core_credits": 0.0,
-                "major_credits": 0.0,
-                "core_completed": 0,
-                "major_completed": 0,
-                "missing_core_units": [f"找不到学习计划: {student_course} - {student_major}"],
-                "missing_major_units": [f"需要: {student_course} 主修 {student_major}, 入学 {intake_year} {intake_term}"]
-            }
+            await supabase_update_student(student_id, {"credit_point": total_credits, "graduation_status": False})
+            return GraduationStatus(
+                can_graduate=False,
+                total_credits=total_credits,
+                core_credits=0.0,
+                major_credits=0.0,
+                core_completed=0,
+                major_completed=0,
+                missing_core_units=[f"找不到学习计划: {student_course} - {student_major}"],
+                missing_major_units=[f"需要: {student_course} 主修 {student_major}, 入学 {intake_year} {intake_term}"]
+            )
 
-        if len(matched_planners) > 1:
-            print(f"DEBUG: Multiple exact planners found: {matched_planners}")
-            print("DEBUG: WARNING: Using first matching planner")
+        planner_id = matched_planners[0]["id"]
 
-        planner = matched_planners[0]
-        planner_id = planner['id']
-        actual_course = planner.get('program')
-        actual_major = planner.get('major')
-        
-        print(f"DEBUG: Using EXACT MATCH planner - ID: {planner_id}")
-        print(f"DEBUG: Planner Course: '{actual_course}', Major: '{actual_major}'")
-
-        # 5. Get required units from the CORRECT planner
-        required_units_res = client.from_('study_planner_units') \
-            .select('unit_code, unit_type, unit_name, planner_id') \
-            .eq('planner_id', planner_id) \
+        # 5. Load required units
+        required_units_res = supabase_client.from_("study_planner_units") \
+            .select("unit_code, unit_type") \
+            .eq("planner_id", planner_id) \
             .execute()
 
         required_units = required_units_res.data or []
-        print(f"DEBUG: Retrieved {len(required_units)} units for CORRECT planner_id: {planner_id}")
-        
-        # Filter units by type
-        core_units_raw = []
-        major_units_raw = []
-        
-        for unit in required_units:
-            unit_type = normalize_type(unit.get('unit_type'))
-            unit_code = unit.get('unit_code')
-            
-            if unit_code is None:
-                continue
-                
-            if unit_type == 'core':
-                core_units_raw.append(unit_code)
-            elif unit_type == 'major':
-                major_units_raw.append(unit_code)
+        core_units = [normalize_code(u["unit_code"]) for u in required_units if normalize_type(u["unit_type"]) == "core"]
+        major_units = [normalize_code(u["unit_code"]) for u in required_units if normalize_type(u["unit_type"]) == "major"]
 
-        print(f"DEBUG: Core units for {actual_course}: {core_units_raw}")
-        print(f"DEBUG: Major units for {actual_course}: {major_units_raw}")
+        core_set = set(core_units)
+        major_set = set(major_units)
 
-        # Create normalized mappings
-        core_norm_map = {normalize_code(code): code for code in core_units_raw}
-        major_norm_map = {normalize_code(code): code for code in major_units_raw}
+        completed_core = core_set & passed_codes_norm
+        completed_major = major_set & passed_codes_norm
+        missing_core = core_set - passed_codes_norm
+        missing_major = major_set - passed_codes_norm
 
-        core_required_norm_set = set(core_norm_map.keys())
-        major_required_norm_set = set(major_norm_map.keys())
-
-        # 6. Compare normalized sets
-        completed_core_norm = core_required_norm_set.intersection(passed_codes_norm)
-        completed_major_norm = major_required_norm_set.intersection(passed_codes_norm)
-
-        missing_core_norm = core_required_norm_set - passed_codes_norm
-        missing_major_norm = major_required_norm_set - passed_codes_norm
-
-        # Map back to original raw codes
-        completed_core = [core_norm_map[n] for n in completed_core_norm]
-        completed_major = [major_norm_map[n] for n in completed_major_norm]
-        missing_core = [core_norm_map[n] for n in missing_core_norm]
-        missing_major = [major_norm_map[n] for n in missing_major_norm]
-
-        print(f"DEBUG: Completed core: {completed_core}")
-        print(f"DEBUG: Completed major: {completed_major}")
-        print(f"DEBUG: Missing core: {missing_core}")
-        print(f"DEBUG: Missing major: {missing_major}")
-
-        # 7. Calculate specific credits
         core_credits = len(completed_core) * 12.5
         major_credits = len(completed_major) * 12.5
-
-        # 8. Check graduation eligibility
         can_graduate = (total_credits >= 300 and not missing_core and not missing_major)
 
-        # 9. Update student record with new credit_point and graduation_status
-        update_data = {
-            "credit_point": float(total_credits),
-            "graduation_status": bool(can_graduate)
-        }
-        try:
-            updated_student = supabase_update_student(student_id, update_data)
-            print(f"DEBUG: supabase_update_student returned: {updated_student}")
-        except HTTPException as he:
-            print(f"DEBUG: supabase_update_student failed: {he.detail}")
-            # 将失败也返回给前端（非 200）
-            raise he
-        
-        # 10. Create planner_info for the response
-        if matched_planners:
-            planner = matched_planners[0]
-            planner_info = f"{planner.get('program', 'Unknown Program')} - {planner.get('major', 'Unknown Major')} (Intake: {intake_year} {intake_term})"
-        else:
-            planner_info = f"No matching study plan found for {student_course} - {student_major}"
+        supabase_update_student(student_id, {"credit_point": total_credits, "graduation_status": can_graduate})
 
-        print(f"DEBUG: Planner info: {planner_info}")
-
-        # 最终返回：包含计算结果 + DB 返回的最新 student 行
-        return JSONResponse(status_code=200, content={
-            "graduation_result": {
-                "can_graduate": can_graduate,
-                "total_credits": total_credits,
-                "core_credits": core_credits,
-                "major_credits": major_credits,
-                "core_completed": len(completed_core),
-                "major_completed": len(completed_major),
-                "missing_core_units": missing_core,
-                "missing_major_units": missing_major,
-                "planner_info": planner_info
-            },
-            "updated_student": updated_student
-        })
-
+        return GraduationStatus(
+            can_graduate=can_graduate,
+            total_credits=total_credits,
+            core_credits=core_credits,
+            major_credits=major_credits,
+            core_completed=len(completed_core),
+            major_completed=len(completed_major),
+            missing_core_units=list(missing_core),
+            missing_major_units=list(missing_major),
+            planner_info=f"Planner {planner_id} for {student_course} - {student_major}"
+        )
 
     except HTTPException as he:
-        print(f"DEBUG: HTTP Exception: {he}")
         raise he
     except Exception as e:
-        print(f"DEBUG: General Exception: {str(e)}")
+        print("❌ CRITICAL ERROR:", e)
         traceback.print_exc()
-        raise HTTPException(500, f"Server error: {str(e)}")
-    
+        raise HTTPException(status_code=500, detail=str(e))
     
 
-def supabase_update_student(student_id: int, payload: dict):
-    upd_res = client.from_('students') \
+async def supabase_update_student(student_id: int, payload: dict):
+    upd_res = supabase_client.from_("students") \
         .update(payload) \
-        .eq('student_id', student_id) \
-        .select('id, student_id, credit_point, graduation_status') \
+        .eq("student_id", student_id) \
+        .select("student_id, credit_point, graduation_status") \
         .execute()
 
-    # robust checks for different supabase client responses
-    # case: object with .error and .data
-    if hasattr(upd_res, 'error') and upd_res.error:
-        print(f"DEBUG: Supabase update error (obj): {upd_res.error}")
-        raise HTTPException(status_code=500, detail=f"DB update error: {upd_res.error}")
+    if hasattr(upd_res, "error") and upd_res.error:
+        raise HTTPException(500, f"DB update error: {upd_res.error}")
 
-    # case: dict-like response
-    if isinstance(upd_res, dict) and upd_res.get('error'):
-        print(f"DEBUG: Supabase update error (dict): {upd_res.get('error')}")
-        raise HTTPException(status_code=500, detail=f"DB update error: {upd_res.get('error')}")
-
-    updated_rows = getattr(upd_res, 'data', None) or (upd_res.get('data') if isinstance(upd_res, dict) else None)
-    if not updated_rows:
-        print(f"DEBUG: Supabase update returned no rows: {upd_res}")
-        # 返回 500 并把整个返回对象放到 detail（便于前端调试）
-        raise HTTPException(status_code=500, detail={"message": "DB update did not return row", "raw": str(upd_res)})
-
-    return updated_rows[0]
+    data = getattr(upd_res, "data", None) or (upd_res.get("data") if isinstance(upd_res, dict) else None)
+    if not data:
+        raise HTTPException(500, f"DB update returned no data: {upd_res}")
+    return data[0]
 
 
 @app.get("/")
@@ -1355,676 +1229,340 @@ async def upload_students(file: UploadFile = File(...)):
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
-# @app.post("/students/{student_id}/upload-units")
-# async def upload_units(
-#     student_id: int,
-#     file: UploadFile = File(...),
-#     overwrite: bool = Form(False),
-# ):
-#     try:
-#         # 1. File size/type validation
-#         file.file.seek(0, 2)
-#         if file.file.tell() > MAX_FILE_SIZE:
-#             raise HTTPException(413, "File size exceeds 10MB limit")
-#         file.file.seek(0)
-#         if not file.filename.lower().endswith((".xlsx", ".xls")):
-#             raise HTTPException(400, "Only Excel files (.xlsx/.xls) are supported")
 
-#         # 2. Read Excel file with better column handling
-#         try:
-#             df = pd.read_excel(
-#                 file.file,
-#                 engine="openpyxl",
-#                 dtype={"Grade": str},
-#             )
-#         except ValueError as e:
-#             raise HTTPException(400, f"Error reading Excel file: {e}")
-
-#         # 3. Normalize column names
-#         df.columns = [str(col).strip().lower() for col in df.columns]
-#         print(f"DEBUG: Excel columns: {df.columns.tolist()}")
-
-#         # 4. Map column names
-#         column_mapping = {
-#             'course': 'unit_code',
-#             'course code': 'unit_code',
-#             'unit code': 'unit_code',
-#             'course title': 'unit_name', 
-#             'unit name': 'unit_name',
-#             'title': 'unit_name',
-#             'status': 'status',
-#             'grade': 'grade',
-#             'term': 'term',
-#             'credits': 'credits',
-#             'earned': 'earned_credits'
-#         }
-        
-#         # Rename columns
-#         for old_col, new_col in column_mapping.items():
-#             if old_col in df.columns:
-#                 df.rename(columns={old_col: new_col}, inplace=True)
-
-#         # 5. Validate required columns
-#         required_columns = ['unit_code', 'status']
-#         missing_columns = [col for col in required_columns if col not in df.columns]
-        
-#         if missing_columns:
-#             raise HTTPException(400, f"Missing required columns: {', '.join(missing_columns)}. Available columns: {', '.join(df.columns)}")
-
-#         # 6. Build payload with improved data processing
-#         units = []
-#         for idx, row in df.iterrows():
-#             try:
-#                 # Skip empty rows
-#                 if pd.isna(row.get('unit_code')) or str(row.get('unit_code')).strip() == '':
-#                     continue
-                    
-#                 code = str(row.get('unit_code', '')).strip()
-#                 status = str(row.get('status', '')).strip().lower()
-                
-#                 if not code:
-#                     continue
-#                 if not status:
-#                     continue
-
-#                 # Handle numeric fields with NaN protection
-#                 def safe_float(value, default=0.0):
-#                     try:
-#                         if pd.isna(value):
-#                             return default
-#                         return float(value)
-#                     except (ValueError, TypeError):
-#                         return default
-
-#                 credits = safe_float(row.get('credits'), 12.5)
-#                 earned_credits_val = row.get('earned_credits')
-                
-#                 # Determine completed status and earned credits
-#                 completed = False
-#                 grade = str(row.get('grade', '')).strip().upper()
-                
-#                 if status in ['complete', 'completed']:
-#                     completed = True
-#                     # If earned_credits is NaN but status is complete, use credits
-#                     if pd.isna(earned_credits_val):
-#                         earned_credits = credits
-#                     else:
-#                         earned_credits = safe_float(earned_credits_val, credits)
-#                 elif status in ['future', 'scheduled']:
-#                     completed = False
-#                     earned_credits = 0.0
-#                 elif grade and grade not in ['', 'N', 'F']:
-#                     completed = True
-#                     if pd.isna(earned_credits_val):
-#                         earned_credits = credits
-#                     else:
-#                         earned_credits = safe_float(earned_credits_val, credits)
-#                 else:
-#                     completed = False
-#                     earned_credits = 0.0
-
-#                 units.append({
-#                     "student_id": student_id,
-#                     "unit_code": code,
-#                     "unit_name": str(row.get('unit_name', '')).strip() or f"Unit {code}",
-#                     "grade": grade,
-#                     "completed": completed,
-#                     "credits": credits,
-#                     "earned_credits": earned_credits,
-#                     "term": str(row.get('term', '')).strip(),
-#                 })
-                
-#             except Exception as unit_error:
-#                 print(f"DEBUG: Error processing row {idx+2}: {unit_error}")
-#                 continue
-
-#         if not units:
-#             raise HTTPException(400, "No valid course records found in Excel")
-
-#         # 7. Ensure student exists
-#         resp = client.from_("students") \
-#             .select("student_id") \
-#             .eq("student_id", student_id) \
-#             .execute()
-#         if not resp.data:
-#             raise HTTPException(404, "Associated student not found")
-
-#         # 8. Optionally overwrite existing data
-#         if overwrite:
-#             client.from_("student_units") \
-#                 .delete() \
-#                 .eq("student_id", student_id) \
-#                 .execute()
-
-#         # 9. Insert new records in batches
-#         batch_size = 50
-#         inserted_count = 0
-        
-#         for i in range(0, len(units), batch_size):
-#             batch = units[i:i + batch_size]
-#             ins = client.from_("student_units").insert(batch).execute()
-#             if ins.data:
-#                 inserted_count += len(ins.data)
-
-#         # 10. Update student credit points
-#         total_credits = sum([unit.get("earned_credits", 0) for unit in units])
-#         client.from_("students") \
-#             .update({"credit_point": total_credits}) \
-#             .eq("student_id", student_id) \
-#             .execute()
-
-#         return {"message": f"Successfully uploaded {inserted_count} course records. Total credits: {total_credits}"}
-
-#     except HTTPException:
-#         raise
-#     except Exception as e:
-#         traceback.print_exc()
-#         raise HTTPException(500, f"Internal server error: {e}")
-    
-@app.post("/students/bulk-upload-units")
-async def bulk_upload_units(
-    files: List[UploadFile] = File(...),
-    overwrite: bool = Form(False),
-    student_id: Optional[int] = Form(None)  # optional fallback id for all files
-):
-    """
-    Bulk upload multiple Excel files containing unit records.
-    - Each file should contain columns like: Course / Course Title / Status / Grade
-      OR columns mapped to unit_code / unit_name / status / grade.
-    - student_id can be taken from a 'student_id' column, extracted from filename, or
-      provided globally via the `student_id` form field.
-    - If overwrite=True, existing student_units for that student_id will be deleted.
-    """
-    try:
-        print(f"DEBUG: Starting bulk upload for {len(files)} files; overwrite={overwrite}; fallback_student_id={student_id}")
-        all_results = []
-        total_success = 0
-        total_errors = 0
-
-        for file_index, file in enumerate(files):
-            try:
-                print(f"\nDEBUG: --- Processing file {file_index + 1}/{len(files)}: {file.filename}")
-
-                # 1) basic validation: extension + file size
-                if not file.filename.lower().endswith((".xlsx", ".xls")):
-                    msg = "Only Excel files (.xlsx/.xls) are supported"
-                    print(f"DEBUG: {file.filename} rejected: {msg}")
-                    all_results.append({"filename": file.filename, "status": "error", "message": msg})
-                    total_errors += 1
-                    continue
-
-                file.file.seek(0, 2)
-                size = file.file.tell()
-                if size > MAX_FILE_SIZE:
-                    msg = "File size exceeds limit"
-                    print(f"DEBUG: {file.filename} rejected: {msg} ({size} bytes)")
-                    all_results.append({"filename": file.filename, "status": "error", "message": msg})
-                    total_errors += 1
-                    continue
-                file.file.seek(0)
-
-                # 2) Read Excel into DataFrame (protect against NaN)
-                try:
-                    df = pd.read_excel(file.file, engine="openpyxl", dtype=str)  # read as strings to avoid float ids
-                except Exception as e:
-                    msg = f"Error reading Excel file: {str(e)}"
-                    print(f"DEBUG: {msg}")
-                    all_results.append({"filename": file.filename, "status": "error", "message": msg})
-                    total_errors += 1
-                    continue
-
-                # quick introspection
-                print(f"DEBUG: {file.filename} rows: {len(df)}")
-                print(f"DEBUG: raw columns: {df.columns.tolist()}")
-                if len(df) > 0:
-                    print(f"DEBUG: df.head:\n{df.head(3)}")
-                # normalize columns: strip/lower
-                df.columns = [str(col).strip().lower() for col in df.columns]
-                print(f"DEBUG: normalized columns: {df.columns.tolist()}")
-
-                # 3) map common column names to canonical names used in logic
-                column_mapping = {
-                    'course': 'unit_code',
-                    'course code': 'unit_code',
-                    'unit code': 'unit_code',
-                    'course title': 'unit_name',
-                    'unit name': 'unit_name',
-                    'title': 'unit_name',
-                    'status': 'status',
-                    'grade': 'grade',
-                    'term': 'term',
-                    'credits': 'credits',
-                    'earned': 'earned_credits',
-                    'earned_credits': 'earned_credits',
-                    'student id': 'student_id',
-                    'student_id': 'student_id',
-                    'student': 'student_id',
-                    'id': 'student_id',
-                }
-                for old, new in column_mapping.items():
-                    if old in df.columns and new not in df.columns:
-                        df.rename(columns={old: new}, inplace=True)
-                print(f"DEBUG: columns after mapping: {df.columns.tolist()}")
-
-                # 4) determine student_id for this file:
-                file_student_id = None
-                if 'student_id' in df.columns:
-                    # pick first non-empty convertible value
-                    non_null = df['student_id'].dropna().astype(str).str.strip()
-                    non_null = non_null[non_null != ""]
-                    if len(non_null) > 0:
-                        for cand in non_null.unique():
-                            try:
-                                # handle values like "12345.0"
-                                file_student_id = int(float(cand))
-                                break
-                            except Exception:
-                                continue
-                    print(f"DEBUG: student_id(s) found in-sheet: {non_null.unique().tolist() if 'student_id' in df.columns else []} -> chosen: {file_student_id}")
-
-                # fallback: extract numbers from filename (pick first sensible 4-12 digit number)
-                if file_student_id is None:
-                    nums = re.findall(r'\d{4,12}', file.filename)
-                    if nums:
-                        try:
-                            file_student_id = int(nums[0])
-                            print(f"DEBUG: extracted student_id from filename: {file_student_id}")
-                        except Exception:
-                            file_student_id = None
-
-                # final fallback: global form field student_id
-                if file_student_id is None and student_id is not None:
-                    file_student_id = int(student_id)
-                    print(f"DEBUG: using fallback student_id from form: {file_student_id}")
-
-                if file_student_id is None:
-                    msg = "Could not determine student_id from file content, filename, or form fallback"
-                    print(f"DEBUG: {msg} for {file.filename}")
-                    all_results.append({"filename": file.filename, "status": "error", "message": msg})
-                    total_errors += 1
-                    continue
-
-                # 5) ensure required columns exist (we require unit_code + status at minimum)
-                required = ['unit_code', 'status']
-                missing = [c for c in required if c not in df.columns]
-                if missing:
-                    msg = f"Missing required columns: {', '.join(missing)}. Available: {', '.join(df.columns)}"
-                    print(f"DEBUG: {msg} for {file.filename}")
-                    all_results.append({"filename": file.filename, "status": "error", "message": msg})
-                    total_errors += 1
-                    continue
-
-                # 6) check student exists in DB
-                student_check = client.from_("students").select("student_id, student_name").eq("student_id", file_student_id).execute()
-                print(f"DEBUG: student_check response: {student_check}")
-                if getattr(student_check, "error", None):
-                    msg = f"DB error checking student: {student_check.error}"
-                    print(f"DEBUG: {msg}")
-                    all_results.append({"filename": file.filename, "status": "error", "message": msg})
-                    total_errors += 1
-                    continue
-                if not student_check.data:
-                    msg = f"Student with ID {file_student_id} not found"
-                    print(f"DEBUG: {msg}")
-                    all_results.append({"filename": file.filename, "status": "error", "message": msg})
-                    total_errors += 1
-                    continue
-                print(f"DEBUG: found student: {student_check.data[0]}")
-
-                # 7) process rows -> build units list
-                units = []
-                row_errors = []
-                def safe_float(val, default=0.0):
-                    try:
-                        if val is None or (isinstance(val, float) and (math.isnan(val) or math.isinf(val))):
-                            return default
-                        return float(val)
-                    except Exception:
-                        try:
-                            return float(str(val))
-                        except Exception:
-                            return default
-
-                for idx, row in df.iterrows():
-                    try:
-                        raw_code = row.get('unit_code') or row.get('course') or ''
-                        if pd.isna(raw_code) or str(raw_code).strip() == '':
-                            continue
-                        unit_code = str(raw_code).strip()
-                        unit_name = str(row.get('unit_name', '') or row.get('course title', '') or '').strip()
-                        status = str(row.get('status', '')).strip().lower()
-                        grade = str(row.get('grade', '') or '').strip().upper()
-                        term = str(row.get('term', '') or '').strip()
-
-                        if not unit_code:
-                            row_errors.append(f"Row {idx+2}: missing unit_code")
-                            continue
-                        if not status:
-                            row_errors.append(f"Row {idx+2}: missing status")
-                            continue
-
-                        credits = safe_float(row.get('credits'), 12.5)
-                        earned_val = row.get('earned_credits', None)
-
-                        completed = False
-                        if status in ['complete', 'completed']:
-                            completed = True
-                            earned_credits = credits if (earned_val is None or str(earned_val).strip() == "") else safe_float(earned_val, credits)
-                        elif status in ['future', 'scheduled']:
-                            completed = False
-                            earned_credits = 0.0
-                        elif grade and grade not in ['', 'N', 'F']:
-                            completed = True
-                            earned_credits = credits if (earned_val is None or str(earned_val).strip() == "") else safe_float(earned_val, credits)
-                        else:
-                            completed = False
-                            earned_credits = 0.0
-
-                        units.append({
-                            "student_id": file_student_id,
-                            "unit_code": unit_code,
-                            "unit_name": unit_name if unit_name else f"Unit {unit_code}",
-                            "grade": grade,
-                            "completed": completed,
-                            "credits": credits,
-                            "earned_credits": earned_credits,
-                            "term": term,
-                            "status": status
-                        })
-                    except Exception as e:
-                        row_errors.append(f"Row {idx+2}: exception processing row -> {str(e)}")
-                        continue
-
-                if not units:
-                    msg = "No valid unit records found in file after processing"
-                    print(f"DEBUG: {msg} for {file.filename}; row_errors: {row_errors[:5]}")
-                    all_results.append({"filename": file.filename, "status": "error", "message": msg, "row_errors": row_errors})
-                    total_errors += 1
-                    continue
-
-                # 8) optionally overwrite existing student_units for this student
-                if overwrite:
-                    try:
-                        del_res = client.from_("student_units").delete().eq("student_id", file_student_id).execute()
-                        print(f"DEBUG: delete_result for student {file_student_id}: {del_res}")
-                        if getattr(del_res, "error", None):
-                            print(f"DEBUG: delete_result error: {del_res.error}")
-                    except Exception as e:
-                        print(f"DEBUG: exception during delete for {file_student_id}: {e}")
-
-                # 9) insert units in batches and capture errors
-                batch_size = 50
-                inserted_count = 0
-                insertion_errors = []
-                for i in range(0, len(units), batch_size):
-                    batch = units[i:i+batch_size]
-                    try:
-                        res = client.from_("student_units").insert(batch).execute()
-                        print(f"DEBUG: insert batch {i//batch_size + 1} result: {res}")
-                        if getattr(res, "error", None):
-                            insertion_errors.append(f"Batch {i//batch_size + 1} error: {res.error}")
-                            print(f"DEBUG: Batch error: {res.error}")
-                        elif getattr(res, "data", None):
-                            inserted_count += len(res.data)
-                            print(f"DEBUG: Batch {i//batch_size + 1} inserted {len(res.data)} rows")
-                        else:
-                            insertion_errors.append(f"Batch {i//batch_size + 1} returned no data and no explicit error")
-                            print("DEBUG: batch returned no data/no error")
-                    except Exception as e:
-                        insertion_errors.append(f"Batch {i//batch_size + 1} exception: {str(e)}")
-                        print(f"DEBUG: exception inserting batch {i//batch_size + 1}: {traceback.format_exc()}")
-                        continue
-
-                # 10) update student's credit_point (simple sum of earned_credits from this file)
-                total_credits = sum([u.get("earned_credits", 0) or 0 for u in units])
-                try:
-                    upd = client.from_("students").update({"credit_point": total_credits}).eq("student_id", file_student_id).execute()
-                    print(f"DEBUG: credit_point update result: {upd}")
-                    if getattr(upd, "error", None):
-                        print(f"DEBUG: credit_point update error: {upd.error}")
-                except Exception as e:
-                    print(f"DEBUG: exception updating credit_point: {e}")
-
-                # 11) record file result
-                status = "success" if not insertion_errors else "partial"
-                file_result = {
-                    "filename": file.filename,
-                    "status": status,
-                    "student_id": file_student_id,
-                    "inserted_count": inserted_count,
-                    "total_units_in_file": len(units),
-                    "total_credits": total_credits,
-                    "row_errors": row_errors if row_errors else None,
-                    "insertion_errors": insertion_errors if insertion_errors else None
-                }
-                all_results.append(file_result)
-                if insertion_errors:
-                    total_errors += 1
-                else:
-                    total_success += 1
-
-                print(f"DEBUG: finished processing {file.filename}: inserted {inserted_count}; errors: {len(insertion_errors)}")
-
-            except Exception as file_e:
-                print(f"DEBUG: Unexpected error processing {file.filename}: {str(file_e)}")
-                traceback.print_exc()
-                all_results.append({"filename": file.filename, "status": "error", "message": f"File processing error: {str(file_e)}"})
-                total_errors += 1
-                continue
-
-        # 12) return consolidated response
-        response = {
-            "message": f"Bulk upload completed. {total_success} files fully processed, {total_errors} files had issues",
-            "summary": {"total_files": len(files), "successful_files": total_success, "failed_files": total_errors},
-            "results": all_results
-        }
-        return response
-
-    except Exception as e:
-        print(f"DEBUG: bulk_upload_units top-level error: {str(e)}")
-        traceback.print_exc()
-        raise HTTPException(500, f"Internal server error: {str(e)}")
-    
-@app.post("/students/{student_id}/assign-bulk-units")
-async def assign_bulk_units_to_student(
+ 
+@app.post("/students/{student_id}/upload-units-adapted")
+async def upload_units_adapted(
     student_id: int,
-    units_data: dict
+    file: UploadFile = File(...),
+    overwrite: bool = Form(True),
 ):
+    """适配现有表结构的上传 - 只使用存在的列"""
     try:
-        print(f"DEBUG: Assigning bulk units to student {student_id}")
-        print(f"DEBUG: Received units_data keys: {units_data.keys()}")
+        print(f"DEBUG: Adapted upload for student {student_id}")
         
-        # 1. Check if student exists
-        student_check = client.from_("students") \
-            .select("student_id, student_name") \
-            .eq("student_id", student_id) \
-            .execute()
-            
+        # 1. 验证学生存在
+        student_check = client.from_("students").select("student_id, student_name, credit_point").eq("student_id", student_id).execute()
         if not student_check.data:
-            raise HTTPException(404, f"Student with ID {student_id} not found")
+            raise HTTPException(404, f"Student {student_id} not found")
         
-        print(f"DEBUG: Found student: {student_check.data[0]}")
+        student_info = student_check.data[0]
+        print(f"DEBUG: Student found: {student_info}")
         
-        # 2. Process units
-        units = units_data.get("units", [])
-        overwrite = units_data.get("overwrite", False)
+        # 2. 读取Excel
+        file.file.seek(0)
+        df = pd.read_excel(file.file, engine="openpyxl")
+        print(f"DEBUG: Original columns: {df.columns.tolist()}")
         
-        print(f"DEBUG: Processing {len(units)} units, overwrite: {overwrite}")
+        # 3. 标准化列名
+        df.columns = [str(col).strip().lower().replace(' ', '_') for col in df.columns]
+        print(f"DEBUG: Normalized columns: {df.columns.tolist()}")
         
-        if not units:
-            raise HTTPException(400, "No units provided")
+        # 4. 映射列名
+        column_mapping = {
+            'course': 'unit_code',
+            'course_code': 'unit_code',
+            'course_title': 'unit_name',
+            'title': 'unit_name'
+        }
         
-        # 3. Optionally overwrite existing data
-        if overwrite:
-            print(f"DEBUG: Deleting existing units for student {student_id}")
+        for old_col, new_col in column_mapping.items():
+            if old_col in df.columns and new_col not in df.columns:
+                df.rename(columns={old_col: new_col}, inplace=True)
+        
+        print(f"DEBUG: After mapping: {df.columns.tolist()}")
+        
+        # 5. 清理数据
+        if 'unit_code' not in df.columns:
+            raise HTTPException(400, f"Missing unit_code. Available: {df.columns.tolist()}")
+            
+        df = df.dropna(subset=['unit_code'])
+        df = df[df['unit_code'].astype(str).str.strip() != '']
+        df = df[~df['unit_code'].astype(str).str.strip().isin(['1', '2', '3'])]
+        print(f"DEBUG: After cleaning: {len(df)} rows")
+        
+        # 6. 处理数据 - 只使用存在的列
+        units = []
+        total_earned_credits = 0
+        
+        for idx, row in df.iterrows():
             try:
-                delete_result = client.from_("student_units") \
-                    .delete() \
-                    .eq("student_id", student_id) \
-                    .execute()
-                print(f"DEBUG: Delete result: {delete_result}")
-            except Exception as delete_error:
-                print(f"DEBUG: Delete error (might be no existing records): {delete_error}")
-        
-        # 4. Prepare units for insertion with proper validation
-        student_units = []
-        valid_units_count = 0
-        
-        for i, unit in enumerate(units):
-            try:
-                # 验证必需字段
-                if not unit.get("unit_code"):
-                    print(f"DEBUG: Skipping unit {i} - missing unit_code")
-                    continue
+                unit_code = str(row['unit_code']).strip()
+                unit_name = str(row.get('unit_name', '')).strip()
+                status = str(row.get('status', '')).strip().lower()
+                grade = str(row.get('grade', '')).strip().upper()
                 
-                # 确保数据类型正确
-                unit_code = str(unit["unit_code"]).strip()
-                unit_name = str(unit.get("unit_name", "")).strip()
-                if not unit_name:
-                    unit_name = f"Unit {unit_code}"
-                
-                grade = str(unit.get("grade", "")).strip().upper()
-                term = str(unit.get("term", "")).strip()
-                
-                # 处理布尔值
-                completed = False
-                status = str(unit.get("status", "")).lower()
-                if status in ['complete', 'completed'] or (grade and grade not in ['', 'N', 'F']):
+                # 确定完成状态
+                completed = status in ['complete', 'completed']
+                if not completed and grade and grade not in ['', 'N', 'F', 'FAIL']:
                     completed = True
                 
-                # 处理数字字段
+                # 计算获得学分（用于更新学生总学分）
                 try:
-                    credits = float(unit.get("credits", 12.5))
+                    earned_credits = float(row.get('earned', 0))
                 except (ValueError, TypeError):
-                    credits = 12.5
+                    earned_credits = 0.0
                 
-                try:
-                    earned_credits = float(unit.get("earned_credits", credits if completed else 0))
-                except (ValueError, TypeError):
-                    earned_credits = credits if completed else 0
+                # 如果状态是完成但Earned为0，检查是否需要调整
+                if completed and earned_credits == 0:
+                    # 尝试从Credits列获取默认学分
+                    try:
+                        default_credits = float(row.get('credits', 12.5))
+                        # 只有当成绩不是不及格时才给学分
+                        if grade not in ['N', 'F', 'FAIL']:
+                            earned_credits = default_credits
+                    except (ValueError, TypeError):
+                        pass
                 
-                student_unit = {
+                # 构建单元记录 - 只使用存在的列
+                unit_data = {
                     "student_id": student_id,
                     "unit_code": unit_code,
-                    "unit_name": unit_name,
+                    "unit_name": unit_name or f"Unit {unit_code}",
                     "grade": grade,
-                    "completed": completed,
-                    "credits": credits,
-                    "earned_credits": earned_credits,
-                    "term": term
+                    "completed": completed
                 }
                 
-                student_units.append(student_unit)
-                valid_units_count += 1
+                units.append(unit_data)
+                total_earned_credits += earned_credits
                 
-            except Exception as unit_error:
-                print(f"DEBUG: Error processing unit {i}: {unit_error}")
-                print(f"DEBUG: Problematic unit data: {unit}")
+                print(f"DEBUG: Processed {unit_code}: completed={completed}, earned_credits={earned_credits}")
+                
+            except Exception as e:
+                print(f"DEBUG: Row {idx} error: {e}")
                 continue
         
-        print(f"DEBUG: Successfully prepared {valid_units_count} units for insertion")
+        print(f"DEBUG: Prepared {len(units)} units")
+        print(f"DEBUG: Sample unit: {units[0] if units else 'No units'}")
         
-        if not student_units:
-            raise HTTPException(400, "No valid units to insert after processing")
+        if not units:
+            raise HTTPException(400, "No valid units found")
         
-        # 5. Insert in smaller batches
-        batch_size = 20
-        inserted_count = 0
-        insertion_errors = []
-        
-        for i in range(0, len(student_units), batch_size):
-            batch = student_units[i:i + batch_size]
-            batch_num = i // batch_size + 1
-            print(f"DEBUG: Inserting batch {batch_num} with {len(batch)} units")
-            
+        # 7. 删除现有数据
+        if overwrite:
             try:
-                result = client.from_("student_units").insert(batch).execute()
-                print(f"DEBUG: Batch {batch_num} insert result status: {getattr(result, 'status_code', 'N/A')}")
-                
-                if result.data:
-                    inserted_count += len(result.data)
-                    print(f"DEBUG: Batch {batch_num} inserted {len(result.data)} units")
-                else:
-                    error_msg = f"Batch {batch_num} failed: No data returned"
-                    print(f"DEBUG: {error_msg}")
-                    insertion_errors.append(error_msg)
-                    
-            except Exception as batch_error:
-                error_msg = f"Batch {batch_num} error: {str(batch_error)}"
-                print(f"DEBUG: {error_msg}")
-                insertion_errors.append(error_msg)
-                continue
+                delete_result = client.from_("student_units").delete().eq("student_id", student_id).execute()
+                print(f"DEBUG: Deleted existing units: {delete_result}")
+            except Exception as e:
+                print(f"DEBUG: Delete warning: {e}")
         
-        # 6. Update student credit points
-        total_credits = sum([unit.get("earned_credits", 0) for unit in student_units])
-        print(f"DEBUG: Updating student {student_id} credit points to {total_credits}")
+        # 8. 插入数据
+        inserted_count = 0
+        if units:
+            # 分批插入以避免超时
+            batch_size = 50
+            for i in range(0, len(units), batch_size):
+                batch = units[i:i + batch_size]
+                try:
+                    result = client.from_("student_units").insert(batch).execute()
+                    if result.data:
+                        inserted_count += len(result.data)
+                    print(f"DEBUG: Batch {i//batch_size + 1} inserted")
+                except Exception as e:
+                    print(f"DEBUG: Batch {i//batch_size + 1} error: {e}")
         
+        print(f"DEBUG: Total inserted: {inserted_count} units")
+        
+        # 9. 更新学生学分
         try:
-            update_result = client.from_("students") \
-                .update({"credit_point": total_credits}) \
-                .eq("student_id", student_id) \
-                .execute()
-            print(f"DEBUG: Student update result: {update_result}")
-        except Exception as update_error:
-            print(f"DEBUG: Credit update failed: {update_error}")
-            # 学分更新失败不影响主要操作
+            # 获取当前学分
+            current_credits = student_info.get('credit_point', 0) or 0
+            
+            # 如果选择覆盖，则使用新计算的学分；否则累加
+            if overwrite:
+                new_credits = total_earned_credits
+            else:
+                new_credits = current_credits + total_earned_credits
+            
+            update_result = client.from_("students").update({"credit_point": new_credits}).eq("student_id", student_id).execute()
+            print(f"DEBUG: Updated student credits from {current_credits} to {new_credits}")
+        except Exception as e:
+            print(f"DEBUG: Credit update warning: {e}")
         
-        response_data = {
-            "message": f"Successfully processed {inserted_count} units for student {student_id}",
-            "inserted_count": inserted_count,
-            "total_credits": total_credits,
+        return {
+            "message": f"Successfully processed {inserted_count} units",
             "student_id": student_id,
-            "total_units_processed": len(units),
-            "valid_units_prepared": valid_units_count
+            "student_name": student_info['student_name'],
+            "units_processed": inserted_count,
+            "total_credits": total_earned_credits,
+            "table_columns_used": ["student_id", "unit_code", "unit_name", "grade", "completed"]
         }
-        
-        if insertion_errors:
-            response_data["insertion_errors"] = insertion_errors
-            response_data["message"] += f" (with {len(insertion_errors)} batch errors)"
-        
-        return response_data
         
     except HTTPException:
         raise
     except Exception as e:
-        print(f"DEBUG: Error in assign_bulk_units_to_student: {str(e)}")
-        print(f"DEBUG: Full traceback:")
+        print(f"DEBUG: Adapted upload error: {str(e)}")
         traceback.print_exc()
-        raise HTTPException(500, f"Internal server error: {str(e)}")
-    
-@app.get("/debug/check-student-units-table")
-async def check_student_units_table():
-    """检查 student_units 表结构"""
+        raise HTTPException(500, f"Upload failed: {str(e)}")     
+
+@app.post("/students/bulk-upload-units-adapted")
+async def bulk_upload_units_adapted(
+    files: List[UploadFile] = File(...),
+    overwrite: bool = Form(True),
+):
+    """适配表结构的批量上传"""
     try:
-        # 尝试获取表结构信息
-        test_data = {
-            "student_id": 99999,  # 测试ID
-            "unit_code": "TEST001",
-            "unit_name": "Test Unit",
-            "grade": "P",
-            "completed": True,
-            "credits": 12.5,
-            "earned_credits": 12.5,
-            "term": "2024_TEST"
-        }
-        
-        # 插入测试数据
-        insert_result = client.from_("student_units").insert(test_data).execute()
-        print(f"DEBUG: Test insert result: {insert_result}")
-        
-        # 立即删除测试数据
-        if insert_result.data and 'id' in insert_result.data[0]:
-            delete_result = client.from_("student_units").delete().eq('id', insert_result.data[0]['id']).execute()
-            print(f"DEBUG: Test delete result: {delete_result}")
+        print(f"DEBUG: Adapted bulk upload for {len(files)} files")
+        all_results = []
+        total_success = 0
+        total_errors = 0
+
+        for file in files:
+            file_result = {
+                "filename": file.filename,
+                "status": "pending",
+                "message": "",
+                "student_id": None,
+                "units_processed": 0
+            }
+            
+            try:
+                # 从文件名提取学生ID
+                import re
+                numbers = re.findall(r'\d+', file.filename)
+                if not numbers:
+                    file_result.update({
+                        "status": "error", 
+                        "message": "Cannot extract student ID from filename"
+                    })
+                    all_results.append(file_result)
+                    total_errors += 1
+                    continue
+                    
+                student_id = int(numbers[0])
+                file_result["student_id"] = student_id
+                
+                # 验证学生存在
+                student_check = client.from_("students").select("student_id, student_name").eq("student_id", student_id).execute()
+                if not student_check.data:
+                    file_result.update({
+                        "status": "error",
+                        "message": f"Student {student_id} not found"
+                    })
+                    all_results.append(file_result)
+                    total_errors += 1
+                    continue
+                
+                # 读取和处理Excel文件（使用与单个上传相同的逻辑）
+                file.file.seek(0)
+                df = pd.read_excel(file.file, engine="openpyxl")
+                
+                # 标准化列名
+                df.columns = [str(col).strip().lower().replace(' ', '_') for col in df.columns]
+                
+                # 映射列名
+                column_mapping = {
+                    'course': 'unit_code',
+                    'course_code': 'unit_code',
+                    'course_title': 'unit_name',
+                    'title': 'unit_name'
+                }
+                
+                for old_col, new_col in column_mapping.items():
+                    if old_col in df.columns and new_col not in df.columns:
+                        df.rename(columns={old_col: new_col}, inplace=True)
+                
+                # 清理数据
+                if 'unit_code' not in df.columns:
+                    file_result.update({
+                        "status": "error",
+                        "message": "Missing unit_code column"
+                    })
+                    all_results.append(file_result)
+                    total_errors += 1
+                    continue
+                    
+                df = df.dropna(subset=['unit_code'])
+                df = df[df['unit_code'].astype(str).str.strip() != '']
+                df = df[~df['unit_code'].astype(str).str.strip().isin(['1', '2', '3'])]
+                
+                # 处理数据
+                units = []
+                total_earned_credits = 0
+                
+                for _, row in df.iterrows():
+                    try:
+                        unit_code = str(row['unit_code']).strip()
+                        unit_name = str(row.get('unit_name', '')).strip()
+                        status = str(row.get('status', '')).strip().lower()
+                        grade = str(row.get('grade', '')).strip().upper()
+                        
+                        completed = status in ['complete', 'completed']
+                        if not completed and grade and grade not in ['', 'N', 'F', 'FAIL']:
+                            completed = True
+                        
+                        # 计算学分
+                        try:
+                            earned_credits = float(row.get('earned', 0))
+                        except:
+                            earned_credits = 0.0
+                            
+                        if completed and earned_credits == 0 and grade not in ['N', 'F', 'FAIL']:
+                            try:
+                                earned_credits = float(row.get('credits', 12.5))
+                            except:
+                                earned_credits = 12.5
+                        
+                        units.append({
+                            "student_id": student_id,
+                            "unit_code": unit_code,
+                            "unit_name": unit_name or f"Unit {unit_code}",
+                            "grade": grade,
+                            "completed": completed
+                        })
+                        
+                        total_earned_credits += earned_credits
+                        
+                    except Exception:
+                        continue
+                
+                if not units:
+                    file_result.update({
+                        "status": "error",
+                        "message": "No valid units found"
+                    })
+                    all_results.append(file_result)
+                    total_errors += 1
+                    continue
+                
+                # 删除现有数据
+                if overwrite:
+                    client.from_("student_units").delete().eq("student_id", student_id).execute()
+                
+                # 插入数据
+                result = client.from_("student_units").insert(units).execute()
+                inserted_count = len(result.data) if result.data else 0
+                
+                # 更新学分
+                client.from_("students").update({"credit_point": total_earned_credits}).eq("student_id", student_id).execute()
+                
+                file_result.update({
+                    "status": "success",
+                    "message": f"Processed {inserted_count} units",
+                    "units_processed": inserted_count
+                })
+                
+                all_results.append(file_result)
+                total_success += 1
+                
+            except Exception as e:
+                file_result.update({
+                    "status": "error",
+                    "message": f"File processing failed: {str(e)}"
+                })
+                all_results.append(file_result)
+                total_errors += 1
+                continue
         
         return {
-            "table_status": "accessible",
-            "test_insert": "successful" if insert_result.data else "failed",
-            "insert_result": str(insert_result)
+            "message": f"Bulk upload completed: {total_success} successful, {total_errors} failed",
+            "summary": {
+                "total_files": len(files),
+                "successful_files": total_success,
+                "failed_files": total_errors
+            },
+            "results": all_results
         }
         
     except Exception as e:
-        return {
-            "table_status": "error",
-            "error": str(e)
-        }
+        raise HTTPException(500, f"Bulk upload failed: {str(e)}") 

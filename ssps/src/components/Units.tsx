@@ -31,11 +31,11 @@ export default function Units() {
     return unitCode && unitName && creditPoint !== '';
   };
 
+  const API = "http://localhost:8000";
+
   useEffect(() => {
     fetchUnits();
   }, []);
-
-  const API = "http://localhost:8000";
 
   const fetchUnits = async () => {
     try {
@@ -59,7 +59,7 @@ export default function Units() {
         prerequisites,
         concurrent_prerequisites: concurrentPrerequisites,
         offered_terms: offeredTerms,
-        credit_point: creditPoint
+        credit_point: creditPoint,
       }),
     });
 
@@ -67,7 +67,6 @@ export default function Units() {
     fetchUnits();
   };
 
-  
   const deleteUnit = async (id: number) => {
     await fetch(`${API}/units/${id}`, { method: 'DELETE' });
     fetchUnits();
@@ -84,7 +83,7 @@ export default function Units() {
         prerequisites: newPrerequisites,
         concurrent_prerequisites: newConcurrentPrerequisites,
         offered_terms: newOfferedTerms,
-        credit_point: newCreditPoint
+        credit_point: newCreditPoint,
       }),
     });
 
@@ -111,8 +110,13 @@ export default function Units() {
   };
 
   return (
-    <div className="max-w-4xl mx-auto p-6 mt-10 bg-white rounded-lg shadow-md">
-      <h1 className="text-3xl font-bold text-center text-blue-700 mb-6">📚 Manage Units</h1>
+    <div className="max-w-6xl mx-auto p-8 mt-10 bg-white rounded-xl shadow-lg border-t-8 border-[#D6001C]">
+      <h1 className="text-4xl font-extrabold text-center text-[#D6001C] mb-2 tracking-wide">
+        Swinburne Unit Management
+      </h1>
+      <p className="text-center text-gray-600 mb-8">
+        Manage and organize your university units efficiently
+      </p>
 
       {/* Add Unit Form */}
       <div className="grid grid-cols-1 md:grid-cols-6 gap-4 mb-6">
@@ -120,13 +124,13 @@ export default function Units() {
           value={unitCode}
           onChange={(e) => setUnitCode(e.target.value)}
           placeholder="Unit Code"
-          className="px-4 py-2 border rounded-md"
+          className="px-4 py-2 border rounded-md focus:ring-2 focus:ring-[#D6001C]"
         />
         <input
           value={unitName}
           onChange={(e) => setUnitName(e.target.value)}
           placeholder="Unit Name"
-          className="px-4 py-2 border rounded-md"
+          className="px-4 py-2 border rounded-md focus:ring-2 focus:ring-[#D6001C]"
         />
         <input
           type="number"
@@ -134,101 +138,70 @@ export default function Units() {
           value={creditPoint}
           onChange={(e) => setCreditPoint(Number(e.target.value) || '')}
           placeholder="Credit Points"
-          className="px-4 py-2 border rounded-md"
+          className="px-4 py-2 border rounded-md focus:ring-2 focus:ring-[#D6001C]"
         />
         <input
           value={prerequisites}
           onChange={(e) => setPrerequisites(e.target.value)}
           placeholder="Prerequisites"
-          className="px-4 py-2 border rounded-md"
+          className="px-4 py-2 border rounded-md focus:ring-2 focus:ring-[#D6001C]"
         />
         <input
           value={concurrentPrerequisites}
           onChange={(e) => setConcurrentPrerequisites(e.target.value)}
           placeholder="Concurrent Prerequisites"
-          className="px-4 py-2 border rounded-md"
+          className="px-4 py-2 border rounded-md focus:ring-2 focus:ring-[#D6001C]"
         />
         <input
           value={offeredTerms}
           onChange={(e) => setOfferedTerms(e.target.value)}
           placeholder="Offered Terms"
-          className="px-4 py-2 border rounded-md"
+          className="px-4 py-2 border rounded-md focus:ring-2 focus:ring-[#D6001C]"
         />
       </div>
 
       <button
         onClick={addUnit}
-        className={`px-6 py-2 text-white font-semibold rounded-md mb-6 ${
-          validateUnit() ? 'bg-blue-600 hover:bg-blue-700' : 'bg-gray-400 cursor-not-allowed'
+        className={`px-6 py-2 font-semibold rounded-md text-white mb-6 transition ${
+          validateUnit()
+            ? 'bg-[#D6001C] hover:bg-[#B00018]'
+            : 'bg-gray-400 cursor-not-allowed'
         }`}
       >
-        Add Unit
+        ➕ Add Unit
       </button>
 
       {/* Units Table */}
       <div className="overflow-x-auto">
-        <table className="min-w-full table-auto">
+        <table className="min-w-full border border-gray-200 shadow-sm">
           <thead>
-            <tr className="bg-blue-100">
-              <th className="px-4 py-2 text-left">Unit Code</th>
-              <th className="px-4 py-2 text-left">Unit Name</th>
-              <th className="px-4 py-2 text-left">Credit Points</th>
-              <th className="px-4 py-2 text-left">Prerequisites</th>
-              <th className="px-4 py-2 text-left">Concurrent Prerequisites</th>
-              <th className="px-4 py-2 text-left">Offered Terms</th>
-              <th className="px-4 py-2 text-left">Actions</th>
+            <tr className="bg-[#D6001C] text-white">
+              <th className="px-4 py-2 text-left font-medium">Unit Code</th>
+              <th className="px-4 py-2 text-left font-medium">Unit Name</th>
+              <th className="px-4 py-2 text-left font-medium">Credit Points</th>
+              <th className="px-4 py-2 text-left font-medium">Prerequisites</th>
+              <th className="px-4 py-2 text-left font-medium">Concurrent</th>
+              <th className="px-4 py-2 text-left font-medium">Offered Terms</th>
+              <th className="px-4 py-2 text-left font-medium">Actions</th>
             </tr>
           </thead>
           <tbody>
             {units.map((unit) => (
-              <tr key={unit.id} className="border-b">
-                <td className="px-4 py-2">{unit.unit_code}</td>
+              <tr key={unit.id} className="odd:bg-gray-50 even:bg-white hover:bg-gray-100 transition">
+                <td className="px-4 py-2 font-semibold">{unit.unit_code}</td>
                 <td className="px-4 py-2">{unit.unit_name}</td>
                 <td className="px-4 py-2">{unit.credit_point}</td>
-                <td className="px-4 py-2">
-                  {unit.prerequisites ? (
-                    unit.prerequisites
-                      .split(',')
-                      .filter(Boolean)
-                      .map((preq, i) => (
-                        <span key={i} className="bg-gray-100 px-2 py-1 rounded mr-1 mb-1">
-                          {preq.trim()}
-                        </span>
-                      ))
-                  ) : (
-                    <span className="text-gray-400">None</span>
-                  )}
+                <td className="px-4 py-2 text-sm text-gray-700">
+                  {unit.prerequisites || <span className="text-gray-400">None</span>}
+                </td>
+                <td className="px-4 py-2 text-sm text-gray-700">
+                  {unit.concurrent_prerequisites || <span className="text-gray-400">None</span>}
+                </td>
+                <td className="px-4 py-2 text-sm text-gray-700">
+                  {unit.offered_terms || <span className="text-gray-400">None</span>}
                 </td>
                 <td className="px-4 py-2">
-                  {unit.concurrent_prerequisites ? (
-                    unit.concurrent_prerequisites
-                      .split(',')
-                      .filter(Boolean)
-                      .map((preq, i) => (
-                        <span key={i} className="bg-gray-100 px-2 py-1 rounded mr-1 mb-1">
-                          {preq.trim()}
-                        </span>
-                      ))
-                  ) : (
-                    <span className="text-gray-400">None</span>
-                  )}
-                </td>
-                <td className="px-4 py-2">
-                  {unit.offered_terms ? (
-                    unit.offered_terms
-                      .split(',')
-                      .filter(Boolean)
-                      .map((term, i) => (
-                        <span key={i} className="bg-gray-100 px-2 py-1 rounded mr-1 mb-1">
-                          {term.trim()}
-                        </span>
-                      ))
-                  ) : (
-                    <span className="text-gray-400">None</span>
-                  )}
-                </td>
-                <td className="px-4 py-2">
-                  <div className="flex gap-2">
+                  <div className="flex gap-3">
                     <button
                       onClick={() => {
                         setEditing(unit.id);
@@ -238,13 +211,13 @@ export default function Units() {
                         setNewOfferedTerms(unit.offered_terms);
                         setNewCreditPoint(unit.credit_point);
                       }}
-                      className="text-blue-600 hover:text-blue-800"
+                      className="text-[#D6001C] hover:text-[#B00018] font-semibold"
                     >
                       ✏️ Edit
                     </button>
                     <button
                       onClick={() => deleteUnit(unit.id)}
-                      className="text-red-600 hover:text-red-800"
+                      className="text-black hover:text-[#D6001C] font-semibold"
                     >
                       🗑️ Delete
                     </button>
@@ -256,16 +229,16 @@ export default function Units() {
         </table>
       </div>
 
-      {/* Edit Unit Form */}
+      {/* Edit Section */}
       {editing !== null && (
-        <div className="mt-6 p-4 bg-gray-50 border rounded-md">
-          <h3 className="text-xl font-semibold text-blue-700">Edit Unit</h3>
-          <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mt-4">
+        <div className="mt-8 p-6 bg-gray-50 border-l-4 border-[#D6001C] rounded-md">
+          <h3 className="text-2xl font-bold text-[#D6001C] mb-4">Edit Unit</h3>
+          <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
             <input
               value={newUnitName}
               onChange={(e) => setNewUnitName(e.target.value)}
               placeholder="Unit Name"
-              className="px-4 py-2 border rounded-md"
+              className="px-4 py-2 border rounded-md focus:ring-2 focus:ring-[#D6001C]"
             />
             <input
               type="number"
@@ -273,39 +246,39 @@ export default function Units() {
               value={newCreditPoint}
               onChange={(e) => setNewCreditPoint(Number(e.target.value) || '')}
               placeholder="Credit Points"
-              className="px-4 py-2 border rounded-md"
+              className="px-4 py-2 border rounded-md focus:ring-2 focus:ring-[#D6001C]"
             />
             <input
               value={newPrerequisites}
               onChange={(e) => setNewPrerequisites(e.target.value)}
               placeholder="Prerequisites"
-              className="px-4 py-2 border rounded-md"
+              className="px-4 py-2 border rounded-md focus:ring-2 focus:ring-[#D6001C]"
             />
             <input
               value={newConcurrentPrerequisites}
               onChange={(e) => setNewConcurrentPrerequisites(e.target.value)}
               placeholder="Concurrent Prerequisites"
-              className="px-4 py-2 border rounded-md"
+              className="px-4 py-2 border rounded-md focus:ring-2 focus:ring-[#D6001C]"
             />
             <input
               value={newOfferedTerms}
               onChange={(e) => setNewOfferedTerms(e.target.value)}
               placeholder="Offered Terms"
-              className="px-4 py-2 border rounded-md"
+              className="px-4 py-2 border rounded-md focus:ring-2 focus:ring-[#D6001C]"
             />
           </div>
-          <div className="flex gap-2 mt-4">
+          <div className="flex gap-3 mt-4">
             <button
               onClick={() => updateUnit(editing)}
-              className="px-4 py-2 bg-green-500 text-white rounded-md hover:bg-green-600"
+              className="px-4 py-2 bg-[#D6001C] text-white rounded-md hover:bg-[#B00018]"
             >
-              Save Changes
+              💾 Save Changes
             </button>
             <button
               onClick={resetEditForm}
               className="px-4 py-2 bg-gray-300 text-gray-800 rounded-md hover:bg-gray-400"
             >
-              Cancel
+              ✖ Cancel
             </button>
           </div>
         </div>
