@@ -24,7 +24,7 @@ export default function Units() {
   const [newUnitName, setNewUnitName] = useState('');
   const [newPrerequisites, setNewPrerequisites] = useState('');
   const [newConcurrentPrerequisites, setNewConcurrentPrerequisites] = useState('');
-  const [newOfferedTerms, setNewOfferedTerms] = useState('');
+  const [newOfferedTerms, setNewOfferedTerms] = useState<string | null>(null);
   const [newCreditPoint, setNewCreditPoint] = useState<number | ''>('');
 
   const validateUnit = () => {
@@ -51,7 +51,7 @@ export default function Units() {
   const addUnit = async () => {
     if (!validateUnit()) return;
 
-    await fetch(`${API}/units`, {
+    await fetch(`${API}/api/units`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -69,14 +69,14 @@ export default function Units() {
   };
 
   const deleteUnit = async (id: number) => {
-    await fetch(`${API}/units/${id}`, { method: 'DELETE' });
+    await fetch(`${API}/api/units/${id}`, { method: 'DELETE' });
     fetchUnits();
   };
 
   const updateUnit = async (id: number) => {
     if (!newUnitName || newCreditPoint === '') return;
 
-    await fetch(`${API}/units/${id}`, {
+    await fetch(`${API}/api/units/${id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -106,7 +106,7 @@ export default function Units() {
     setNewUnitName('');
     setNewPrerequisites('');
     setNewConcurrentPrerequisites('');
-    setNewOfferedTerms('');
+    setNewOfferedTerms(null);
     setNewCreditPoint('');
   };
 
@@ -262,8 +262,8 @@ export default function Units() {
               className="px-4 py-2 border rounded-md focus:ring-2 focus:ring-[#D6001C]"
             />
             <input
-              value={newOfferedTerms}
-              onChange={(e) => setNewOfferedTerms(e.target.value)}
+              value={newOfferedTerms ?? ""}
+              onChange={(e) => setNewOfferedTerms(e.target.value || null)}
               placeholder="Offered Terms"
               className="px-4 py-2 border rounded-md focus:ring-2 focus:ring-[#D6001C]"
             />
