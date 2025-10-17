@@ -293,9 +293,6 @@ const CreateStudyPlanner: React.FC = () => {
       <div className="flex items-center justify-between mb-8">
         <div>
           <h1 className="text-3xl font-bold text-[#b71c1c]">Create Study Planner</h1>
-          <p className="text-gray-600 mt-1">
-            Design or copy an academic study planner for your program intake.
-          </p>
         </div>
       </div>
 
