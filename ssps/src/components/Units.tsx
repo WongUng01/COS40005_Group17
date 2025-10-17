@@ -31,13 +31,11 @@ export default function Units() {
     return unitCode && unitName && creditPoint !== '';
   };
 
-  const API = "http://localhost:8000";
-
   useEffect(() => {
     fetchUnits();
   }, []);
 
-  //const API = "http://localhost:8000";
+  // const API = "http://localhost:8000";
   const API = "http://127.0.0.1:8000";
 
   const fetchUnits = async () => {
