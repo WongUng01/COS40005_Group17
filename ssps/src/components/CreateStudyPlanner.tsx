@@ -77,7 +77,7 @@ const CreateStudyPlanner: React.FC = () => {
   const studyPlannerSemesters = [
     "1", "2", "3", "4", "Summer", "Winter", "Term 1", "Term 2", "Term 3", "Term 4",
   ];
-  const unitTypes = ["Major", "Core", "Elective", "MPU", "WIL"];
+  const unitTypes = ["Major", "Core", "Elective", "MPU", "WIL", "Special"];
 
   const unitTypeColors: Record<string, string> = {
     Core: "bg-blue-100 text-blue-800",
@@ -85,6 +85,7 @@ const CreateStudyPlanner: React.FC = () => {
     Elective: "bg-green-100 text-green-800",
     MPU: "bg-yellow-100 text-yellow-800",
     WIL: "bg-purple-100 text-purple-800",
+    Special: "bg-sky-100 text-sky-800",
   };
 
   const unitOptions = units.map((u) => ({ value: u.unit_code, code: u.unit_code, name: u.unit_name }));
