@@ -14,6 +14,9 @@ import {
   FaEye,
   FaChevronDown,
   FaChevronUp,
+  FaUsers,
+  FaGraduationCap,
+  FaFileExcel,
 } from 'react-icons/fa';
 
 const navItems = [
@@ -27,7 +30,16 @@ const navItems = [
       { label: 'View Study Planner', href: '/study-planner', icon: <FaEye /> },
     ],
   },
-  { label: 'Students', href: '/students', icon: <FaUserGraduate /> },
+  {
+    label: 'Students',
+    icon: <FaUserGraduate />,
+    children: [
+      { label: 'Students Dashboard', href: '/students', icon: <FaUsers /> },
+      { label: 'Students Information', href: '/students/information', icon: <FaUserGraduate /> },
+      { label: 'Bulk Upload', href: '/students/bulk-upload', icon: <FaFileExcel /> },
+      { label: 'Check Graduation', href: '/students/check-graduation', icon: <FaGraduationCap /> },
+    ],
+  },
 ];
 
 export default function Sidebar() {
@@ -72,6 +84,7 @@ export default function Sidebar() {
 
   const renderNavItem = (item: typeof navItems[number]) => {
     const isActive = item.href && pathname === item.href;
+    const hasActiveChild = item.children?.some(child => child.href === pathname);
 
     if (item.children) {
       const isExpanded = expandedMenus[item.label];
@@ -80,11 +93,15 @@ export default function Sidebar() {
           <button
             onClick={() => handleTopLevelClick(item)}
             className={`flex items-center justify-between gap-3 px-5 py-3 text-sm font-medium w-full transition-all duration-150 rounded-none border-l-4 ${
-              isExpanded ? 'bg-red-50 border-[#cc0000] text-[#cc0000]' : 'border-transparent text-gray-700 hover:bg-gray-50 hover:text-[#cc0000]'
+              isExpanded || hasActiveChild 
+                ? 'bg-red-50 border-[#cc0000] text-[#cc0000]' 
+                : 'border-transparent text-gray-700 hover:bg-gray-50 hover:text-[#cc0000]'
             }`}
           >
             <span className="flex items-center gap-3">
-              <span className="text-lg text-gray-600">{item.icon}</span>
+              <span className={`text-lg ${isExpanded || hasActiveChild ? 'text-[#cc0000]' : 'text-gray-600'}`}>
+                {item.icon}
+              </span>
               {item.label}
             </span>
             {isExpanded ? <FaChevronUp className="text-gray-600" /> : <FaChevronDown className="text-gray-600" />}
@@ -104,7 +121,9 @@ export default function Sidebar() {
                       : 'border-transparent text-gray-700 hover:bg-gray-50 hover:text-[#cc0000]'
                   }`}
                 >
-                  <span className={`text-lg ${isChildActive ? 'text-[#cc0000]' : 'text-gray-600'}`}>{child.icon}</span>
+                  <span className={`text-lg ${isChildActive ? 'text-[#cc0000]' : 'text-gray-600'}`}>
+                    {child.icon}
+                  </span>
                   <span>{child.label}</span>
                 </Link>
               );
@@ -122,7 +141,9 @@ export default function Sidebar() {
           isActive ? 'bg-red-50 border-[#cc0000] text-[#cc0000]' : 'border-transparent text-gray-700 hover:bg-gray-50 hover:text-[#cc0000]'
         }`}
       >
-        <span className={`text-lg ${isActive ? 'text-[#cc0000]' : 'text-gray-600'}`}>{item.icon}</span>
+        <span className={`text-lg ${isActive ? 'text-[#cc0000]' : 'text-gray-600'}`}>
+          {item.icon}
+        </span>
         <span>{item.label}</span>
       </Link>
     );
@@ -160,10 +181,12 @@ export default function Sidebar() {
       </div>
 
       {/* Navigation */}
-      <nav className="flex flex-col mt-4">{navItems.map(renderNavItem)}</nav>
+      <nav className="flex flex-col mt-4 flex-1 overflow-y-auto">
+        {navItems.map(renderNavItem)}
+      </nav>
 
       {/* Footer */}
-      <div className="mt-auto py-3 text-center text-xs text-gray-400 border-t border-gray-100">
+      <div className="py-3 text-center text-xs text-gray-400 border-t border-gray-100">
         © 2025 Swinburne SSPS
       </div>
     </aside>

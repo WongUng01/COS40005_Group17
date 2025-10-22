@@ -1,0 +1,309 @@
+// app/students/check-graduation/page.tsx
+'use client';
+import { useEffect, useState } from 'react';
+import Link from 'next/link';
+import axios from 'axios';
+import toast from 'react-hot-toast';
+
+type Student = {
+  id: number;
+  graduation_status: boolean;
+  student_name: string;
+  student_id: number;
+  student_email: string;
+  student_course: string;
+  student_major: string;
+  intake_term: string;
+  intake_year: string;
+  credit_point: number;
+  created_at: string;
+};
+
+export default function CheckGraduationPage() {
+  const [students, setStudents] = useState<Student[]>([]);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [searchResults, setSearchResults] = useState<Student[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
+  const [checkingGraduation, setCheckingGraduation] = useState<number | null>(null);
+  const API_URL = 'http://localhost:8000';
+
+  useEffect(() => {
+    fetchStudents();
+  }, []);
+
+  const fetchStudents = async () => {
+    try {
+      const res = await fetch(`${API_URL}/students`);
+      const data = await res.json();
+
+      if (!res.ok) {
+        console.error('Failed to load students:', data);
+        return;
+      }
+
+      setStudents(data);
+    } catch (err) {
+      toast.error('Failed to load students');
+    }
+  };
+
+  const handleSearch = async () => {
+    if (!searchTerm.trim()) {
+      toast.error('Please enter a student ID to search');
+      return;
+    }
+
+    setIsSearching(true);
+    try {
+      const response = await axios.get(`${API_URL}/students/search/${searchTerm}`);
+      setSearchResults(response.data);
+      toast.success(`Found ${response.data.length} student(s)`);
+    } catch (err: any) {
+      if (err.response?.status === 404) {
+        setSearchResults([]);
+        toast.error('No student found with that ID');
+      } else {
+        toast.error('Search failed: ' + (err.response?.data?.detail || err.message));
+      }
+    } finally {
+      setIsSearching(false);
+    }
+  };
+
+  const clearSearch = () => {
+    setSearchTerm('');
+    setSearchResults([]);
+  };
+
+  const checkGraduation = async (studentId: number) => {
+    try {
+      setCheckingGraduation(studentId);
+      
+      const response = await axios.put(`${API_URL}/students/${studentId}/graduate`, null, {
+        headers: { Accept: "application/json" },
+        timeout: 30000
+      });
+
+      const data = response.data;
+      console.log("DEBUG: graduation PUT response raw:", data);
+
+      const gradResult = data?.graduation_result ?? data;
+      const updatedStudent = data?.updated_student ?? null;
+
+      if (!gradResult) {
+        console.warn("DEBUG: graduation result missing in response", data);
+        toast.error("Graduation check returned unexpected shape; see console.");
+        return;
+      }
+
+      // Update local state
+      if (updatedStudent && typeof updatedStudent === "object") {
+        setStudents(prev =>
+          prev.map(s =>
+            s.student_id === studentId
+              ? { ...s, credit_point: updatedStudent.credit_point, graduation_status: updatedStudent.graduation_status }
+              : s
+          )
+        );
+      } else {
+        setStudents(prev =>
+          prev.map(s =>
+            s.student_id === studentId
+              ? { ...s, credit_point: gradResult.total_credits ?? s.credit_point, graduation_status: !!gradResult.can_graduate }
+              : s
+          )
+        );
+      }
+
+      // Show results
+      if (gradResult.can_graduate) {
+        toast.success("Graduation Approved");
+        alert(`✅ Graduation Approved!\nTotal Credits: ${gradResult.total_credits}/300\nPlanner: ${gradResult.planner_info ?? "Unknown"}`);
+      } else {
+        let message = `❌ Not Eligible for Graduation\n\n`;
+        message += `Total Credits: ${gradResult.total_credits ?? "N/A"}/300\n`;
+        message += `Missing Core: ${Array.isArray(gradResult.missing_core_units) ? gradResult.missing_core_units.join(", ") : "N/A"}\n`;
+        message += `Missing Major: ${Array.isArray(gradResult.missing_major_units) ? gradResult.missing_major_units.join(", ") : "N/A"}\n`;
+        alert(message);
+      }
+
+    } catch (err) {
+      console.error("Graduation check error (frontend):", err);
+
+      if (axios.isAxiosError(err)) {
+        console.log("DEBUG: error.response:", err.response);
+        const status = err.response?.status;
+        const respData = err.response?.data;
+        const serverMsg = respData?.detail ?? respData?.message ?? JSON.stringify(respData);
+        toast.error(`Graduation check failed (status ${status}).`);
+        alert(`Graduation check failed (status ${status})\n\nServer message:\n${serverMsg}`);
+      } else {
+        toast.error("Graduation check failed (non-Axios error). See console.");
+      }
+    } finally {
+      setCheckingGraduation(null);
+    }
+  };
+
+  const displayStudents = searchResults.length > 0 ? searchResults : students;
+
+  return (
+    <div className="max-w-7xl mx-auto p-6 bg-gray-50 min-h-screen">
+      {/* Header with Navigation */}
+      <div className="flex justify-between items-center mb-6">
+        <h1 className="text-3xl font-bold text-[#E31C25]">Check Graduation</h1>
+        <div className="flex gap-4">
+          <Link 
+            href="/students" 
+            className="px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700"
+          >
+            Back to Main
+          </Link>
+          <Link 
+            href="/students/information" 
+            className="px-4 py-2 bg-[#E31C25] text-white rounded hover:bg-[#B71C1C]"
+          >
+            View All Students
+          </Link>
+        </div>
+      </div>
+
+      {/* Search Section */}
+      <div className="bg-white p-6 rounded-lg shadow-md mb-6 border border-[#E31C25]/40">
+        <h2 className="text-xl font-semibold mb-4 text-[#E31C25]">Search Student by ID</h2>
+        <div className="flex gap-4 flex-wrap">
+          <input
+            type="number"
+            placeholder="Enter Student ID"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="p-2 border rounded flex-grow border-gray-300 focus:ring-2 focus:ring-[#E31C25] text-black"
+          />
+          <button
+            onClick={handleSearch}
+            disabled={isSearching}
+            className="px-4 py-2 bg-[#E31C25] text-white rounded hover:bg-[#B71C1C] disabled:opacity-60"
+          >
+            {isSearching ? 'Searching...' : 'Search'}
+          </button>
+          {searchResults.length > 0 && (
+            <button
+              onClick={clearSearch}
+              className="px-4 py-2 bg-black text-white rounded hover:opacity-95"
+            >
+              Clear Search
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Graduation Status Overview */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+        <div className="bg-white p-4 rounded-lg shadow border border-green-200">
+          <div className="text-center">
+            <div className="text-2xl font-bold text-green-600">
+              {displayStudents.filter(s => s.graduation_status).length}
+            </div>
+            <div className="text-sm text-gray-600">Eligible to Graduate</div>
+          </div>
+        </div>
+        <div className="bg-white p-4 rounded-lg shadow border border-yellow-200">
+          <div className="text-center">
+            <div className="text-2xl font-bold text-yellow-600">
+              {displayStudents.filter(s => !s.graduation_status && s.credit_point >= 240).length}
+            </div>
+            <div className="text-sm text-gray-600">Near Completion (240+ credits)</div>
+          </div>
+        </div>
+        <div className="bg-white p-4 rounded-lg shadow border border-red-200">
+          <div className="text-center">
+            <div className="text-2xl font-bold text-red-600">
+              {displayStudents.filter(s => !s.graduation_status && s.credit_point < 240).length}
+            </div>
+            <div className="text-sm text-gray-600">Need More Credits</div>
+          </div>
+        </div>
+      </div>
+
+      {/* Students Table for Graduation Check */}
+      <div className="bg-white rounded-lg shadow-md overflow-x-auto border border-gray-200">
+        <table className="min-w-full divide-y divide-gray-200">
+          <thead className="bg-[#E31C25]">
+            <tr>
+              <th className="px-6 py-3 text-left text-white font-medium">Graduation Status</th>
+              <th className="px-6 py-3 text-left text-white font-medium">Name</th>
+              <th className="px-6 py-3 text-left text-white font-medium">Student ID</th>
+              <th className="px-6 py-3 text-left text-white font-medium">Course</th>
+              <th className="px-6 py-3 text-left text-white font-medium">Major</th>
+              <th className="px-6 py-3 text-left text-white font-medium">Credits</th>
+              <th className="px-6 py-3 text-left text-white font-medium">Actions</th>
+            </tr>
+          </thead>
+          <tbody className="bg-white divide-y divide-gray-200">
+            {displayStudents.map((student) => (
+              <tr key={student.student_id} className="hover:bg-gray-50">
+                <td className="px-6 py-4">
+                  <span
+                    className={`px-3 py-1 rounded-full text-white text-sm font-semibold ${
+                      student.graduation_status 
+                        ? 'bg-green-600' 
+                        : student.credit_point >= 240 
+                          ? 'bg-yellow-500' 
+                          : 'bg-red-500'
+                    }`}
+                  >
+                    {student.graduation_status ? 'Eligible' : student.credit_point >= 240 ? 'Near Completion' : 'Not Eligible'}
+                  </span>
+                </td>
+                <td className="px-6 py-4 font-medium">{student.student_name}</td>
+                <td className="px-6 py-4">{student.student_id}</td>
+                <td className="px-6 py-4">{student.student_course}</td>
+                <td className="px-6 py-4">{student.student_major}</td>
+                <td className="px-6 py-4">
+                  <span className={`font-semibold ${
+                    student.credit_point >= 300 ? 'text-green-600' : 
+                    student.credit_point >= 240 ? 'text-yellow-600' : 'text-red-600'
+                  }`}>
+                    {student.credit_point}/300
+                  </span>
+                </td>
+                <td className="px-6 py-4">
+                  <button
+                    onClick={() => checkGraduation(student.student_id)}
+                    disabled={checkingGraduation === student.student_id}
+                    className={`px-4 py-2 rounded text-white text-sm font-medium ${
+                      checkingGraduation === student.student_id
+                        ? 'bg-gray-400 cursor-not-allowed'
+                        : 'bg-green-600 hover:bg-green-700'
+                    }`}
+                  >
+                    {checkingGraduation === student.student_id ? 'Checking...' : 'Check Graduation'}
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Legend */}
+      <div className="mt-6 bg-white p-4 rounded-lg shadow border border-gray-200">
+        <h3 className="font-semibold text-gray-800 mb-2">Graduation Status Legend</h3>
+        <div className="flex flex-wrap gap-4 text-sm">
+          <div className="flex items-center gap-2">
+            <div className="w-3 h-3 bg-green-600 rounded-full"></div>
+            <span>Eligible to Graduate</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="w-3 h-3 bg-yellow-500 rounded-full"></div>
+            <span>Near Completion (240+ credits)</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="w-3 h-3 bg-red-500 rounded-full"></div>
+            <span>Need More Credits</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}

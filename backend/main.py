@@ -82,9 +82,9 @@ app.add_middleware(
 class UnitBase(BaseModel):
     unit_code: str
     unit_name: str
-    prerequisites: str
-    concurrent_prerequisites: str
-    offered_terms: str
+    prerequisites: Optional[str] = None
+    concurrent_prerequisite: Optional[str] = None  # Match frontend (without 's')
+    offered_terms: Optional[str] = None
     credit_point: float
 
 class StudentBase(BaseModel):
@@ -793,7 +793,7 @@ async def create_unit(unit: UnitBase):
         raise HTTPException(status_code=400, detail=f"Creation failed: {e}")
 
 @app.put("/units/{unit_id}")
-async def update_unit(unit_id: int, updated: UnitBase):
+async def update_unit(unit_id: str, updated: UnitBase):
     try:
         response = (
             client.from_('units')
@@ -809,8 +809,8 @@ async def update_unit(unit_id: int, updated: UnitBase):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Update failed: {e}")
 
-@app.delete("/units/{unit_id")
-async def delete_unit(unit_id: int):
+@app.delete("/units/{unit_id}")
+async def delete_unit(unit_id: str):
     try:
         response = (
             client.from_('units')
