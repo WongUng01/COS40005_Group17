@@ -207,7 +207,7 @@ export default function Units() {
 
   const fetchUnits = async () => {
     try {
-      const res = await fetch(`${API}/units`);
+      const res = await fetch(`${API}/api/units`);
       if (!res.ok) {
         throw new Error(`HTTP error! status: ${res.status}`);
       }
