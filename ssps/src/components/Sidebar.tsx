@@ -14,6 +14,7 @@ import {
   FaEye,
   FaChevronDown,
   FaChevronUp,
+  FaChartBar,
 } from 'react-icons/fa';
 
 const navItems = [
@@ -28,6 +29,7 @@ const navItems = [
     ],
   },
   { label: 'Students', href: '/students', icon: <FaUserGraduate /> },
+  { label: 'Analytics', href: '/analytics-dashboard', icon: <FaChartBar /> },
 ];
 
 export default function Sidebar() {
