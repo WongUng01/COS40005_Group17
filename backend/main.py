@@ -6,7 +6,7 @@ import uuid
 import supabase
 from supabaseClient import get_supabase_client
 from pydantic import BaseModel
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Any
 from io import BytesIO
 import traceback
 from fastapi.responses import JSONResponse
@@ -1569,3 +1569,182 @@ async def bulk_upload_units_adapted(
         
     except Exception as e:
         raise HTTPException(500, f"Bulk upload failed: {str(e)}") 
+    
+@app.get("/api/analytics/overview")
+def analytics_overview():
+    # 🧮 Students by intake year
+    rows = supabase_client.table("students").select("intake_year").execute().data or []
+    by_year: Dict[str, int] = {}
+    for r in rows:
+        y = r.get("intake_year") or "Unknown"
+        by_year[y] = by_year.get(y, 0) + 1
+    students_by_year = [{"intake_year": k, "total_students": v} for k, v in sorted(by_year.items())]
+
+    # 🎓 Students by program + major + intake year (excluding graduated)
+    rows2 = (
+        supabase_client.table("students")
+        .select("student_course, student_major, intake_year, graduation_status")
+        .execute()
+        .data or []
+    )
+    pm_map: Dict[tuple, int] = {}
+    for r in rows2:
+        if r.get("graduation_status"):  # skip graduated students
+            continue
+        program = r.get("student_course") or "Unknown Program"
+        major = r.get("student_major") or "Unknown Major"
+        year = r.get("intake_year") or "Unknown"
+        key = (program, major, year)
+        pm_map[key] = pm_map.get(key, 0) + 1
+    students_by_program_major = [
+        {"program": k[0], "major": k[1], "intake_year": k[2], "total_students": v}
+        for k, v in pm_map.items()
+    ]
+
+    # 🏅 Graduation by intake year
+    rows3 = (
+        supabase_client.table("students")
+        .select("intake_year, graduation_status")
+        .execute()
+        .data or []
+    )
+    grad_map: Dict[str, Dict[str, int]] = {}
+    for r in rows3:
+        year = r.get("intake_year") or "Unknown"
+        if year not in grad_map:
+            grad_map[year] = {"graduated": 0, "not_graduated": 0}
+        if r.get("graduation_status"):
+            grad_map[year]["graduated"] += 1
+        else:
+            grad_map[year]["not_graduated"] += 1
+    graduation_by_year = [{"intake_year": k, **v} for k, v in sorted(grad_map.items())]
+
+    return {
+        "students_by_year": students_by_year,
+        "students_by_program_major": students_by_program_major,
+        "graduation_by_year": graduation_by_year,
+    }
+
+@app.get("/api/analytics/graduation-summary")
+def graduation_summary():
+    rows = supabase_client.table("students").select("student_course, student_major, intake_year, graduation_status").execute().data or []
+    summary: Dict[tuple, int] = {}
+    for r in rows:
+        if r.get("graduation_status"):
+            key = (r.get("student_course") or "Unknown", r.get("student_major") or "Unknown", r.get("intake_year") or "Unknown")
+            summary[key] = summary.get(key, 0) + 1
+    return [{"program": k[0], "major": k[1], "year": k[2], "graduates": v} for k, v in summary.items()]
+
+@app.get("/api/analytics/grade-distribution")
+def grade_distribution(request: Request):
+    try:
+        # ✅ Read query parameter correctly
+        unit_code = request.query_params.get("unit_code")
+
+        # ✅ Fetch all unit codes (for dropdown)
+        all_rows = supabase_client.table("student_units").select("unit_code").execute().data or []
+        available_units = sorted(list({(r["unit_code"] or "").strip() for r in all_rows if r.get("unit_code")}))
+
+        # ✅ Prepare query for grade distribution
+        query = supabase_client.table("student_units").select("unit_code, grade")
+
+        if unit_code:
+            query = query.eq("unit_code", unit_code.strip())
+
+        rows = query.execute().data or []
+
+        # ✅ Count grades only for relevant rows
+        grade_counts = {}
+        for r in rows:
+            grade = (r.get("grade") or "Unknown").strip()
+            grade_counts[grade] = grade_counts.get(grade, 0) + 1
+
+        return {
+            "grades": grade_counts,
+            "available_units": available_units,
+        }
+
+    except Exception as e:
+        print("🔥 Error in /api/analytics/grade-distribution:", e)
+        return {"error": str(e)}
+
+@app.get("/api/analytics/unit-performance")
+def unit_performance():
+    rows = supabase_client.table("student_units").select("unit_code, unit_name, grade, completed").execute().data or []
+    unit_map: Dict[str, Dict[str, Any]] = {}
+    for r in rows:
+        code = r.get("unit_code") or "Unknown"
+        name = r.get("unit_name") or ""
+        if code not in unit_map:
+            unit_map[code] = {"unit_name": name, "grades": [], "completed": 0, "total": 0}
+        unit_map[code]["grades"].append((r.get("grade") or "N/A").upper())
+        unit_map[code]["total"] += 1
+        if r.get("completed"):
+            unit_map[code]["completed"] += 1
+
+    def grade_to_point(g: str) -> float:
+        map_ = {"A+": 4.0, "A": 4.0, "A-": 3.7, "B+": 3.3, "B": 3.0, "B-": 2.7,
+                "C+": 2.3, "C": 2.0, "C-": 1.7, "D": 1.0, "F": 0.0}
+        return map_.get(g, 0.0)
+
+    result = []
+    for code, v in unit_map.items():
+        grades = v["grades"]
+        avg_point = round(sum(grade_to_point(g) for g in grades) / len(grades), 2) if grades else 0.0
+        completion_rate = round((v["completed"] / v["total"]) * 100, 1) if v["total"] else 0.0
+        result.append({
+            "unit_code": code,
+            "unit_name": v["unit_name"],
+            "avg_grade": avg_point,
+            "completion_rate": completion_rate
+        })
+    return result
+
+@app.get("/api/analytics/trends")
+def graduation_trends():
+    rows = supabase_client.table("students").select("intake_year, graduation_status").execute().data or []
+
+    trends: Dict[str, Dict[str, int]] = {}
+
+    for r in rows:
+        year = str(r.get("intake_year") or "Unknown")
+        grad_status = r.get("graduation_status")
+
+        if year not in trends:
+            trends[year] = {"graduated": 0, "not_graduated": 0}
+
+        if grad_status:
+            trends[year]["graduated"] += 1
+        else:
+            trends[year]["not_graduated"] += 1
+
+    # ✅ Proper numeric sorting by year, Unknown goes last
+    sorted_trends = sorted(
+        trends.items(),
+        key=lambda x: int(x[0]) if x[0].isdigit() else 9999
+    )
+
+    return [
+        {
+            "year": year,
+            "graduated": data["graduated"],
+            "not_graduated": data["not_graduated"],
+        }
+        for year, data in sorted_trends
+    ]
+
+@app.get("/api/analytics/program-breakdown")
+def program_breakdown():
+    rows = supabase_client.table("students").select("student_course, student_major, intake_year, intake_term, graduation_status").execute().data or []
+    summary: Dict[tuple, Dict[str, int]] = {}
+    for r in rows:
+        key = (r.get("student_course") or "Unknown", r.get("student_major") or "Unknown", r.get("intake_year") or "Unknown", r.get("intake_term") or "Unknown")
+        if key not in summary:
+            summary[key] = {"total": 0, "graduated": 0}
+        summary[key]["total"] += 1
+        if r.get("graduation_status"):
+            summary[key]["graduated"] += 1
+    return [
+        {"program": k[0], "major": k[1], "intake_year": k[2], "intake_term": k[3], "total": v["total"], "graduated": v["graduated"]}
+        for k, v in summary.items()
+    ]

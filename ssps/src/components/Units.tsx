@@ -198,8 +198,6 @@ export default function Units() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isDeleting, setIsDeleting] = useState<string | null>(null);
 
-  const API = 'http://localhost:8000';
-
   useEffect(() => {
     fetchUnits();
   }, []);

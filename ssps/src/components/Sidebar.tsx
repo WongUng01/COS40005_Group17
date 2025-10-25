@@ -17,6 +17,7 @@ import {
   FaUsers,
   FaGraduationCap,
   FaFileExcel,
+  FaChartBar,
 } from 'react-icons/fa';
 
 const navItems = [
@@ -40,6 +41,7 @@ const navItems = [
       { label: 'Check Graduation', href: '/students/check-graduation', icon: <FaGraduationCap /> },
     ],
   },
+  { label: 'Analytics', href: '/analytics-dashboard', icon: <FaChartBar /> },
 ];
 
 export default function Sidebar() {

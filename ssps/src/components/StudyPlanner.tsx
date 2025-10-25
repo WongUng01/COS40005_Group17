@@ -4,6 +4,7 @@ import React, { useEffect, useState } from "react";
 import axios from "axios";
 import classNames from "classnames";
 import Select from "react-select";
+import toast from "react-hot-toast";
 import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
 import {
   Search,
@@ -181,35 +182,88 @@ const ViewStudyPlannerTabs: React.FC = () => {
   };
 
   const handleRemoveRow = (plannerId: number, unit: any) => {
-    if (unit?.id) {
-      if (!window.confirm("Are you sure you want to delete this unit? This will be removed when you press Save.")) return;
-      setDeletedUnits((prev) => ({ ...prev, [plannerId]: [...(prev[plannerId] || []), unit.id] }));
+    if (!unit) return;
+
+    // If unit has an id, show confirmation toast
+    if (unit.id) {
+      toast((t) => (
+        <div className="text-sm">
+          <p className="mb-2 font-medium">Delete this unit?</p>
+          <p className="text-gray-500 mb-3">
+            This will be removed when you press <strong>Save</strong>.
+          </p>
+          <div className="flex gap-2 justify-end">
+            <button
+              onClick={() => {
+                setDeletedUnits((prev) => ({ ...prev, [plannerId]: [...(prev[plannerId] || []), unit.id] }));
+                setDraftUnitsMap((prev) => {
+                  const current = prev[plannerId] || [];
+                  return { ...prev, [plannerId]: current.filter((u) => u.id !== unit.id) };
+                });
+                toast.dismiss(t.id);
+                toast.success("Unit marked for deletion");
+              }}
+              className="px-3 py-1 bg-red-600 text-white rounded hover:bg-red-700"
+            >
+              Yes, Delete
+            </button>
+            <button
+              onClick={() => toast.dismiss(t.id)}
+              className="px-3 py-1 bg-gray-200 text-gray-700 rounded hover:bg-gray-300"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      ));
+      return;
     }
 
+    // For new units (no id), just remove immediately
     setDraftUnitsMap((prev) => {
       const current = prev[plannerId] || [];
-      const filtered = current.filter((u) => {
-        if (unit?.id != null) return u.id !== unit.id;
-        if (unit?.tempId != null) return u.tempId !== unit.tempId;
-        return true;
-      });
-      return { ...prev, [plannerId]: filtered };
+      return {
+        ...prev,
+        [plannerId]: current.filter((u) => u.tempId !== unit.tempId),
+      };
     });
   };
 
   const handleRemovePlanner = async (plannerId: number) => {
-    if (!window.confirm("Are you sure you want to remove this study planner? This action cannot be undone.")) return;
-    try {
-      await axios.delete(`${API}/api/delete-study-planner`, { params: { id: plannerId } });
-      setTabs((prev) => prev.filter((p) => p.id !== plannerId));
-      setFilteredPlanners((prev) => prev.filter((p) => p.id !== plannerId));
-      const newUnitsMap = { ...unitsMap };
-      delete newUnitsMap[plannerId];
-      setUnitsMap(newUnitsMap);
-    } catch (err) {
-      console.error("Failed to remove planner", err);
-      setMessage("Failed to remove study planner.");
-    }
+    toast((t) => (
+      <div className="text-sm">
+        <p className="mb-2 font-medium">Delete this study planner?</p>
+        <p className="text-gray-500 mb-3">This action cannot be undone.</p>
+        <div className="flex gap-2 justify-end">
+          <button
+            onClick={async () => {
+              try {
+                await axios.delete(`${API}/api/delete-study-planner`, { params: { id: plannerId } });
+                setTabs((prev) => prev.filter((p) => p.id !== plannerId));
+                setFilteredPlanners((prev) => prev.filter((p) => p.id !== plannerId));
+                const newUnitsMap = { ...unitsMap };
+                delete newUnitsMap[plannerId];
+                setUnitsMap(newUnitsMap);
+                toast.success("Study planner removed successfully");
+              } catch (err) {
+                console.error(err);
+                toast.error("Failed to remove study planner. Please try again.");
+              }
+              toast.dismiss(t.id);
+            }}
+            className="px-3 py-1 bg-red-600 text-white rounded hover:bg-red-700"
+          >
+            Yes, Delete
+          </button>
+          <button
+            onClick={() => toast.dismiss(t.id)}
+            className="px-3 py-1 bg-gray-200 text-gray-700 rounded hover:bg-gray-300"
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+    ));
   };
 
   const handleSavePlanner = async (plannerId: number) => {
@@ -222,9 +276,7 @@ const ViewStudyPlannerTabs: React.FC = () => {
       );
 
       if (missingUnits.length > 0) {
-        alert(
-          `Please select a unit for all non-elective rows. Missing in ${missingUnits.length} row(s).`
-        );
+        toast.error(`Please select a unit for all non-elective rows. Missing in ${missingUnits.length} row(s).`);
         return;
       }
 
@@ -234,7 +286,7 @@ const ViewStudyPlannerTabs: React.FC = () => {
         setDeletedUnits((prev) => ({ ...prev, [plannerId]: [] }));
       }
 
-      const existingUnits = (draftUnits || []).filter((u: any) => !!u.id);
+      const existingUnits = draftUnits.filter((u: any) => !!u.id);
       if (existingUnits.length > 0) {
         await axios.put(`${API}/api/update-study-planner-order`, {
           planner_id: plannerId,
@@ -242,7 +294,6 @@ const ViewStudyPlannerTabs: React.FC = () => {
         });
       }
 
-      // Add or update rows
       await Promise.all(
         draftUnits.map(async (unit: any, index: number) => {
           if (!unit.id && unit.tempId) {
@@ -255,37 +306,30 @@ const ViewStudyPlannerTabs: React.FC = () => {
               row_index: index + 1,
             });
             const newUnit = res.data.unit;
-            setDraftUnitsMap((prev) => ({ ...prev, [plannerId]: prev[plannerId].map((u: any) => (u.tempId === unit.tempId ? { ...newUnit } : u)) }));
+            setDraftUnitsMap((prev) => ({
+              ...prev,
+              [plannerId]: prev[plannerId].map((u: any) => (u.tempId === unit.tempId ? { ...newUnit } : u)),
+            }));
           } else if (unit.id) {
-            console.log("Updating unit:", {
-              unit_id: unit.id,
-              year: String(unit.year),
-              semester: String(unit.semester),
-              unit_code: unit.unit_code,
-              unit_type: unit.unit_type,
-            });
-
             await axios.put(`${API}/api/update-study-planner-unit`, {
               unit_id: unit.id,
               year: String(unit.year),
               semester: String(unit.semester),
-              unit_code:
-                !unit.unit_code || unit.unit_code === "nan" ? null : unit.unit_code,
+              unit_code: !unit.unit_code || unit.unit_code === "nan" ? null : unit.unit_code,
               unit_type: unit.unit_type,
               prerequisites: unit.prerequisites,
               unit_name: unit.unit_name,
             });
           }
-
         })
       );
 
       setUnitsMap((prev) => ({ ...prev, [plannerId]: draftUnitsMap[plannerId] }));
       setEditPlannerId(null);
-      alert("Planner saved successfully!");
+      toast.success("Study planner saved successfully!");
     } catch (err) {
       console.error(err);
-      alert("Failed to save planner.");
+      toast.error("Failed to save study planner. Please try again.");
     }
   };
 
