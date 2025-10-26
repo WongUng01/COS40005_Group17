@@ -85,61 +85,54 @@ export default function CheckGraduationPage() {
       });
 
       const data = response.data;
-      console.log("DEBUG: graduation PUT response raw:", data);
+      console.log("DEBUG: Full graduation response:", data);
 
-      const gradResult = data?.graduation_result ?? data;
-      const updatedStudent = data?.updated_student ?? null;
-
-      if (!gradResult) {
-        console.warn("DEBUG: graduation result missing in response", data);
-        toast.error("Graduation check returned unexpected shape; see console.");
-        return;
-      }
-
-      // Update local state
-      if (updatedStudent && typeof updatedStudent === "object") {
+      // Use the updated_student from backend if available
+      const updatedStudent = data.updated_student;
+      
+      if (updatedStudent) {
+        // Update both students and searchResults states
         setStudents(prev =>
           prev.map(s =>
             s.student_id === studentId
-              ? { ...s, credit_point: updatedStudent.credit_point, graduation_status: updatedStudent.graduation_status }
+              ? { 
+                  ...s, 
+                  credit_point: updatedStudent.credit_point, 
+                  graduation_status: updatedStudent.graduation_status 
+                }
               : s
           )
         );
-      } else {
-        setStudents(prev =>
+        
+        setSearchResults(prev =>
           prev.map(s =>
             s.student_id === studentId
-              ? { ...s, credit_point: gradResult.total_credits ?? s.credit_point, graduation_status: !!gradResult.can_graduate }
+              ? { 
+                  ...s, 
+                  credit_point: updatedStudent.credit_point, 
+                  graduation_status: updatedStudent.graduation_status 
+                }
               : s
           )
         );
       }
 
-      // Show results
-      if (gradResult.can_graduate) {
-        toast.success("Graduation Approved");
-        alert(`✅ Graduation Approved!\nTotal Credits: ${gradResult.total_credits}/300\nPlanner: ${gradResult.planner_info ?? "Unknown"}`);
+      // Show success message
+      if (data.can_graduate) {
+        toast.success("Graduation Approved - Database Updated");
+        alert(`✅ Graduation Approved!\nTotal Credits: ${data.total_credits}/300\n\nStatus has been saved to database.`);
       } else {
         let message = `❌ Not Eligible for Graduation\n\n`;
-        message += `Total Credits: ${gradResult.total_credits ?? "N/A"}/300\n`;
-        message += `Missing Core: ${Array.isArray(gradResult.missing_core_units) ? gradResult.missing_core_units.join(", ") : "N/A"}\n`;
-        message += `Missing Major: ${Array.isArray(gradResult.missing_major_units) ? gradResult.missing_major_units.join(", ") : "N/A"}\n`;
+        message += `Total Credits: ${data.total_credits}/300\n`;
+        message += `Missing Core: ${data.missing_core_units.join(", ") || "None"}\n`;
+        message += `Missing Major: ${data.missing_major_units.join(", ") || "None"}\n`;
+        message += `\nStatus has been updated in the database.`;
         alert(message);
       }
 
     } catch (err) {
-      console.error("Graduation check error (frontend):", err);
-
-      if (axios.isAxiosError(err)) {
-        console.log("DEBUG: error.response:", err.response);
-        const status = err.response?.status;
-        const respData = err.response?.data;
-        const serverMsg = respData?.detail ?? respData?.message ?? JSON.stringify(respData);
-        toast.error(`Graduation check failed (status ${status}).`);
-        alert(`Graduation check failed (status ${status})\n\nServer message:\n${serverMsg}`);
-      } else {
-        toast.error("Graduation check failed (non-Axios error). See console.");
-      }
+      console.error("Graduation check error:", err);
+      toast.error("Graduation check failed");
     } finally {
       setCheckingGraduation(null);
     }

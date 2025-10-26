@@ -8,12 +8,15 @@ type Unit = {
   unit_code: string;
   unit_name: string;
   prerequisites: string;
-  concurrent_prerequisite: string; // 修复：使用正确的列名
+  concurrent_prerequisite: string;
   offered_terms: string;
   credit_point: number;
 };
 
-// Unit Modal Component
+type SortField = 'unit_code' | 'unit_name' | 'credit_point';
+type SortDirection = 'asc' | 'desc';
+
+// Unit Modal Component (unchanged)
 function UnitModal({ 
   isOpen, 
   onClose, 
@@ -140,7 +143,7 @@ function UnitModal({
               <input
                 type="text"
                 placeholder="e.g., ICT10003"
-                value={formData.concurrent_prerequisite || ''} // 修复：使用正确的字段名
+                value={formData.concurrent_prerequisite || ''}
                 onChange={(e) => setFormData({ ...formData, concurrent_prerequisite: e.target.value })}
                 className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#D6001C] focus:border-transparent"
                 disabled={isSubmitting}
@@ -184,11 +187,12 @@ function UnitModal({
 
 export default function Units() {
   const [units, setUnits] = useState<Unit[]>([]);
+  const [filteredUnits, setFilteredUnits] = useState<Unit[]>([]);
   const [formData, setFormData] = useState<Partial<Unit>>({
     unit_code: '',
     unit_name: '',
     prerequisites: '',
-    concurrent_prerequisite: '', // 修复：使用正确的字段名
+    concurrent_prerequisite: '',
     offered_terms: '',
     credit_point: 0
   });
@@ -197,6 +201,11 @@ export default function Units() {
   const [modalMode, setModalMode] = useState<'add' | 'edit'>('add');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isDeleting, setIsDeleting] = useState<string | null>(null);
+  
+  // Search and Sort states
+  const [searchTerm, setSearchTerm] = useState('');
+  const [sortField, setSortField] = useState<SortField>('unit_code');
+  const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
 
   useEffect(() => {
     fetchUnits();
@@ -204,6 +213,41 @@ export default function Units() {
 
   // const API = "http://localhost:8000";
   const API = "http://127.0.0.1:8000";
+  // Filter and sort units whenever units, searchTerm, sortField, or sortDirection change
+  useEffect(() => {
+    let result = units;
+
+    // Apply search filter
+    if (searchTerm) {
+      const lowercasedSearch = searchTerm.toLowerCase();
+      result = result.filter(unit =>
+        unit.unit_code.toLowerCase().includes(lowercasedSearch) ||
+        unit.unit_name.toLowerCase().includes(lowercasedSearch)
+      );
+    }
+
+    // Apply sorting
+    result = [...result].sort((a, b) => {
+      let aValue: any = a[sortField];
+      let bValue: any = b[sortField];
+
+      // For string comparison
+      if (typeof aValue === 'string' && typeof bValue === 'string') {
+        aValue = aValue.toLowerCase();
+        bValue = bValue.toLowerCase();
+      }
+
+      if (aValue < bValue) {
+        return sortDirection === 'asc' ? -1 : 1;
+      }
+      if (aValue > bValue) {
+        return sortDirection === 'asc' ? 1 : -1;
+      }
+      return 0;
+    });
+
+    setFilteredUnits(result);
+  }, [units, searchTerm, sortField, sortDirection]);
 
   const fetchUnits = async () => {
     try {
@@ -219,12 +263,11 @@ export default function Units() {
     }
   };
 
-  // 改进的错误处理函数
+  // Improved error handling function
   const parseErrorMessage = (errorText: string): string => {
     try {
       const errorData = JSON.parse(errorText);
       
-      // 处理数组错误
       if (Array.isArray(errorData)) {
         return errorData.map(err => {
           if (typeof err === 'object' && err !== null) {
@@ -234,7 +277,6 @@ export default function Units() {
         }).join(', ');
       }
       
-      // 处理对象错误
       if (typeof errorData === 'object' && errorData !== null) {
         return errorData.detail || errorData.message || JSON.stringify(errorData);
       }
@@ -252,12 +294,11 @@ export default function Units() {
     try {
       let response;
       if (editingId) {
-        // 修复：使用正确的字段名
         const payload = {
           unit_code: formData.unit_code,
           unit_name: formData.unit_name,
           prerequisites: formData.prerequisites,
-          concurrent_prerequisite: formData.concurrent_prerequisite, // 修复字段名
+          concurrent_prerequisite: formData.concurrent_prerequisite,
           offered_terms: formData.offered_terms,
           credit_point: formData.credit_point
         };
@@ -276,12 +317,11 @@ export default function Units() {
         
         toast.success('Unit updated successfully');
       } else {
-        // 创建新单元 - 使用正确的字段名
         const payload = {
           unit_code: formData.unit_code,
           unit_name: formData.unit_name,
           prerequisites: formData.prerequisites,
-          concurrent_prerequisite: formData.concurrent_prerequisite, // 修复字段名
+          concurrent_prerequisite: formData.concurrent_prerequisite,
           offered_terms: formData.offered_terms,
           credit_point: formData.credit_point
         };
@@ -301,7 +341,6 @@ export default function Units() {
         toast.success('Unit added successfully');
       }
 
-      // 重置表单并关闭模态框
       setFormData({
         unit_code: '',
         unit_name: '',
@@ -313,7 +352,6 @@ export default function Units() {
       setEditingId(null);
       setIsModalOpen(false);
       
-      // 刷新单元列表
       await fetchUnits();
     } catch (err: any) {
       console.error('Error submitting unit:', err);
@@ -367,7 +405,7 @@ export default function Units() {
       unit_code: unit.unit_code,
       unit_name: unit.unit_name,
       prerequisites: unit.prerequisites,
-      concurrent_prerequisite: unit.concurrent_prerequisite, // 修复字段名
+      concurrent_prerequisite: unit.concurrent_prerequisite,
       offered_terms: unit.offered_terms,
       credit_point: unit.credit_point
     });
@@ -381,6 +419,29 @@ export default function Units() {
       setIsModalOpen(false);
       setEditingId(null);
     }
+  };
+
+  // Handle sort column click
+  const handleSort = (field: SortField) => {
+    if (sortField === field) {
+      // Toggle direction if same field
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      // New field, default to ascending
+      setSortField(field);
+      setSortDirection('asc');
+    }
+  };
+
+  // Sort indicator component
+  const SortIndicator = ({ field }: { field: SortField }) => {
+    if (sortField !== field) return null;
+    
+    return (
+      <span className="ml-1">
+        {sortDirection === 'asc' ? '↑' : '↓'}
+      </span>
+    );
   };
 
   return (
@@ -406,23 +467,85 @@ export default function Units() {
         </button>
       </div>
 
+      {/* Search Bar */}
+      <div className="mb-6">
+        <div className="relative max-w-md">
+          <input
+            type="text"
+            placeholder="Search by unit code or name..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-full p-3 pl-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#D6001C] focus:border-transparent"
+          />
+          <svg 
+            className="absolute left-3 top-3.5 h-4 w-4 text-gray-400" 
+            fill="none" 
+            stroke="currentColor" 
+            viewBox="0 0 24 24"
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+          </svg>
+          {searchTerm && (
+            <button
+              onClick={() => setSearchTerm('')}
+              className="absolute right-3 top-3.5 text-gray-400 hover:text-gray-600"
+            >
+              ×
+            </button>
+          )}
+        </div>
+        {searchTerm && (
+          <p className="text-sm text-gray-600 mt-2">
+            Found {filteredUnits.length} unit{filteredUnits.length !== 1 ? 's' : ''} matching "{searchTerm}"
+          </p>
+        )}
+      </div>
+
       {/* Units Table */}
       <div className="bg-white rounded-lg shadow-md overflow-x-auto border border-gray-200">
-        {units.length === 0 ? (
+        {filteredUnits.length === 0 ? (
           <div className="text-center py-12 text-gray-500">
             <svg className="w-16 h-16 mx-auto text-gray-300 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.746 0 3.332.477 4.5 1.253v13C19.832 18.477 18.246 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
             </svg>
-            <p className="text-lg font-medium">No units found</p>
-            <p className="text-sm">Add your first unit to get started</p>
+            <p className="text-lg font-medium">
+              {searchTerm ? 'No units found matching your search' : 'No units found'}
+            </p>
+            <p className="text-sm">
+              {searchTerm ? 'Try adjusting your search terms' : 'Add your first unit to get started'}
+            </p>
           </div>
         ) : (
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-[#D6001C]">
               <tr>
-                <th className="px-6 py-3 text-left text-white font-medium">Unit Code</th>
-                <th className="px-6 py-3 text-left text-white font-medium">Unit Name</th>
-                <th className="px-6 py-3 text-left text-white font-medium">Credit Points</th>
+                <th 
+                  className="px-6 py-3 text-left text-white font-medium cursor-pointer hover:bg-[#B00018] transition-colors"
+                  onClick={() => handleSort('unit_code')}
+                >
+                  <div className="flex items-center">
+                    Unit Code
+                    <SortIndicator field="unit_code" />
+                  </div>
+                </th>
+                <th 
+                  className="px-6 py-3 text-left text-white font-medium cursor-pointer hover:bg-[#B00018] transition-colors"
+                  onClick={() => handleSort('unit_name')}
+                >
+                  <div className="flex items-center">
+                    Unit Name
+                    <SortIndicator field="unit_name" />
+                  </div>
+                </th>
+                <th 
+                  className="px-6 py-3 text-left text-white font-medium cursor-pointer hover:bg-[#B00018] transition-colors"
+                  onClick={() => handleSort('credit_point')}
+                >
+                  <div className="flex items-center">
+                    Credit Points
+                    <SortIndicator field="credit_point" />
+                  </div>
+                </th>
                 <th className="px-6 py-3 text-left text-white font-medium">Prerequisites</th>
                 <th className="px-6 py-3 text-left text-white font-medium">Concurrent</th>
                 <th className="px-6 py-3 text-left text-white font-medium">Offered Terms</th>
@@ -430,7 +553,7 @@ export default function Units() {
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {units.map((unit) => (
+              {filteredUnits.map((unit) => (
                 <tr key={unit.id} className="hover:bg-gray-50">
                   <td className="px-6 py-4 font-semibold text-gray-900">{unit.unit_code}</td>
                   <td className="px-6 py-4 font-medium">{unit.unit_name}</td>
@@ -445,7 +568,7 @@ export default function Units() {
                     )}
                   </td>
                   <td className="px-6 py-4 text-sm text-gray-700 max-w-xs">
-                    {unit.concurrent_prerequisite ? ( // 修复字段名
+                    {unit.concurrent_prerequisite ? (
                       <span className="bg-green-50 text-green-700 px-2 py-1 rounded text-xs">
                         {unit.concurrent_prerequisite}
                       </span>
