@@ -6,7 +6,7 @@ import uuid
 import supabase
 from supabaseClient import get_supabase_client
 from pydantic import BaseModel
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional,Any
 from io import BytesIO
 import traceback
 from fastapi.responses import JSONResponse
@@ -106,14 +106,16 @@ class StudentUnitBase(BaseModel):
     completed: bool
 
 class GraduationStatus(BaseModel):
-    can_graduate:        bool
-    total_credits:       float
-    core_credits:        float
-    major_credits:       float
-    core_completed:      int
-    major_completed:     int
-    missing_core_units:  List[str]
+    can_graduate: bool
+    total_credits: float
+    core_credits: float
+    major_credits: float
+    core_completed: int
+    major_completed: int
+    missing_core_units: List[str]
     missing_major_units: List[str]
+    planner_info: Optional[str] = None
+    updated_student: Optional[Dict[str, Any]] = None
 
 class StudentUnitOut(BaseModel):
     id: int
@@ -994,7 +996,9 @@ async def process_graduation(student_id: int):
         ]
 
         if not matched_planners:
-            await supabase_update_student(student_id, {"credit_point": total_credits, "graduation_status": False})
+            # FIX: Add await here
+            updated_student = await supabase_update_student(student_id, {"credit_point": total_credits, "graduation_status": False})
+            print(f"DEBUG: Updated student (no planner): {updated_student}")
             return GraduationStatus(
                 can_graduate=False,
                 total_credits=total_credits,
@@ -1030,7 +1034,9 @@ async def process_graduation(student_id: int):
         major_credits = len(completed_major) * 12.5
         can_graduate = (total_credits >= 300 and not missing_core and not missing_major)
 
-        supabase_update_student(student_id, {"credit_point": total_credits, "graduation_status": can_graduate})
+        # FIX: Add await here
+        updated_student = await supabase_update_student(student_id, {"credit_point": total_credits, "graduation_status": can_graduate})
+        print(f"DEBUG: Updated student data: {updated_student}")
 
         return GraduationStatus(
             can_graduate=can_graduate,
@@ -1041,7 +1047,9 @@ async def process_graduation(student_id: int):
             major_completed=len(completed_major),
             missing_core_units=list(missing_core),
             missing_major_units=list(missing_major),
-            planner_info=f"Planner {planner_id} for {student_course} - {student_major}"
+            planner_info=f"Planner {planner_id} for {student_course} - {student_major}",
+            # Include the updated student data in the response
+            updated_student=updated_student
         )
 
     except HTTPException as he:
@@ -1050,22 +1058,42 @@ async def process_graduation(student_id: int):
         print("❌ CRITICAL ERROR:", e)
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
-    
+        
 
 async def supabase_update_student(student_id: int, payload: dict):
-    upd_res = supabase_client.from_("students") \
-        .update(payload) \
-        .eq("student_id", student_id) \
-        .select("student_id, credit_point, graduation_status") \
-        .execute()
+    try:
+        print(f"DEBUG: Updating student {student_id} with {payload}")
+        
+        upd_res = supabase_client.from_("students") \
+            .update(payload) \
+            .eq("student_id", student_id) \
+            .execute()
 
-    if hasattr(upd_res, "error") and upd_res.error:
-        raise HTTPException(500, f"DB update error: {upd_res.error}")
+        print(f"DEBUG: Raw update response: {upd_res}")
 
-    data = getattr(upd_res, "data", None) or (upd_res.get("data") if isinstance(upd_res, dict) else None)
-    if not data:
-        raise HTTPException(500, f"DB update returned no data: {upd_res}")
-    return data[0]
+        # Check for errors
+        if hasattr(upd_res, 'error') and upd_res.error:
+            print(f"❌ Database update error: {upd_res.error}")
+            raise HTTPException(500, f"DB update error: {upd_res.error}")
+
+        # Get the updated data by querying again
+        verify_res = supabase_client.from_("students") \
+            .select("student_id, credit_point, graduation_status, student_name, student_course, student_major") \
+            .eq("student_id", student_id) \
+            .execute()
+
+        if not verify_res.data:
+            print(f"❌ Could not verify update for student {student_id}")
+            raise HTTPException(500, "Update verification failed")
+
+        updated_data = verify_res.data[0]
+        print(f"DEBUG: Verified updated student: {updated_data}")
+        
+        return updated_data
+
+    except Exception as e:
+        print(f"❌ Error in supabase_update_student: {str(e)}")
+        raise
 
 
 @app.get("/")
