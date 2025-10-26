@@ -144,10 +144,15 @@ const CreateStudyPlanner: React.FC = () => {
   };
 
   const handleAddProgram = async () => {
-    if (!program || !programCode) return alert("Enter program name and code.");
+    if (!program || !programCode)
+      return toast.error("Please enter program name and code.");
+
     try {
       // 1️⃣ Add the program
-      await axios.post(`${API}/api/programs`, { program_name: program, program_code: programCode });
+      await axios.post(`${API}/api/programs`, {
+        program_name: program,
+        program_code: programCode,
+      });
 
       // 2️⃣ Fetch updated program list
       const res = await axios.get(`${API}/api/programs`);
@@ -167,20 +172,26 @@ const CreateStudyPlanner: React.FC = () => {
       setAddingProgram(false);
       toast.success("Program added!");
     } catch (err: any) {
-      alert(err.response?.status === 409 ? "Program already exists." : "Failed to add program.");
+      if (err.response?.status === 409)
+        toast.error("Program already exists.");
+      else toast.error("Failed to add program.");
     }
   };
 
-
   const handleAddMajor = async () => {
-    if (!programId || !major) return alert("Select program and enter major.");
+    if (!programId || !major)
+      return toast.error("Please select a program and enter a major.");
+
     try {
-      await axios.post(`${API}/api/majors`, { program_id: programId, major_name: major });
+      await axios.post(`${API}/api/majors`, {
+        program_id: programId,
+        major_name: major,
+      });
       setAddingMajor(false);
       await fetchMajors(programId);
-      alert("Major added!");
+      toast.success("Major added!");
     } catch {
-      alert("Failed to add major.");
+      toast.error("Failed to add major.");
     }
   };
 
@@ -207,7 +218,7 @@ const CreateStudyPlanner: React.FC = () => {
 
   const handleSave = async () => {
     if (!program || !major || !intakeYear || !intakeSemester)
-      return alert("Fill all required fields before saving.");
+      return toast.error("Please fill all required fields before saving.");
 
     const payload = {
       program,
@@ -221,9 +232,9 @@ const CreateStudyPlanner: React.FC = () => {
     setLoading(true);
     try {
       await axios.post(`${API}/api/create-study-planner`, payload);
-      alert("Study planner created!");
+      toast.success("Study planner created!");
     } catch {
-      alert("Failed to create study planner.");
+      toast.error("Failed to create study planner.");
     } finally {
       setLoading(false);
     }
@@ -496,9 +507,11 @@ const CreateStudyPlanner: React.FC = () => {
                 <button
                   className="bg-[#b71c1c] text-white px-3 py-1 rounded hover:bg-[#a00000]"
                   onClick={async () => {
-                    if (!newYear) return alert("Enter a year.");
+                    if (!newYear) return toast.error("Please enter a year.");
                     const yearNumber = Number(newYear);
-                    if (intakeYears.includes(yearNumber)) return alert("Year already exists.");
+                    if (intakeYears.includes(yearNumber))
+                      return toast.error("Year already exists.");
+
                     try {
                       await axios.post(`${API}/api/intake-years`, { intake_year: yearNumber });
                       setIntakeYears((prev) => [...prev, yearNumber].sort((a, b) => a - b));
@@ -511,7 +524,7 @@ const CreateStudyPlanner: React.FC = () => {
                     }
                   }}
                 >
-                  Add
+                  Add Year
                 </button>
                 <button className="bg-gray-200 px-3 py-1 rounded" onClick={() => setAddingYear(false)}>Cancel</button>
               </div>

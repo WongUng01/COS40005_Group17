@@ -177,6 +177,7 @@ const UploadStudyPlanner = () => {
       await axios.post(`${API}/api/upload-study-planner`, formData, {
         headers: { "Content-Type": "multipart/form-data" },
       });
+
       toast.success("Upload successful!");
       setFile(null);
       setProgram("");
@@ -188,11 +189,28 @@ const UploadStudyPlanner = () => {
     } catch (err: unknown) {
       const axiosError = err as AxiosError<any>;
       const data = axiosError.response?.data;
+
       if (axiosError.response?.status === 409 && data?.detail?.existing) {
-        const confirm = window.confirm("Planner already exists. Overwrite?");
-        if (confirm) await handleUpload(true);
+        toast(
+          (t) => (
+            <div className="flex flex-col gap-2">
+              <span>Planner already exists.</span>
+              <button
+                onClick={async () => {
+                  toast.dismiss(t.id);
+                  await handleUpload(true);
+                }}
+                className="bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded"
+              >
+                Overwrite
+              </button>
+            </div>
+          ),
+          { duration: 8000 }
+        );
         return;
       }
+
       toast.error("Upload failed: " + (data?.detail?.message || axiosError.message));
     } finally {
       setLoading(false);
