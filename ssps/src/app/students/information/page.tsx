@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import axios from 'axios';
 import toast from 'react-hot-toast';
+import Select from 'react-select';
 
 type Student = {
   id: number;
@@ -19,6 +20,18 @@ type Student = {
   created_at: string;
 };
 
+type Program = {
+  id: number;
+  program_name: string;
+  program_code: string;
+};
+
+type Major = {
+  id: number;
+  major_name: string;
+  program_id: number;
+};
+
 // Student Modal Component
 function StudentModal({ 
   isOpen, 
@@ -27,7 +40,10 @@ function StudentModal({
   formData, 
   setFormData, 
   mode,
-  isSubmitting
+  isSubmitting,
+  programs,
+  majors,
+  intakeYears
 }: {
   isOpen: boolean;
   onClose: () => void;
@@ -36,13 +52,88 @@ function StudentModal({
   setFormData: (data: Partial<Student>) => void;
   mode: 'add' | 'edit';
   isSubmitting: boolean;
+  programs: Program[];
+  majors: Major[];
+  intakeYears: number[];
 }) {
+  const semesters = [
+    { value: 'Feb/Mar', label: 'Feb/Mar' },
+    { value: 'Aug/Sep', label: 'Aug/Sep' }
+  ];
+
+  const swinburneStyles = {
+    control: (base: any, state: any) => ({
+      ...base,
+      backgroundColor: "white",
+      borderColor: state.isFocused ? "#b71c1c" : "#ccc",
+      boxShadow: state.isFocused ? "0 0 0 2px rgba(183, 28, 28, 0.2)" : "none",
+      borderWidth: "1.5px",
+      borderRadius: "8px",
+      padding: "2px",
+      "&:hover": { borderColor: "#d32f2f" },
+    }),
+    option: (base: any, state: any) => ({
+      ...base,
+      backgroundColor: state.isSelected
+        ? "#d32f2f"
+        : state.isFocused
+        ? "#ffcdd2"
+        : "white",
+      color: state.isSelected ? "white" : "#333",
+      cursor: "pointer",
+    }),
+    singleValue: (base: any) => ({ ...base, color: "#212121", fontWeight: 500 }),
+    placeholder: (base: any) => ({ ...base, color: "#757575" }),
+    menu: (base: any) => ({ ...base, borderRadius: "8px", boxShadow: "0 4px 8px rgba(0,0,0,0.1)", zIndex: 9999 }),
+    menuPortal: (base: any) => ({ ...base, zIndex: 9999 }),
+  };
+
   if (!isOpen) return null;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     await onSubmit(e);
   };
+
+  const handleProgramSelect = (option: any) => {
+    setFormData({ 
+      ...formData, 
+      student_course: option?.value || '' 
+    });
+  };
+
+  const handleMajorSelect = (option: any) => {
+    setFormData({ 
+      ...formData, 
+      student_major: option?.value || '' 
+    });
+  };
+
+  const handleYearSelect = (option: any) => {
+    setFormData({ 
+      ...formData, 
+      intake_year: option?.value || '' 
+    });
+  };
+
+  const handleSemesterSelect = (option: any) => {
+    setFormData({ 
+      ...formData, 
+      intake_term: option?.value || '' 
+    });
+  };
+
+  const programOptions = programs
+    .sort((a, b) => a.program_name.localeCompare(b.program_name))
+    .map(p => ({ value: p.program_name, label: p.program_name }));
+
+  const majorOptions = majors
+    .sort((a, b) => a.major_name.localeCompare(b.major_name))
+    .map(m => ({ value: m.major_name, label: m.major_name }));
+
+  const yearOptions = intakeYears
+    .sort((a, b) => b - a)
+    .map(y => ({ value: y.toString(), label: y.toString() }));
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
@@ -90,7 +181,7 @@ function StudentModal({
                 onChange={(e) => setFormData({ ...formData, student_id: parseInt(e.target.value) || 0 })}
                 className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#E31C25] focus:border-transparent"
                 required
-                disabled={isSubmitting || mode === 'edit'} // Disable editing student ID in edit mode
+                disabled={isSubmitting || mode === 'edit'}
               />
             </div>
 
@@ -109,64 +200,68 @@ function StudentModal({
               />
             </div>
 
+            {/* Program Dropdown */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Course *
+                Program *
               </label>
-              <input
-                type="text"
-                placeholder="Enter course"
-                value={formData.student_course}
-                onChange={(e) => setFormData({ ...formData, student_course: e.target.value })}
-                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#E31C25] focus:border-transparent"
-                required
-                disabled={isSubmitting}
+              <Select
+                value={formData.student_course ? { value: formData.student_course, label: formData.student_course } : null}
+                onChange={handleProgramSelect}
+                options={programOptions}
+                placeholder="Select Program"
+                styles={swinburneStyles}
+                menuPortalTarget={document.body}
+                isDisabled={isSubmitting}
               />
             </div>
 
+            {/* Major Dropdown */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Major *
               </label>
-              <input
-                type="text"
-                placeholder="Enter major"
-                value={formData.student_major}
-                onChange={(e) => setFormData({ ...formData, student_major: e.target.value })}
-                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#E31C25] focus:border-transparent"
-                required
-                disabled={isSubmitting}
+              <Select
+                value={formData.student_major ? { value: formData.student_major, label: formData.student_major } : null}
+                onChange={handleMajorSelect}
+                options={majorOptions}
+                placeholder="Select Major"
+                styles={swinburneStyles}
+                menuPortalTarget={document.body}
+                isDisabled={isSubmitting || !formData.student_course}
               />
             </div>
 
             <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Intake Term *
-                </label>
-                <input
-                  type="text"
-                  placeholder="e.g., Semester 1"
-                  value={formData.intake_term}
-                  onChange={(e) => setFormData({ ...formData, intake_term: e.target.value })}
-                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#E31C25] focus:border-transparent"
-                  required
-                  disabled={isSubmitting}
-                />
-              </div>
-
+              {/* Intake Year Dropdown */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Intake Year *
                 </label>
-                <input
-                  type="text"
-                  placeholder="e.g., 2024"
-                  value={formData.intake_year}
-                  onChange={(e) => setFormData({ ...formData, intake_year: e.target.value })}
-                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#E31C25] focus:border-transparent"
-                  required
-                  disabled={isSubmitting}
+                <Select
+                  value={formData.intake_year ? { value: formData.intake_year, label: formData.intake_year } : null}
+                  onChange={handleYearSelect}
+                  options={yearOptions}
+                  placeholder="Select Year"
+                  styles={swinburneStyles}
+                  menuPortalTarget={document.body}
+                  isDisabled={isSubmitting}
+                />
+              </div>
+
+              {/* Intake Semester Dropdown */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Intake Term *
+                </label>
+                <Select
+                  value={formData.intake_term ? { value: formData.intake_term, label: formData.intake_term } : null}
+                  onChange={handleSemesterSelect}
+                  options={semesters}
+                  placeholder="Select Term"
+                  styles={swinburneStyles}
+                  menuPortalTarget={document.body}
+                  isDisabled={isSubmitting}
                 />
               </div>
             </div>
@@ -240,6 +335,9 @@ function StudentModal({
 
 export default function StudentsInformationPage() {
   const [students, setStudents] = useState<Student[]>([]);
+  const [programs, setPrograms] = useState<Program[]>([]);
+  const [majors, setMajors] = useState<Major[]>([]);
+  const [intakeYears, setIntakeYears] = useState<number[]>([]);
   const [formData, setFormData] = useState<Partial<Student>>({
     graduation_status: false,
     student_name: '',
@@ -251,7 +349,7 @@ export default function StudentsInformationPage() {
     intake_year: '',
     credit_point: 0
   });
-  const [editingStudentId, setEditingStudentId] = useState<number | null>(null); // 改为使用 student_id
+  const [editingStudentId, setEditingStudentId] = useState<number | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [searchResults, setSearchResults] = useState<Student[]>([]);
   const [isSearching, setIsSearching] = useState(false);
@@ -263,7 +361,19 @@ export default function StudentsInformationPage() {
 
   useEffect(() => {
     fetchStudents();
+    fetchPrograms();
+    fetchIntakeYears();
   }, []);
+
+  // Fetch majors when program changes
+  useEffect(() => {
+    if (formData.student_course) {
+      const selectedProgram = programs.find(p => p.program_name === formData.student_course);
+      if (selectedProgram) {
+        fetchMajors(selectedProgram.id);
+      }
+    }
+  }, [formData.student_course, programs]);
 
   const fetchStudents = async () => {
     try {
@@ -283,6 +393,38 @@ export default function StudentsInformationPage() {
     }
   };
 
+  const fetchPrograms = async () => {
+    try {
+      const res = await fetch(`${API_URL}/api/programs`);
+      const data = await res.json();
+      setPrograms(data || []);
+    } catch (err) {
+      console.error('Error fetching programs:', err);
+      toast.error('Failed to load programs');
+    }
+  };
+
+  const fetchMajors = async (programId: number) => {
+    try {
+      const res = await fetch(`${API_URL}/api/majors/${programId}`);
+      const data = await res.json();
+      setMajors(data || []);
+    } catch (err) {
+      console.error('Error fetching majors:', err);
+    }
+  };
+
+  const fetchIntakeYears = async () => {
+    try {
+      const res = await fetch(`${API_URL}/api/intake-years`);
+      const data = await res.json();
+      setIntakeYears(data || []);
+    } catch (err) {
+      console.error('Error fetching intake years:', err);
+      toast.error('Failed to load intake years');
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
@@ -290,11 +432,9 @@ export default function StudentsInformationPage() {
     try {
       let response;
       if (editingStudentId) {
-        // 修复：使用 student_id 而不是 id
         response = await axios.put(`${API_URL}/students/${editingStudentId}`, formData);
         toast.success('Student updated successfully');
       } else {
-        // Create new student
         response = await axios.post(`${API_URL}/students`, formData);
         toast.success('Student added successfully');
       }
@@ -332,12 +472,11 @@ export default function StudentsInformationPage() {
 
     setIsDeleting(studentId);
     try {
-      // 修复：使用 student_id 而不是 id
       const response = await axios.delete(`${API_URL}/students/${studentId}`);
       console.log('Delete response:', response.data);
       
       toast.success('Student deleted successfully');
-      await fetchStudents(); // Refresh the list
+      await fetchStudents();
     } catch (err: any) {
       console.error('Error deleting student:', err);
       const errorMessage = err.response?.data?.detail || err.response?.data?.message || err.message || 'Delete failed';
@@ -413,7 +552,6 @@ export default function StudentsInformationPage() {
       intake_year: student.intake_year, 
       credit_point: student.credit_point 
     });
-    // 修复：使用 student_id 而不是 id
     setEditingStudentId(student.student_id);
     setModalMode('edit');
     setIsModalOpen(true);
@@ -537,8 +675,8 @@ export default function StudentsInformationPage() {
                         Edit
                       </button>
                       <button
-                        onClick={() => handleDelete(student.student_id)} // 修复：使用 student_id
-                        disabled={isDeleting === student.student_id} // 修复：使用 student_id
+                        onClick={() => handleDelete(student.student_id)}
+                        disabled={isDeleting === student.student_id}
                         className="px-3 py-1 bg-red-600 text-white rounded hover:bg-red-700 text-sm flex items-center gap-1 transition-colors disabled:opacity-50"
                       >
                         {isDeleting === student.student_id ? (
@@ -581,6 +719,9 @@ export default function StudentsInformationPage() {
         setFormData={setFormData}
         mode={modalMode}
         isSubmitting={isSubmitting}
+        programs={programs}
+        majors={majors}
+        intakeYears={intakeYears}
       />
     </div>
   );
