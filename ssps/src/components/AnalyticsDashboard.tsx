@@ -234,6 +234,164 @@ export default function AnalyticsDashboard() {
         </div>
       </section>
 
+      {/* 🎓 Graduation & Students Summary (Side-by-Side Charts) */}
+      <section className="bg-white rounded-2xl shadow p-6">
+        <h2 className="text-xl font-semibold mb-6 text-gray-700">
+          Graduation & Student Distribution
+        </h2>
+
+        <div className="grid md:grid-cols-2 gap-8">
+          {/* 🎓 Graduation Summary */}
+          <div>
+            <h3 className="font-semibold text-gray-700 mb-3">Graduation Summary</h3>
+
+            <div className="mb-4">
+              <label className="font-medium text-gray-600 mr-3">Select Program:</label>
+              <select
+                className="border rounded-md px-3 py-1"
+                value={selectedProgram}
+                onChange={(e) => setSelectedProgram(e.target.value)}
+              >
+                <option value="">All Programs</option>
+                {allPrograms.map((p: string) => (
+                  <option key={p} value={p}>
+                    {p}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {(() => {
+              const filtered = selectedProgram
+                ? graduationSummary.filter((r) => r.program === selectedProgram)
+                : graduationSummary;
+
+              const data = selectedProgram
+                ? filtered.reduce((acc: any, curr: any) => {
+                    acc[curr.major] = (acc[curr.major] || 0) + curr.graduates;
+                    return acc;
+                  }, {})
+                : filtered.reduce((acc: any, curr: any) => {
+                    acc[curr.program] = (acc[curr.program] || 0) + curr.graduates;
+                    return acc;
+                  }, {});
+
+              return (
+                <div className="flex justify-center">
+                  <div style={{ width: "300px", height: "300px" }}>
+                    <Pie
+                      data={{
+                        labels: Object.keys(data),
+                        datasets: [
+                          {
+                            label: "Graduates",
+                            data: Object.values(data),
+                            backgroundColor: [
+                              "#60a5fa",
+                              "#f97316",
+                              "#22c55e",
+                              "#a855f7",
+                              "#f43f5e",
+                              "#14b8a6",
+                              "#eab308",
+                            ],
+                          },
+                        ],
+                      }}
+                      options={{
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                          legend: {
+                            position: "bottom",
+                            labels: { boxWidth: 12, font: { size: 12 } },
+                          },
+                        },
+                      }}
+                    />
+                  </div>
+                </div>
+              );
+            })()}
+          </div>
+
+          {/* 🧭 Students by Program & Major */}
+          <div>
+            <h3 className="font-semibold text-gray-700 mb-3">Students by Program & Major</h3>
+
+            <div className="mb-4">
+              <label className="font-medium text-gray-600 mr-3">Select Program:</label>
+              <select
+                className="border rounded-md px-3 py-1"
+                value={selectedProgram}
+                onChange={(e) => setSelectedProgram(e.target.value)}
+              >
+                <option value="">All Programs</option>
+                {allPrograms.map((p: string) => (
+                  <option key={p} value={p}>
+                    {p}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {(() => {
+              const activeStudents =
+                overview.students_by_program_major.filter((r: any) => !r.graduation_status);
+
+              const data = selectedProgram
+                ? activeStudents
+                    .filter((r: any) => r.program === selectedProgram)
+                    .reduce((acc: any, curr: any) => {
+                      acc[curr.major] = (acc[curr.major] || 0) + curr.total_students;
+                      return acc;
+                    }, {})
+                : activeStudents.reduce((acc: any, curr: any) => {
+                    acc[curr.program] = (acc[curr.program] || 0) + curr.total_students;
+                    return acc;
+                  }, {});
+
+              return (
+                <div className="flex justify-center">
+                  <div style={{ width: "300px", height: "300px" }}>
+                    <Pie
+                      data={{
+                        labels: Object.keys(data),
+                        datasets: [
+                          {
+                            label: "Active Students",
+                            data: Object.values(data),
+                            backgroundColor: [
+                              "#60a5fa",
+                              "#f97316",
+                              "#22c55e",
+                              "#a855f7",
+                              "#f43f5e",
+                              "#14b8a6",
+                              "#eab308",
+                            ],
+                          },
+                        ],
+                      }}
+                      options={{
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                          legend: {
+                            position: "bottom",
+                            labels: { boxWidth: 12, font: { size: 12 } },
+                          },
+                        },
+                      }}
+                    />
+                  </div>
+                </div>
+              );
+            })()}
+          </div>
+        </div>
+      </section>
+
       {/* 📈 Graduation Trends */}
       <section className="bg-white rounded-2xl shadow p-6 border border-gray-100">
         <h2 className="text-xl font-semibold mb-4 text-[#1A1A1A]">
