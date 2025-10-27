@@ -908,7 +908,7 @@ async def delete_student(student_id: int):
 async def get_student_units(student_id: int):
     try:
         resp = (
-            client
+            supabase_client
             .from_('student_units')         
             .select('*')
             .eq('student_id', student_id)
@@ -1776,3 +1776,80 @@ def program_breakdown():
         {"program": k[0], "major": k[1], "intake_year": k[2], "intake_term": k[3], "total": v["total"], "graduated": v["graduated"]}
         for k, v in summary.items()
     ]
+
+@app.get("/api/students/{student_id}/progress")
+def get_student_progress(student_id: int):
+    try:
+        # 1️⃣ Fetch student info
+        student_res = supabase_client.table("students").select("*").eq("student_id", student_id).execute()
+        if not student_res.data:
+            raise HTTPException(status_code=404, detail="Student not found")
+        student = student_res.data[0]
+
+        # 2️⃣ Fetch matching study planner
+        program, major = student.get("student_course"), student.get("student_major")
+        intake_year, intake_semester = student.get("intake_year"), student.get("intake_term")
+
+        planner_res = supabase_client.table("study_planners").select("*").match({
+            "program": program,
+            "major": major,
+            "intake_year": intake_year,
+            "intake_semester": intake_semester,
+        }).execute()
+
+        if not planner_res.data:
+            return {
+                "student": student,
+                "default_planner_units": [],
+                "student_units": [],
+                "completed_units": [],
+                "remaining_units": [],
+                "summary": {"completed_count": 0, "total_required": 0}
+            }
+
+        planner_id = planner_res.data[0]["id"]
+
+        # 3️⃣ Fetch planner and student units
+        planner_units = supabase_client.table("study_planner_units").select("*").eq("planner_id", planner_id).execute().data or []
+        student_units = supabase_client.table("student_units").select("*").eq("student_id", student_id).execute().data or []
+
+        completed_codes = {u["unit_code"] for u in student_units if u.get("unit_code")}
+        elective_placeholders = [u for u in planner_units if str(u.get("unit_code")).lower() in ["0", "nan", "", "none"]]
+
+        # 4️⃣ Start with normal matching
+        for unit in planner_units:
+            code = str(unit.get("unit_code"))
+            unit["completed"] = False
+            unit["replacement"] = None
+
+            if code in completed_codes:
+                unit["completed"] = True
+            elif unit in elective_placeholders:
+                # try to fill elective with an unmatched student unit
+                unmatched = next((su for su in student_units if su["unit_code"] not in [p.get("unit_code") for p in planner_units]), None)
+                if unmatched:
+                    unit["completed"] = True
+                    unit["replacement"] = unmatched["unit_code"]
+                    unit["unit_name"] = f"{unit['unit_name']} (filled with {unmatched['unit_code']})"
+                    student_units.remove(unmatched)
+
+        remaining_units = [u for u in planner_units if not u["completed"]]
+        completed_units = [u for u in planner_units if u["completed"]]
+
+        summary = {
+            "completed_count": len(completed_units),
+            "total_required": len(planner_units)
+        }
+
+        return {
+            "student": student,
+            "default_planner_units": planner_units,
+            "student_units": student_units,
+            "completed_units": completed_units,
+            "remaining_units": remaining_units,
+            "summary": summary
+        }
+
+    except Exception as e:
+        print("Error in get_student_progress:", str(e))
+        raise HTTPException(status_code=500, detail=str(e))
