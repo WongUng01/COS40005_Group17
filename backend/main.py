@@ -112,10 +112,13 @@ class GraduationStatus(BaseModel):
     major_credits: float
     core_completed: int
     major_completed: int
+    mpu_requirements_met: bool
+    mpu_types_completed: List[str]
     missing_core_units: List[str]
     missing_major_units: List[str]
+    messages: List[str] = []
     planner_info: Optional[str] = None
-    updated_student: Optional[Dict[str, Any]] = None
+    updated_student: Optional[dict] = None
 
 class StudentUnitOut(BaseModel):
     id: int
@@ -980,7 +983,33 @@ async def process_graduation(student_id: int):
             normalize_code(u["unit_code"]) for u in (completed_units_res.data or []) if u.get("unit_code")
         }
 
-        total_credits = len(passed_codes_norm) * 12.5
+        # Check if student has no completed units
+        if not passed_codes_norm:
+            updated_student = await supabase_update_student(student_id, {"credit_point": 0, "graduation_status": False})
+            return GraduationStatus(
+                can_graduate=False,
+                total_credits=0,
+                core_credits=0.0,
+                major_credits=0.0,
+                core_completed=0,
+                major_completed=0,
+                mpu_requirements_met=False,
+                mpu_types_completed=[],
+                missing_core_units=[],
+                missing_major_units=[],
+                messages=["No completed units found. Student has not passed any units yet."],
+                planner_info="",
+                updated_student=updated_student
+            )
+
+        # Calculate total credits with special handling for ICT20016
+        total_credits = 0
+        for unit in (completed_units_res.data or []):
+            unit_code = normalize_code(unit["unit_code"])
+            if unit_code == "ICT20016":
+                total_credits += 25
+            else:
+                total_credits += 12.5
 
         # 3. All planners
         all_planners_res = supabase_client.from_("study_planners") \
@@ -999,7 +1028,6 @@ async def process_graduation(student_id: int):
         ]
 
         if not matched_planners:
-            # FIX: Add await here
             updated_student = await supabase_update_student(student_id, {"credit_point": total_credits, "graduation_status": False})
             print(f"DEBUG: Updated student (no planner): {updated_student}")
             return GraduationStatus(
@@ -1009,8 +1037,12 @@ async def process_graduation(student_id: int):
                 major_credits=0.0,
                 core_completed=0,
                 major_completed=0,
+                mpu_requirements_met=False,
+                mpu_types_completed=[],
                 missing_core_units=[f"找不到学习计划: {student_course} - {student_major}"],
-                missing_major_units=[f"需要: {student_course} 主修 {student_major}, 入学 {intake_year} {intake_term}"]
+                missing_major_units=[f"需要: {student_course} 主修 {student_major}, 入学 {intake_year} {intake_term}"],
+                messages=["No study planner found for this student's course and intake."],
+                planner_info=""
             )
 
         planner_id = matched_planners[0]["id"]
@@ -1024,6 +1056,9 @@ async def process_graduation(student_id: int):
         required_units = required_units_res.data or []
         core_units = [normalize_code(u["unit_code"]) for u in required_units if normalize_type(u["unit_type"]) == "core"]
         major_units = [normalize_code(u["unit_code"]) for u in required_units if normalize_type(u["unit_type"]) == "major"]
+        
+        # Get MPU units - assuming MPU units have unit_type starting with "mpu"
+        mpu_units = [u for u in required_units if normalize_type(u["unit_type"]).startswith("mpu")]
 
         core_set = set(core_units)
         major_set = set(major_units)
@@ -1033,9 +1068,57 @@ async def process_graduation(student_id: int):
         missing_core = core_set - passed_codes_norm
         missing_major = major_set - passed_codes_norm
 
-        core_credits = len(completed_core) * 12.5
-        major_credits = len(completed_major) * 12.5
-        can_graduate = (total_credits >= 300 and not missing_core and not missing_major)
+        # Calculate credits with special handling for ICT20016
+        core_credits = 0
+        for unit_code in completed_core:
+            if unit_code == "ICT20016":
+                core_credits += 25
+            else:
+                core_credits += 12.5
+
+        major_credits = 0
+        for unit_code in completed_major:
+            if unit_code == "ICT20016":
+                major_credits += 25
+            else:
+                major_credits += 12.5
+
+        # Check MPU requirement: at least three different MPU types
+        mpu_types_completed = set()
+        for mpu_unit in mpu_units:
+            unit_code_norm = normalize_code(mpu_unit["unit_code"])
+            if unit_code_norm in passed_codes_norm:
+                mpu_type = normalize_type(mpu_unit["unit_type"])
+                mpu_types_completed.add(mpu_type)
+
+        mpu_requirements_met = len(mpu_types_completed) >= 3
+
+        # Update graduation condition to include MPU requirement
+        can_graduate = (total_credits >= 300 and 
+                       not missing_core and 
+                       not missing_major and 
+                       mpu_requirements_met)
+
+        # Generate messages
+        messages = []
+        
+        # Credit requirement message
+        if total_credits < 300:
+            messages.append(f"Credit requirement not met: {total_credits}/300 credits")
+        
+        # Core units message
+        if missing_core:
+            messages.append(f"Missing {len(missing_core)} core units")
+        
+        # Major units message
+        if missing_major:
+            messages.append(f"Missing {len(missing_major)} major units")
+        
+        # MPU requirement message
+        if not mpu_requirements_met:
+            messages.append(f"MPU requirement not met: {len(mpu_types_completed)}/3 different MPU types completed")
+        else:
+            messages.append(f"MPU requirement met: {len(mpu_types_completed)}/3 different MPU types completed")
 
         # FIX: Add await here
         updated_student = await supabase_update_student(student_id, {"credit_point": total_credits, "graduation_status": can_graduate})
@@ -1048,8 +1131,11 @@ async def process_graduation(student_id: int):
             major_credits=major_credits,
             core_completed=len(completed_core),
             major_completed=len(completed_major),
+            mpu_requirements_met=mpu_requirements_met,
+            mpu_types_completed=list(mpu_types_completed),
             missing_core_units=list(missing_core),
             missing_major_units=list(missing_major),
+            messages=messages,
             planner_info=f"Planner {planner_id} for {student_course} - {student_major}",
             # Include the updated student data in the response
             updated_student=updated_student
@@ -1061,7 +1147,7 @@ async def process_graduation(student_id: int):
         print("❌ CRITICAL ERROR:", e)
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
-        
+          
 
 async def supabase_update_student(student_id: int, payload: dict):
     try:

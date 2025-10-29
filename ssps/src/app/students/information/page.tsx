@@ -32,6 +32,9 @@ type Major = {
   program_id: number;
 };
 
+type SortField = 'student_name' | 'student_id';
+type SortDirection = 'asc' | 'desc';
+
 // Student Modal Component
 function StudentModal({ 
   isOpen, 
@@ -333,6 +336,21 @@ function StudentModal({
   );
 }
 
+// Sort indicator component
+const SortIndicator = ({ field, sortField, sortDirection }: { 
+  field: SortField; 
+  sortField: SortField | null; 
+  sortDirection: SortDirection; 
+}) => {
+  if (sortField !== field) return null;
+  
+  return (
+    <span className="ml-1">
+      {sortDirection === 'asc' ? '↑' : '↓'}
+    </span>
+  );
+};
+
 export default function StudentsInformationPage() {
   const [students, setStudents] = useState<Student[]>([]);
   const [programs, setPrograms] = useState<Program[]>([]);
@@ -357,6 +375,11 @@ export default function StudentsInformationPage() {
   const [modalMode, setModalMode] = useState<'add' | 'edit'>('add');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isDeleting, setIsDeleting] = useState<number | null>(null);
+  
+  // Sorting state
+  const [sortField, setSortField] = useState<SortField | null>(null);
+  const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
+
   const API_URL = 'http://localhost:8000';
 
   useEffect(() => {
@@ -374,6 +397,37 @@ export default function StudentsInformationPage() {
       }
     }
   }, [formData.student_course, programs]);
+
+  // Apply sorting and filtering to display students
+  const getDisplayStudents = () => {
+    let result = searchResults.length > 0 ? [...searchResults] : [...students];
+
+    // Apply sorting
+    if (sortField) {
+      result.sort((a, b) => {
+        let aValue: any = a[sortField];
+        let bValue: any = b[sortField];
+
+        if (sortField === 'student_name') {
+          // String comparison for names
+          aValue = aValue.toLowerCase();
+          bValue = bValue.toLowerCase();
+        }
+
+        if (aValue < bValue) {
+          return sortDirection === 'asc' ? -1 : 1;
+        }
+        if (aValue > bValue) {
+          return sortDirection === 'asc' ? 1 : -1;
+        }
+        return 0;
+      });
+    }
+
+    return result;
+  };
+
+  const displayStudents = getDisplayStudents();
 
   const fetchStudents = async () => {
     try {
@@ -422,6 +476,17 @@ export default function StudentsInformationPage() {
     } catch (err) {
       console.error('Error fetching intake years:', err);
       toast.error('Failed to load intake years');
+    }
+  };
+
+  const handleSort = (field: SortField) => {
+    if (sortField === field) {
+      // Toggle direction if same field
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      // New field, default to ascending
+      setSortField(field);
+      setSortDirection('asc');
     }
   };
 
@@ -564,8 +629,6 @@ export default function StudentsInformationPage() {
     }
   };
 
-  const displayStudents = searchResults.length > 0 ? searchResults : students;
-
   return (
     <div className="max-w-7xl mx-auto p-6 bg-gray-50 min-h-screen">
       {/* Header with Navigation */}
@@ -631,8 +694,32 @@ export default function StudentsInformationPage() {
             <thead className="bg-[#E31C25]">
               <tr>
                 <th className="px-6 py-3 text-left text-white font-medium">Graduated</th>
-                <th className="px-6 py-3 text-left text-white font-medium">Name</th>
-                <th className="px-6 py-3 text-left text-white font-medium">Student ID</th>
+                <th 
+                  className="px-6 py-3 text-left text-white font-medium cursor-pointer hover:bg-[#B71C1C] transition-colors"
+                  onClick={() => handleSort('student_name')}
+                >
+                  <div className="flex items-center">
+                    Name
+                    <SortIndicator 
+                      field="student_name" 
+                      sortField={sortField} 
+                      sortDirection={sortDirection} 
+                    />
+                  </div>
+                </th>
+                <th 
+                  className="px-6 py-3 text-left text-white font-medium cursor-pointer hover:bg-[#B71C1C] transition-colors"
+                  onClick={() => handleSort('student_id')}
+                >
+                  <div className="flex items-center">
+                    Student ID
+                    <SortIndicator 
+                      field="student_id" 
+                      sortField={sortField} 
+                      sortDirection={sortDirection} 
+                    />
+                  </div>
+                </th>
                 <th className="px-6 py-3 text-left text-white font-medium">Email</th>
                 <th className="px-6 py-3 text-left text-white font-medium">Course</th>
                 <th className="px-6 py-3 text-left text-white font-medium">Major</th>
