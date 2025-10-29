@@ -19,12 +19,20 @@ type Student = {
   created_at: string;
 };
 
+type SortField = 'student_name' | 'student_id';
+type SortDirection = 'asc' | 'desc';
+
 export default function CheckGraduationPage() {
   const [students, setStudents] = useState<Student[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [searchResults, setSearchResults] = useState<Student[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [checkingGraduation, setCheckingGraduation] = useState<number | null>(null);
+  
+  // Sorting state
+  const [sortField, setSortField] = useState<SortField | null>(null);
+  const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
+
   const API_URL = 'http://localhost:8000';
 
   useEffect(() => {
@@ -44,6 +52,48 @@ export default function CheckGraduationPage() {
       setStudents(data);
     } catch (err) {
       toast.error('Failed to load students');
+    }
+  };
+
+  // Apply sorting and filtering to display students
+  const getDisplayStudents = () => {
+    let result = searchResults.length > 0 ? [...searchResults] : [...students];
+
+    // Apply sorting
+    if (sortField) {
+      result.sort((a, b) => {
+        let aValue: any = a[sortField];
+        let bValue: any = b[sortField];
+
+        if (sortField === 'student_name') {
+          // String comparison for names
+          aValue = aValue.toLowerCase();
+          bValue = bValue.toLowerCase();
+        }
+
+        if (aValue < bValue) {
+          return sortDirection === 'asc' ? -1 : 1;
+        }
+        if (aValue > bValue) {
+          return sortDirection === 'asc' ? 1 : -1;
+        }
+        return 0;
+      });
+    }
+
+    return result;
+  };
+
+  const displayStudents = getDisplayStudents();
+
+  const handleSort = (field: SortField) => {
+    if (sortField === field) {
+      // Toggle direction if same field
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      // New field, default to ascending
+      setSortField(field);
+      setSortDirection('asc');
     }
   };
 
@@ -76,69 +126,92 @@ export default function CheckGraduationPage() {
   };
 
   const checkGraduation = async (studentId: number) => {
-    try {
-      setCheckingGraduation(studentId);
+  try {
+    setCheckingGraduation(studentId);
+    
+    const response = await axios.put(`${API_URL}/students/${studentId}/graduate`, null, {
+      headers: { Accept: "application/json" },
+      timeout: 30000
+    });
+
+    const data = response.data;
+    console.log("DEBUG: Full graduation response:", data);
+
+    // Use the updated_student from backend if available
+    const updatedStudent = data.updated_student;
+    
+    if (updatedStudent) {
+      // Update both students and searchResults states
+      setStudents(prev =>
+        prev.map(s =>
+          s.student_id === studentId
+            ? { 
+                ...s, 
+                credit_point: updatedStudent.credit_point, 
+                graduation_status: updatedStudent.graduation_status 
+              }
+            : s
+        )
+      );
       
-      const response = await axios.put(`${API_URL}/students/${studentId}/graduate`, null, {
-        headers: { Accept: "application/json" },
-        timeout: 30000
-      });
+      setSearchResults(prev =>
+        prev.map(s =>
+          s.student_id === studentId
+            ? { 
+                ...s, 
+                credit_point: updatedStudent.credit_point, 
+                graduation_status: updatedStudent.graduation_status 
+              }
+            : s
+        )
+      );
+    }
 
-      const data = response.data;
-      console.log("DEBUG: Full graduation response:", data);
-
-      // Use the updated_student from backend if available
-      const updatedStudent = data.updated_student;
+    // Show success message
+    if (data.can_graduate) {
+      toast.success("Graduation Approved - Database Updated");
+      alert(`✅ Graduation Approved!\nTotal Credits: ${data.total_credits}/300\n\nStatus has been saved to database.`);
+    } else {
+      let message = `❌ Not Eligible for Graduation\n\n`;
+      message += `Total Credits: ${data.total_credits}/300\n`;
       
-      if (updatedStudent) {
-        // Update both students and searchResults states
-        setStudents(prev =>
-          prev.map(s =>
-            s.student_id === studentId
-              ? { 
-                  ...s, 
-                  credit_point: updatedStudent.credit_point, 
-                  graduation_status: updatedStudent.graduation_status 
-                }
-              : s
-          )
-        );
-        
-        setSearchResults(prev =>
-          prev.map(s =>
-            s.student_id === studentId
-              ? { 
-                  ...s, 
-                  credit_point: updatedStudent.credit_point, 
-                  graduation_status: updatedStudent.graduation_status 
-                }
-              : s
-          )
-        );
-      }
-
-      // Show success message
-      if (data.can_graduate) {
-        toast.success("Graduation Approved - Database Updated");
-        alert(`✅ Graduation Approved!\nTotal Credits: ${data.total_credits}/300\n\nStatus has been saved to database.`);
+      // Show messages from backend if available
+      if (data.messages && data.messages.length > 0) {
+        message += `\nReasons:\n`;
+        data.messages.forEach((msg: string) => {
+          message += `• ${msg}\n`;
+        });
       } else {
-        let message = `❌ Not Eligible for Graduation\n\n`;
-        message += `Total Credits: ${data.total_credits}/300\n`;
+        // Fallback to old message format
         message += `Missing Core: ${data.missing_core_units.join(", ") || "None"}\n`;
         message += `Missing Major: ${data.missing_major_units.join(", ") || "None"}\n`;
-        message += `\nStatus has been updated in the database.`;
-        alert(message);
+        message += `MPU Requirement: ${data.mpu_requirements_met ? "Met" : "Not Met"}\n`;
+        if (data.mpu_types_completed) {
+          message += `MPU Types Completed: ${data.mpu_types_completed.length}/3\n`;
+        }
       }
-
-    } catch (err) {
-      console.error("Graduation check error:", err);
-      toast.error("Graduation check failed");
-    } finally {
-      setCheckingGraduation(null);
+      
+      message += `\nStatus has been updated in the database.`;
+      alert(message);
     }
-  };
 
-  const displayStudents = searchResults.length > 0 ? searchResults : students;
+  } catch (err) {
+    console.error("Graduation check error:", err);
+    toast.error("Graduation check failed");
+  } finally {
+    setCheckingGraduation(null);
+  }
+};
+  // Sort indicator component
+  const SortIndicator = ({ field }: { field: SortField }) => {
+    if (sortField !== field) return null;
+    
+    return (
+      <span className="ml-1">
+        {sortDirection === 'asc' ? '↑' : '↓'}
+      </span>
+    );
+  };
 
   return (
     <div className="max-w-7xl mx-auto p-6 bg-gray-50 min-h-screen">
@@ -224,10 +297,28 @@ export default function CheckGraduationPage() {
           <thead className="bg-[#E31C25]">
             <tr>
               <th className="px-6 py-3 text-left text-white font-medium">Graduation Status</th>
-              <th className="px-6 py-3 text-left text-white font-medium">Name</th>
-              <th className="px-6 py-3 text-left text-white font-medium">Student ID</th>
+              <th 
+                className="px-6 py-3 text-left text-white font-medium cursor-pointer hover:bg-[#B71C1C] transition-colors"
+                onClick={() => handleSort('student_name')}
+              >
+                <div className="flex items-center">
+                  Name
+                  <SortIndicator field="student_name" />
+                </div>
+              </th>
+              <th 
+                className="px-6 py-3 text-left text-white font-medium cursor-pointer hover:bg-[#B71C1C] transition-colors"
+                onClick={() => handleSort('student_id')}
+              >
+                <div className="flex items-center">
+                  Student ID
+                  <SortIndicator field="student_id" />
+                </div>
+              </th>
               <th className="px-6 py-3 text-left text-white font-medium">Course</th>
               <th className="px-6 py-3 text-left text-white font-medium">Major</th>
+              <th className="px-6 py-3 text-left text-white font-medium">Intake Term</th>
+              <th className="px-6 py-3 text-left text-white font-medium">Intake Year</th>
               <th className="px-6 py-3 text-left text-white font-medium">Credits</th>
               <th className="px-6 py-3 text-left text-white font-medium">Actions</th>
             </tr>
@@ -252,6 +343,16 @@ export default function CheckGraduationPage() {
                 <td className="px-6 py-4">{student.student_id}</td>
                 <td className="px-6 py-4">{student.student_course}</td>
                 <td className="px-6 py-4">{student.student_major}</td>
+                <td className="px-6 py-4">
+                  <span className="bg-purple-50 text-purple-700 px-2 py-1 rounded text-xs">
+                    {student.intake_term}
+                  </span>
+                </td>
+                <td className="px-6 py-4">
+                  <span className="bg-blue-50 text-blue-700 px-2 py-1 rounded text-xs">
+                    {student.intake_year}
+                  </span>
+                </td>
                 <td className="px-6 py-4">
                   <span className={`font-semibold ${
                     student.credit_point >= 300 ? 'text-green-600' : 
