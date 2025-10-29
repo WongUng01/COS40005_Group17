@@ -1,15 +1,17 @@
-'use client';
-import { useEffect, useState, useCallback, useRef } from 'react';
-import { useParams } from 'next/navigation';
-import axios from 'axios';
-import toast from 'react-hot-toast';
-import Link from 'next/link';
+"use client";
+import { useEffect, useState, useCallback, useRef } from "react";
+import { useParams } from "next/navigation";
+import axios from "axios";
+import toast from "react-hot-toast";
+import Link from "next/link";
 
 type Student = {
   student_id: number;
   student_name: string;
   student_course: string;
   student_major: string;
+  student_type?: string;
+  spm_credit?: boolean;
 };
 
 type StudentUnit = {
@@ -44,9 +46,9 @@ export default function StudentUnitsPage() {
   const [summary, setSummary] = useState({ completed_count: 0, total_required: 0 });
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
-
   const abortControllerRef = useRef<AbortController | null>(null);
-  const API_URL = 'http://127.0.0.1:8000';
+
+  const API_URL = "http://127.0.0.1:8000";
 
   const fetchProgress = useCallback(async () => {
     try {
@@ -56,8 +58,8 @@ export default function StudentUnitsPage() {
       setStudentUnits(data.student_units || []);
       setSummary(data.summary || { completed_count: 0, total_required: 0 });
     } catch (err) {
-      console.error('Failed to fetch progress:', err);
-      toast.error('Failed to load student progress');
+      console.error("Failed to fetch progress:", err);
+      toast.error("Failed to load student progress");
     } finally {
       setLoading(false);
     }
@@ -71,34 +73,30 @@ export default function StudentUnitsPage() {
     const file = e.target.files?.[0];
     if (!file) return;
     if (file.size > 10 * 1024 * 1024) {
-      toast.error('File too large (max 10MB)');
+      toast.error("File too large (max 10MB)");
       return;
     }
 
     const formData = new FormData();
-    formData.append('file', file);
-    formData.append('overwrite', 'true');
+    formData.append("file", file);
+    formData.append("overwrite", "true");
 
     try {
       setUploading(true);
       abortControllerRef.current = new AbortController();
-      const res = await axios.post(
-        `${API_URL}/students/${student_id}/upload-units`,
-        formData,
-        {
-          headers: { 'Content-Type': 'multipart/form-data' },
-          signal: abortControllerRef.current.signal,
-        }
-      );
+      await axios.post(`${API_URL}/students/${student_id}/upload-units`, formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+        signal: abortControllerRef.current.signal,
+      });
 
-      toast.success('Upload successful!');
+      toast.success("Upload successful!");
       fetchProgress();
     } catch (err) {
-      toast.error('Upload failed');
+      toast.error("Upload failed");
       console.error(err);
     } finally {
       setUploading(false);
-      e.target.value = '';
+      e.target.value = "";
       abortControllerRef.current = null;
     }
   };
@@ -130,6 +128,11 @@ export default function StudentUnitsPage() {
           </h1>
           <p className="text-gray-600 text-sm mt-1">
             {student.student_course} — {student.student_major}
+          </p>
+          <p className="text-xs text-gray-500 mt-1">
+            {student.student_type
+              ? `Student Type: ${student.student_type.toUpperCase()}`
+              : ""}
           </p>
         </div>
 
@@ -164,9 +167,7 @@ export default function StudentUnitsPage() {
       {/* Progress Overview */}
       <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
         <div className="flex justify-between items-center mb-2">
-          <h2 className="text-lg font-semibold text-gray-800">
-            Study Progress Overview
-          </h2>
+          <h2 className="text-lg font-semibold text-gray-800">Study Progress Overview</h2>
           <span
             className={`text-sm font-semibold ${
               completionRate === 100 ? "text-green-700" : "text-red-700"
@@ -193,77 +194,78 @@ export default function StudentUnitsPage() {
           <div className="bg-red-700 text-white px-5 py-3 font-semibold text-lg rounded-t-xl">
             Default Study Planner
           </div>
-          <table className="w-full text-sm border-collapse">
-            <thead className="bg-gray-100 text-gray-700">
-              <tr>
-                <th className="p-2 border">Year</th>
-                <th className="p-2 border">Sem</th>
-                <th className="p-2 border">Unit Code</th>
-                <th className="p-2 border">Unit Name</th>
-                <th className="p-2 border">Type</th>
-              </tr>
-            </thead>
-            <tbody>
-              {defaultPlanner.map((unit) => {
-                const isCompleted = Boolean(unit.completed);
-                const isReplaced = !!unit.replaced_by_code;
 
-                return (
-                  <tr
-                    key={unit.id}
-                    className={`border transition ${
-                      isCompleted
-                        ? "bg-green-50 text-green-700 font-medium"
-                        : "bg-white hover:bg-gray-50 text-gray-800"
-                    }`}
-                  >
-                    <td className="p-2 border text-center">{unit.year}</td>
-                    <td className="p-2 border text-center">{unit.semester}</td>
-                    <td className="p-2 border font-mono text-center">
-                      {unit.unit_code || "-"}
-                    </td>
-                    <td className="p-2 border">
-                      {unit.unit_name}
-                      {isReplaced && (
-                        <span className="ml-2 bg-green-100 text-green-800 text-xs font-semibold px-2 py-0.5 rounded-full">
-                          filled with {unit.replaced_by_code}
-                        </span>
-                      )}
-                    </td>
-                    <td className="p-2 border text-center">
-                      <span
-                        className={`text-xs px-2 py-1 rounded-full font-semibold ${
-                          unit.unit_type === "Major"
-                            ? "bg-red-100 text-red-700"
-                            : unit.unit_type === "Core"
-                            ? "bg-blue-100 text-blue-700"
-                            : unit.unit_type === "Elective"
-                            ? "bg-yellow-100 text-yellow-700"
-                            : unit.unit_type === "MPU"
-                            ? "bg-purple-100 text-purple-700"
-                            : "bg-gray-100 text-gray-700"
-                        }`}
-                      >
-                        {unit.unit_type}
-                      </span>
-                    </td>
+          {defaultPlanner.length === 0 ? (
+            <div className="p-6 text-center text-gray-500">
+              <p>
+                ⚠️ No applicable planner units found for this student.
+              </p>
+              <p className="text-xs mt-1">
+                (e.g., International students may not have Malaysian MPU units.)
+              </p>
+            </div>
+          ) : (
+            <>
+              <table className="w-full text-sm border-collapse">
+                <thead className="bg-gray-100 text-gray-700">
+                  <tr>
+                    <th className="p-2 border">Year</th>
+                    <th className="p-2 border">Sem</th>
+                    <th className="p-2 border">Unit Code</th>
+                    <th className="p-2 border">Unit Name</th>
+                    <th className="p-2 border">Type</th>
                   </tr>
-                );
-              })}
-            </tbody>
-          </table>
+                </thead>
+                <tbody>
+                  {defaultPlanner.map((unit) => (
+                    <tr
+                      key={unit.id}
+                      className={`border transition ${
+                        unit.completed
+                          ? "bg-green-50 text-green-700 font-medium"
+                          : "bg-white hover:bg-gray-50 text-gray-800"
+                      }`}
+                    >
+                      <td className="p-2 border text-center">{unit.year}</td>
+                      <td className="p-2 border text-center">{unit.semester}</td>
+                      <td className="p-2 border font-mono text-center">
+                        {unit.unit_code || "-"}
+                      </td>
+                      <td className="p-2 border">{unit.unit_name}</td>
+                      <td className="p-2 border text-center">
+                        <span
+                          className={`text-xs px-2 py-1 rounded-full font-semibold ${
+                            unit.unit_type === "Major"
+                              ? "bg-red-100 text-red-700"
+                              : unit.unit_type === "Core"
+                              ? "bg-blue-100 text-blue-700"
+                              : unit.unit_type === "Elective"
+                              ? "bg-yellow-100 text-yellow-700"
+                              : unit.unit_type === "MPU"
+                              ? "bg-purple-100 text-purple-700"
+                              : "bg-gray-100 text-gray-700"
+                          }`}
+                        >
+                          {unit.unit_type}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
 
-          {/* Legend */}
-          <div className="p-3 flex gap-5 text-xs text-gray-600 border-t bg-gray-50 rounded-b-xl">
-            <div>
-              <span className="inline-block w-3 h-3 bg-green-50 border border-green-300 mr-1"></span>
-              Completed
-            </div>
-            <div>
-              <span className="inline-block w-3 h-3 bg-white border border-gray-300 mr-1"></span>
-              Pending
-            </div>
-          </div>
+              <div className="p-3 flex gap-5 text-xs text-gray-600 border-t bg-gray-50 rounded-b-xl">
+                <div>
+                  <span className="inline-block w-3 h-3 bg-green-50 border border-green-300 mr-1"></span>
+                  Completed
+                </div>
+                <div>
+                  <span className="inline-block w-3 h-3 bg-white border border-gray-300 mr-1"></span>
+                  Pending
+                </div>
+              </div>
+            </>
+          )}
         </div>
 
         {/* Student Completed Units */}
@@ -282,26 +284,17 @@ export default function StudentUnitsPage() {
             </thead>
             <tbody>
               {studentUnits.map((unit) => (
-                <tr
-                  key={unit.id}
-                  className="border hover:bg-gray-50 transition"
-                >
-                  <td className="p-2 border font-mono text-center">
-                    {unit.unit_code || "-"}
-                  </td>
+                <tr key={unit.id} className="border hover:bg-gray-50 transition">
+                  <td className="p-2 border font-mono text-center">{unit.unit_code || "-"}</td>
                   <td className="p-2 border">{unit.unit_name}</td>
                   <td className="p-2 border text-center font-semibold text-gray-700">
                     {unit.grade || "-"}
                   </td>
                   <td className="p-2 border text-center">
                     {unit.completed ? (
-                      <span className="text-green-700 font-medium">
-                        ✅ Completed
-                      </span>
+                      <span className="text-green-700 font-medium">✅ Completed</span>
                     ) : (
-                      <span className="text-red-600 font-medium">
-                        ❌ Incomplete
-                      </span>
+                      <span className="text-red-600 font-medium">❌ Incomplete</span>
                     )}
                   </td>
                 </tr>

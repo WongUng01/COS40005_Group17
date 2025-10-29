@@ -1786,9 +1786,23 @@ def get_student_progress(student_id: int):
             raise HTTPException(status_code=404, detail="Student not found")
         student = student_res.data[0]
 
+        # Extract and normalize student info
+        student_type = (student.get("student_type") or "malaysian").strip().lower()
+
+        # 🧩 Normalize SPM BM credit to a proper boolean (use correct column name!)
+        raw_credit = student.get("has_spm_bm_credit", True)
+        if isinstance(raw_credit, str):
+            has_spm_credit = raw_credit.lower() in ["true", "1", "yes", "y"]
+        else:
+            has_spm_credit = bool(raw_credit)
+
+        print("✅ DEBUG: student_type =", student_type, "| has_spm_credit =", has_spm_credit)
+
         # 2️⃣ Fetch matching study planner
-        program, major = student.get("student_course"), student.get("student_major")
-        intake_year, intake_semester = student.get("intake_year"), student.get("intake_term")
+        program = student.get("student_course")
+        major = student.get("student_major")
+        intake_year = student.get("intake_year")
+        intake_semester = student.get("intake_term")
 
         planner_res = supabase_client.table("study_planners").select("*").match({
             "program": program,
@@ -1804,7 +1818,7 @@ def get_student_progress(student_id: int):
                 "student_units": [],
                 "completed_units": [],
                 "remaining_units": [],
-                "summary": {"completed_count": 0, "total_required": 0}
+                "summary": {"completed_count": 0, "total_required": 0},
             }
 
         planner_id = planner_res.data[0]["id"]
@@ -1813,37 +1827,44 @@ def get_student_progress(student_id: int):
         planner_units = supabase_client.table("study_planner_units").select("*").eq("planner_id", planner_id).execute().data or []
         student_units = supabase_client.table("student_units").select("*").eq("student_id", student_id).execute().data or []
 
-        completed_codes = {u["unit_code"] for u in student_units if u.get("unit_code")}
-        elective_placeholders = [u for u in planner_units if str(u.get("unit_code")).lower() in ["0", "nan", "", "none"]]
-
-        # 4️⃣ Start with normal matching
+        # 🧹 4️⃣ Filter MPU units by student type & SPM BM credit
+        filtered_units = []
         for unit in planner_units:
+            code = str(unit.get("unit_code", "")).upper()
+
+            if "MPU" in code:
+                # 1️⃣ Bahasa Kebangsaan A — Malaysians without SPM BM credit only
+                if code.startswith("MPU321") and (student_type != "malaysian" or has_spm_credit):
+                    continue
+                # 2️⃣ Penghayatan Etika dan Peradaban — Malaysians only
+                if code.startswith("MPU318") and student_type != "malaysian":
+                    continue
+                # 3️⃣ Malay Language Communication 2 — Internationals only
+                if code.startswith("MPU314") and student_type == "malaysian":
+                    continue
+                # ✅ Others like MPU3272, MPU3192, MPU3412 stay
+
+            filtered_units.append(unit)
+
+        # 5️⃣ Mark completed units
+        completed_codes = {u["unit_code"] for u in student_units if u.get("unit_code")}
+        for unit in filtered_units:
             code = str(unit.get("unit_code"))
-            unit["completed"] = False
-            unit["replacement"] = None
+            unit["completed"] = code in completed_codes
 
-            if code in completed_codes:
-                unit["completed"] = True
-            elif unit in elective_placeholders:
-                # try to fill elective with an unmatched student unit
-                unmatched = next((su for su in student_units if su["unit_code"] not in [p.get("unit_code") for p in planner_units]), None)
-                if unmatched:
-                    unit["completed"] = True
-                    unit["replacement"] = unmatched["unit_code"]
-                    unit["unit_name"] = f"{unit['unit_name']} (filled with {unmatched['unit_code']})"
-                    student_units.remove(unmatched)
+        completed_units = [u for u in filtered_units if u["completed"]]
+        remaining_units = [u for u in filtered_units if not u["completed"]]
 
-        remaining_units = [u for u in planner_units if not u["completed"]]
-        completed_units = [u for u in planner_units if u["completed"]]
-
+        # 6️⃣ Summary
         summary = {
             "completed_count": len(completed_units),
-            "total_required": len(planner_units)
+            "total_required": len(filtered_units)
         }
 
+        # ✅ Final Response
         return {
             "student": student,
-            "default_planner_units": planner_units,
+            "default_planner_units": filtered_units,
             "student_units": student_units,
             "completed_units": completed_units,
             "remaining_units": remaining_units,
@@ -1851,5 +1872,5 @@ def get_student_progress(student_id: int):
         }
 
     except Exception as e:
-        print("Error in get_student_progress:", str(e))
+        print("❌ Error in get_student_progress:", str(e))
         raise HTTPException(status_code=500, detail=str(e))
