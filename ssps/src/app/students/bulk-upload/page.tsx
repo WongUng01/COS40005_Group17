@@ -10,7 +10,8 @@ const MAX_FILE_SIZE_MB = 10;
 export default function BulkUploadPage() {
   const [uploadingStudents, setUploadingStudents] = useState(false);
   const [uploadingBulkUnits, setUploadingBulkUnits] = useState(false);
-  const API_URL = 'http://localhost:8000';
+  // const API_URL = 'http://localhost:8000';
+  const API_URL = "http://127.0.0.1:8000";
 
   // 批量上传学生
   const handleUploadStudents = async (e: React.ChangeEvent<HTMLInputElement>) => {
