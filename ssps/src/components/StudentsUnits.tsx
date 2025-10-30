@@ -231,7 +231,23 @@ export default function StudentUnitsPage() {
                       <td className="p-2 border font-mono text-center">
                         {unit.unit_code || "-"}
                       </td>
-                      <td className="p-2 border">{unit.unit_name}</td>
+                      <td className="p-2 border">
+                        <div className="flex items-center flex-wrap">
+                          {/\(filled with .*?\)/i.test(unit.unit_name) ? (
+                            <>
+                              {/* Part before "(filled with ...)" */}
+                              {unit.unit_name.split(/\(filled with .*?\)/i)[0]}
+
+                              {/* Extract "(filled with ...)" part */}
+                              <span className="ml-2 inline-block rounded-full px-2 py-0.5 text-xs font-semibold bg-green-100 text-green-800 border border-green-200 shadow-sm">
+                                {unit.unit_name.match(/\(filled with .*?\)/i)?.[0]}
+                              </span>
+                            </>
+                          ) : (
+                            <span>{unit.unit_name}</span>
+                          )}
+                        </div>
+                      </td>
                       <td className="p-2 border text-center">
                         <span
                           className={`text-xs px-2 py-1 rounded-full font-semibold ${
@@ -240,7 +256,7 @@ export default function StudentUnitsPage() {
                               : unit.unit_type === "Core"
                               ? "bg-blue-100 text-blue-700"
                               : unit.unit_type === "Elective"
-                              ? "bg-yellow-100 text-yellow-700"
+                              ? "bg-green-100 text-green-700"
                               : unit.unit_type === "MPU"
                               ? "bg-purple-100 text-purple-700"
                               : "bg-gray-100 text-gray-700"

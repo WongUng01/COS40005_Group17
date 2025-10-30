@@ -1786,19 +1786,25 @@ def get_student_progress(student_id: int):
             raise HTTPException(status_code=404, detail="Student not found")
         student = student_res.data[0]
 
-        # Extract and normalize student info
+        # 🧩 Normalize student_type and has_spm_bm_credit
         student_type = (student.get("student_type") or "malaysian").strip().lower()
 
-        # 🧩 Normalize SPM BM credit to a proper boolean (use correct column name!)
-        raw_credit = student.get("has_spm_bm_credit", True)
-        if isinstance(raw_credit, str):
-            has_spm_credit = raw_credit.lower() in ["true", "1", "yes", "y"]
-        else:
+        # Handle SPM BM credit safely
+        raw_credit = student.get("has_spm_bm_credit")
+        if raw_credit is None:
+            has_spm_credit = True
+        elif isinstance(raw_credit, bool):
+            has_spm_credit = raw_credit
+        elif isinstance(raw_credit, (int, float)):
             has_spm_credit = bool(raw_credit)
+        elif isinstance(raw_credit, str):
+            has_spm_credit = raw_credit.strip().lower() in ["true", "1", "yes", "y"]
+        else:
+            has_spm_credit = True
 
-        print("✅ DEBUG: student_type =", student_type, "| has_spm_credit =", has_spm_credit)
+        print(f"✅ DEBUG: student_type={student_type}, has_spm_credit={has_spm_credit}")
 
-        # 2️⃣ Fetch matching study planner
+        # 2️⃣ Fetch study planner
         program = student.get("student_course")
         major = student.get("student_major")
         intake_year = student.get("intake_year")
@@ -1827,35 +1833,58 @@ def get_student_progress(student_id: int):
         planner_units = supabase_client.table("study_planner_units").select("*").eq("planner_id", planner_id).execute().data or []
         student_units = supabase_client.table("student_units").select("*").eq("student_id", student_id).execute().data or []
 
-        # 🧹 4️⃣ Filter MPU units by student type & SPM BM credit
+        # 🧹 4️⃣ Filter MPU units based on student type & SPM BM credit
         filtered_units = []
         for unit in planner_units:
             code = str(unit.get("unit_code", "")).upper()
 
             if "MPU" in code:
-                # 1️⃣ Bahasa Kebangsaan A — Malaysians without SPM BM credit only
+                # Bahasa Kebangsaan A — Malaysians WITHOUT SPM BM credit only
                 if code.startswith("MPU321") and (student_type != "malaysian" or has_spm_credit):
                     continue
-                # 2️⃣ Penghayatan Etika dan Peradaban — Malaysians only
+                # Penghayatan Etika dan Peradaban — Malaysians only
                 if code.startswith("MPU318") and student_type != "malaysian":
                     continue
-                # 3️⃣ Malay Language Communication 2 — Internationals only
+                # Malay Language Communication 2 — Internationals only
                 if code.startswith("MPU314") and student_type == "malaysian":
                     continue
-                # ✅ Others like MPU3272, MPU3192, MPU3412 stay
 
             filtered_units.append(unit)
 
-        # 5️⃣ Mark completed units
+        # 5️⃣ Determine completed and elective placeholders
         completed_codes = {u["unit_code"] for u in student_units if u.get("unit_code")}
+        elective_placeholders = [
+            u for u in filtered_units
+            if str(u.get("unit_code")).lower() in ["0", "nan", "", "none", "—"]
+        ]
+
         for unit in filtered_units:
             code = str(unit.get("unit_code"))
-            unit["completed"] = code in completed_codes
+            unit["completed"] = False
+            unit["replacement"] = None
 
+            # ✅ If this unit is directly completed
+            if code in completed_codes:
+                unit["completed"] = True
+            # ✅ If this unit is an elective placeholder, try to fill it
+            elif unit in elective_placeholders:
+                # Find an unmatched student unit that isn't already in planner
+                unmatched = next(
+                    (su for su in student_units if su["unit_code"] not in [p.get("unit_code") for p in filtered_units]),
+                    None
+                )
+                if unmatched:
+                    unit["completed"] = True
+                    unit["replacement"] = unmatched["unit_code"]
+                    unit["unit_name"] = f"{unit['unit_name']} (filled with {unmatched['unit_code']})"
+                    # Remove matched student unit to avoid reuse
+                    student_units.remove(unmatched)
+
+        # 6️⃣ Split into completed and remaining
         completed_units = [u for u in filtered_units if u["completed"]]
         remaining_units = [u for u in filtered_units if not u["completed"]]
 
-        # 6️⃣ Summary
+        # 7️⃣ Summary
         summary = {
             "completed_count": len(completed_units),
             "total_required": len(filtered_units)
@@ -1868,6 +1897,7 @@ def get_student_progress(student_id: int):
             "student_units": student_units,
             "completed_units": completed_units,
             "remaining_units": remaining_units,
+            "elective_placeholders": elective_placeholders,
             "summary": summary
         }
 
