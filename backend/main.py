@@ -97,6 +97,8 @@ class StudentBase(BaseModel):
     intake_term: str
     intake_year: str
     credit_point: float
+    student_type: str = "malaysian"
+    has_spm_bm_credit: bool = True 
 
 class StudentUnitBase(BaseModel):
     student_id: int
@@ -851,41 +853,88 @@ async def get_students():
 @app.post("/students")
 async def create_student(student: StudentBase):
     try:
-        # Check if student ID or email already exists
-        existing = (
-            supabase_client.from_('students')
-            .select('*')
-            .or_(
-                f"student_id.eq.{student.student_id},student_email.eq.{student.student_email}"
-            )
+        # 检查学生是否已存在
+        existing_check = supabase_client.from_('students') \
+            .select('student_id') \
+            .eq('student_id', student.student_id) \
             .execute()
-        )
-        if existing.data:
-            raise HTTPException(status_code=400, detail="Student ID or email already exists")
-
-        response = client.from_('students').insert(student.dict()).execute()
-        return response.data[0]
+        
+        if existing_check.data:
+            raise HTTPException(status_code=400, detail="Student ID already exists")
+        
+        # 准备插入数据，包含新字段
+        student_data = {
+            'student_id': student.student_id,
+            'student_name': student.student_name,
+            'student_email': student.student_email,
+            'student_course': student.student_course,
+            'student_major': student.student_major,
+            'intake_term': student.intake_term,
+            'intake_year': student.intake_year,
+            'graduation_status': student.graduation_status,
+            'credit_point': student.credit_point,
+            'student_type': student.student_type,  # 新增
+            'has_spm_bm_credit': student.has_spm_bm_credit,  # 新增
+            'created_at': 'now()'
+        }
+        
+        # 插入数据
+        result = supabase_client.from_('students').insert(student_data).execute()
+        
+        if not result.data:
+            raise HTTPException(status_code=500, detail="Failed to create student")
+            
+        return {"message": "Student created successfully", "student": result.data[0]}
+        
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Creation failed: {e}")
+        print(f"Error creating student: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+    
 
 @app.put("/students/{student_id}")
 async def update_student(student_id: int, student: StudentBase):
     try:
-        response = (
-            client.from_('students')
-            .update(student.dict())
-            .eq('student_id', student_id)
+        # 检查学生是否存在
+        existing_check = supabase_client.from_('students') \
+            .select('student_id') \
+            .eq('student_id', student_id) \
             .execute()
-        )
-        if not response.data:
+        
+        if not existing_check.data:
             raise HTTPException(status_code=404, detail="Student not found")
-        return response.data[0]
+        
+        # 准备更新数据，包含新字段
+        update_data = {
+            'student_name': student.student_name,
+            'student_email': student.student_email,
+            'student_course': student.student_course,
+            'student_major': student.student_major,
+            'intake_term': student.intake_term,
+            'intake_year': student.intake_year,
+            'graduation_status': student.graduation_status,
+            'credit_point': student.credit_point,
+            'student_type': student.student_type,  # 新增
+            'has_spm_bm_credit': student.has_spm_bm_credit,  # 新增
+        }
+        
+        # 更新数据
+        result = supabase_client.from_('students') \
+            .update(update_data) \
+            .eq('student_id', student_id) \
+            .execute()
+        
+        if not result.data:
+            raise HTTPException(status_code=500, detail="Failed to update student")
+            
+        return {"message": "Student updated successfully", "student": result.data[0]}
+        
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Update failed: {e}")
+        print(f"Error updating student: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
 @app.delete("/students/{student_id}")
 async def delete_student(student_id: int):
@@ -904,10 +953,32 @@ async def delete_student(student_id: int):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Deletion failed: {e}")
     
-@app.get(
-    "/students/{student_id}/units",
-    response_model=List[StudentUnitOut]
-)
+@app.get("/students")
+async def get_students():
+    try:
+        response = supabase_client.from_('students') \
+            .select('*') \
+            .execute()
+        
+        return response.data
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/students/{student_id}")
+async def get_student(student_id: int):
+    try:
+        response = supabase_client.from_('students') \
+            .select('*') \
+            .eq('student_id', student_id) \
+            .execute()
+        
+        if not response.data:
+            raise HTTPException(status_code=404, detail="Student not found")
+            
+        return response.data[0]
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 async def get_student_units(student_id: int):
     try:
         resp = (
@@ -956,9 +1027,9 @@ async def process_graduation(student_id: int):
 
         print(f"=== DEBUG: Checking graduation for student {student_id} ===")
 
-        # 1. Load student info
+        # 1. Load student info (包括 student_type 和 has_spm_bm_credit)
         student_res = supabase_client.from_("students") \
-            .select("student_course, student_major, intake_year, intake_term, credit_point, graduation_status") \
+            .select("student_course, student_major, intake_year, intake_term, credit_point, graduation_status, student_type, has_spm_bm_credit") \
             .eq("student_id", student_id) \
             .execute()
 
@@ -970,6 +1041,18 @@ async def process_graduation(student_id: int):
         student_major = student["student_major"]
         intake_year = student["intake_year"]
         intake_term = student["intake_term"]
+        
+        # 提取和标准化学生类型和SPM BM学分信息
+        student_type = (student.get("student_type") or "malaysian").strip().lower()
+        
+        # 标准化 SPM BM credit 为布尔值
+        raw_credit = student.get("has_spm_bm_credit", True)
+        if isinstance(raw_credit, str):
+            has_spm_credit = raw_credit.lower() in ["true", "1", "yes", "y"]
+        else:
+            has_spm_credit = bool(raw_credit)
+
+        print("✅ DEBUG: student_type =", student_type, "| has_spm_credit =", has_spm_credit)
 
         # 2. Completed units
         completed_units_res = supabase_client.from_("student_units") \
@@ -1047,19 +1130,45 @@ async def process_graduation(student_id: int):
 
         planner_id = matched_planners[0]["id"]
 
-        # 5. Load required units
+        # 5. Load required units and apply MPU filtering (与progress endpoint相同)
         required_units_res = supabase_client.from_("study_planner_units") \
             .select("unit_code, unit_type") \
             .eq("planner_id", planner_id) \
             .execute()
 
         required_units = required_units_res.data or []
-        core_units = [normalize_code(u["unit_code"]) for u in required_units if normalize_type(u["unit_type"]) == "core"]
-        major_units = [normalize_code(u["unit_code"]) for u in required_units if normalize_type(u["unit_type"]) == "major"]
         
-        # Get MPU units - assuming MPU units have unit_type starting with "mpu"
-        mpu_units = [u for u in required_units if normalize_type(u["unit_type"]).startswith("mpu")]
+        # 🧹 应用MPU过滤逻辑 (与progress endpoint相同)
+        filtered_units = []
+        for unit in required_units:
+            code = str(unit.get("unit_code", "")).upper()
 
+            if "MPU" in code:
+                # 1️⃣ Bahasa Kebangsaan A — Malaysians without SPM BM credit only
+                if code.startswith("MPU321") and (student_type != "malaysian" or has_spm_credit):
+                    continue
+                # 2️⃣ Penghayatan Etika dan Peradaban — Malaysians only
+                if code.startswith("MPU318") and student_type != "malaysian":
+                    continue
+                # 3️⃣ Malay Language Communication 2 — Internationals only
+                if code.startswith("MPU314") and student_type == "malaysian":
+                    continue
+                # ✅ Others like MPU3272, MPU3192, MPU3412 stay
+
+            filtered_units.append(unit)
+
+        # 6. 检查学生是否完成了所有过滤后的必修科目
+        required_codes_norm = {normalize_code(unit["unit_code"]) for unit in filtered_units}
+        completed_required = required_codes_norm & passed_codes_norm
+        missing_required = required_codes_norm - passed_codes_norm
+
+        # 7. 毕业条件：完成所有过滤后的必修科目
+        can_graduate = len(missing_required) == 0
+
+        # 8. 计算各类别的学分和完成情况（用于显示）
+        core_units = [normalize_code(u["unit_code"]) for u in filtered_units if normalize_type(u["unit_type"]) == "core"]
+        major_units = [normalize_code(u["unit_code"]) for u in filtered_units if normalize_type(u["unit_type"]) == "major"]
+        
         core_set = set(core_units)
         major_set = set(major_units)
 
@@ -1083,42 +1192,31 @@ async def process_graduation(student_id: int):
             else:
                 major_credits += 12.5
 
-        # Check MPU requirement: at least three different MPU types
-        mpu_types_completed = set()
-        for mpu_unit in mpu_units:
-            unit_code_norm = normalize_code(mpu_unit["unit_code"])
-            if unit_code_norm in passed_codes_norm:
-                mpu_type = normalize_type(mpu_unit["unit_type"])
-                mpu_types_completed.add(mpu_type)
-
-        mpu_requirements_met = len(mpu_types_completed) >= 3
-
-        # Update graduation condition to include MPU requirement
-        can_graduate = (total_credits >= 300 and 
-                       not missing_core and 
-                       not missing_major and 
-                       mpu_requirements_met)
-
-        # Generate messages
+        # 9. 生成消息
         messages = []
         
-        # Credit requirement message
-        if total_credits < 300:
-            messages.append(f"Credit requirement not met: {total_credits}/300 credits")
+        # 总体完成情况
+        if can_graduate:
+            messages.append("All required units completed - Eligible for graduation")
+        else:
+            messages.append(f"Not all required units completed: {len(completed_required)}/{len(required_codes_norm)}")
         
         # Core units message
         if missing_core:
-            messages.append(f"Missing {len(missing_core)} core units")
+            messages.append(f"Missing {len(missing_core)} core units: {', '.join(list(missing_core))}")
+        else:
+            messages.append("All core units completed")
         
         # Major units message
         if missing_major:
-            messages.append(f"Missing {len(missing_major)} major units")
-        
-        # MPU requirement message
-        if not mpu_requirements_met:
-            messages.append(f"MPU requirement not met: {len(mpu_types_completed)}/3 different MPU types completed")
+            messages.append(f"Missing {len(missing_major)} major units: {', '.join(list(missing_major))}")
         else:
-            messages.append(f"MPU requirement met: {len(mpu_types_completed)}/3 different MPU types completed")
+            messages.append("All major units completed")
+        
+        # 其他缺失科目（非core非major）
+        other_missing = missing_required - missing_core - missing_major
+        if other_missing:
+            messages.append(f"Missing {len(other_missing)} other required units: {', '.join(list(other_missing))}")
 
         # FIX: Add await here
         updated_student = await supabase_update_student(student_id, {"credit_point": total_credits, "graduation_status": can_graduate})
@@ -1131,12 +1229,12 @@ async def process_graduation(student_id: int):
             major_credits=major_credits,
             core_completed=len(completed_core),
             major_completed=len(completed_major),
-            mpu_requirements_met=mpu_requirements_met,
-            mpu_types_completed=list(mpu_types_completed),
+            mpu_requirements_met=True,  # 由于三种不同MPU要求已作废，设为True
+            mpu_types_completed=[],     # 清空MPU类型列表
             missing_core_units=list(missing_core),
             missing_major_units=list(missing_major),
             messages=messages,
-            planner_info=f"Planner {planner_id} for {student_course} - {student_major}",
+            planner_info=f"Planner {planner_id} for {student_course} - {student_major} (Filtered MPU based on student type)",
             # Include the updated student data in the response
             updated_student=updated_student
         )
@@ -1147,8 +1245,7 @@ async def process_graduation(student_id: int):
         print("❌ CRITICAL ERROR:", e)
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
-          
-
+    
 async def supabase_update_student(student_id: int, payload: dict):
     try:
         print(f"DEBUG: Updating student {student_id} with {payload}")
@@ -1224,7 +1321,7 @@ async def upload_students(file: UploadFile = File(...)):
         df.columns = [col.strip().lower() for col in df.columns]
         print(f"DEBUG: Excel columns: {df.columns.tolist()}")
         
-        # 4. 映射列名
+        # 4. 映射列名 - 添加新列的映射
         column_mapping = {
             'name': 'student_name',
             'id': 'student_id', 
@@ -1232,7 +1329,13 @@ async def upload_students(file: UploadFile = File(...)):
             'course': 'student_course',
             'major': 'student_major',
             'intake term': 'intake_term',
-            'intake year': 'intake_year'
+            'intake year': 'intake_year',
+            'student type': 'student_type',  # 新增
+            'student_type': 'student_type',  # 新增
+            'has spm bm credit': 'has_spm_bm_credit',  # 新增
+            'has_spm_bm_credit': 'has_spm_bm_credit',  # 新增
+            'spm bm credit': 'has_spm_bm_credit',  # 别名
+            'bm credit': 'has_spm_bm_credit'  # 别名
         }
         
         # 检查必需的列
@@ -1263,6 +1366,34 @@ async def upload_students(file: UploadFile = File(...)):
                 intake_term = str(row['intake_term']).strip()
                 intake_year = str(row['intake_year']).strip()
                 
+                # 处理新列 - student_type
+                student_type = "malaysian"  # 默认值
+                if 'student_type' in row and pd.notna(row['student_type']):
+                    raw_type = str(row['student_type']).strip().lower()
+                    if raw_type in ['malaysian', 'international', 'local']:
+                        student_type = raw_type
+                    else:
+                        # 尝试映射常见值
+                        type_mapping = {
+                            'malay': 'malaysian',
+                            'my': 'malaysian',
+                            'intl': 'international',
+                            'foreign': 'international',
+                            'local': 'malaysian'
+                        }
+                        student_type = type_mapping.get(raw_type, 'malaysian')
+                
+                # 处理新列 - has_spm_bm_credit
+                has_spm_bm_credit = True  # 默认值
+                if 'has_spm_bm_credit' in row and pd.notna(row['has_spm_bm_credit']):
+                    raw_credit = row['has_spm_bm_credit']
+                    if isinstance(raw_credit, bool):
+                        has_spm_bm_credit = raw_credit
+                    elif isinstance(raw_credit, (int, float)):
+                        has_spm_bm_credit = bool(raw_credit)
+                    elif isinstance(raw_credit, str):
+                        has_spm_bm_credit = raw_credit.lower() in ['true', '1', 'yes', 'y', '有', '具备']
+                
                 # 验证必需字段
                 if not student_name:
                     errors.append(f"Row {index+2}: Student name is required")
@@ -1278,7 +1409,7 @@ async def upload_students(file: UploadFile = File(...)):
                     continue
                 
                 # 检查学生是否已存在
-                existing_check = client.from_('students') \
+                existing_check = supabase_client.from_('students') \
                     .select('student_id') \
                     .eq('student_id', student_id) \
                     .execute()
@@ -1296,6 +1427,8 @@ async def upload_students(file: UploadFile = File(...)):
                     'student_major': student_major,
                     'intake_term': intake_term,
                     'intake_year': intake_year,
+                    'student_type': student_type,  # 新增
+                    'has_spm_bm_credit': has_spm_bm_credit,  # 新增
                     'graduation_status': False,
                     'credit_point': 0.0,
                     'created_at': 'now()'
@@ -1311,7 +1444,7 @@ async def upload_students(file: UploadFile = File(...)):
         # 7. 插入新学生数据
         inserted_count = 0
         if students_to_insert:
-            result = client.from_('students').insert(students_to_insert).execute()
+            result = supabase_client.from_('students').insert(students_to_insert).execute()
             inserted_count = len(result.data) if result.data else 0
             print(f"DEBUG: Inserted {inserted_count} new students")
         

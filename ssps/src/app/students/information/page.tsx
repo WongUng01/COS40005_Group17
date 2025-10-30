@@ -18,6 +18,8 @@ type Student = {
   intake_year: string;
   credit_point: number;
   created_at: string;
+  student_type: string; 
+  has_spm_bm_credit: boolean; 
 };
 
 type Program = {
@@ -35,6 +37,7 @@ type Major = {
 type SortField = 'student_name' | 'student_id';
 type SortDirection = 'asc' | 'desc';
 
+// Student Modal Component
 // Student Modal Component
 function StudentModal({ 
   isOpen, 
@@ -62,6 +65,16 @@ function StudentModal({
   const semesters = [
     { value: 'Feb/Mar', label: 'Feb/Mar' },
     { value: 'Aug/Sep', label: 'Aug/Sep' }
+  ];
+
+  const studentTypeOptions = [
+    { value: 'malaysian', label: 'Malaysian' },
+    { value: 'international', label: 'International' }
+  ];
+
+  const spmCreditOptions = [
+    { value: 'true', label: 'TRUE' },
+    { value: 'false', label: 'FALSE' }
   ];
 
   const swinburneStyles = {
@@ -123,6 +136,20 @@ function StudentModal({
     setFormData({ 
       ...formData, 
       intake_term: option?.value || '' 
+    });
+  };
+
+  const handleStudentTypeSelect = (option: any) => {
+    setFormData({ 
+      ...formData, 
+      student_type: option?.value || 'malaysian' 
+    });
+  };
+
+  const handleSpmCreditSelect = (option: any) => {
+    setFormData({ 
+      ...formData, 
+      has_spm_bm_credit: option?.value === 'true' 
     });
   };
 
@@ -200,6 +227,41 @@ function StudentModal({
                 className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#E31C25] focus:border-transparent"
                 required
                 disabled={isSubmitting}
+              />
+            </div>
+
+            {/* Student Type Dropdown */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Student Type *
+              </label>
+              <Select
+                value={formData.student_type ? { value: formData.student_type, label: formData.student_type.charAt(0).toUpperCase() + formData.student_type.slice(1) } : { value: 'malaysian', label: 'Malaysian' }}
+                onChange={handleStudentTypeSelect}
+                options={studentTypeOptions}
+                placeholder="Select Student Type"
+                styles={swinburneStyles}
+                menuPortalTarget={document.body}
+                isDisabled={isSubmitting}
+              />
+            </div>
+
+            {/* SPM BM Credit Dropdown */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Has SPM BM Credit *
+              </label>
+              <Select
+                value={formData.has_spm_bm_credit !== undefined ? 
+                  { value: formData.has_spm_bm_credit.toString(), label: formData.has_spm_bm_credit ? 'TRUE' : 'FALSE' } : 
+                  { value: 'true', label: 'TRUE' }
+                }
+                onChange={handleSpmCreditSelect}
+                options={spmCreditOptions}
+                placeholder="Select SPM BM Credit Status"
+                styles={swinburneStyles}
+                menuPortalTarget={document.body}
+                isDisabled={isSubmitting}
               />
             </div>
 
@@ -588,39 +650,43 @@ export default function StudentsInformationPage() {
   };
 
   const openAddModal = () => {
-    setFormData({
-      graduation_status: false,
-      student_name: '',
-      student_id: 0,
-      student_email: '',
-      student_course: '',
-      student_major: '',
-      intake_term: '',
-      intake_year: '',
-      credit_point: 0
-    });
-    setEditingStudentId(null);
-    setModalMode('add');
-    setIsModalOpen(true);
-  };
+  setFormData({
+    graduation_status: false,
+    student_name: '',
+    student_id: 0,
+    student_email: '',
+    student_course: '',
+    student_major: '',
+    intake_term: '',
+    intake_year: '',
+    credit_point: 0,
+    student_type: 'malaysian', 
+    has_spm_bm_credit: true 
+  });
+  setEditingStudentId(null);
+  setModalMode('add');
+  setIsModalOpen(true);
+};
 
-  const openEditModal = (student: Student) => {
-    console.log('Editing student:', student);
-    setFormData({ 
-      graduation_status: student.graduation_status, 
-      student_name: student.student_name, 
-      student_id: student.student_id, 
-      student_email: student.student_email, 
-      student_course: student.student_course, 
-      student_major: student.student_major, 
-      intake_term: student.intake_term, 
-      intake_year: student.intake_year, 
-      credit_point: student.credit_point 
-    });
-    setEditingStudentId(student.student_id);
-    setModalMode('edit');
-    setIsModalOpen(true);
-  };
+const openEditModal = (student: Student) => {
+  console.log('Editing student:', student);
+  setFormData({ 
+    graduation_status: student.graduation_status, 
+    student_name: student.student_name, 
+    student_id: student.student_id, 
+    student_email: student.student_email, 
+    student_course: student.student_course, 
+    student_major: student.student_major, 
+    intake_term: student.intake_term, 
+    intake_year: student.intake_year, 
+    credit_point: student.credit_point,
+    student_type: student.student_type || 'malaysian', // 新增
+    has_spm_bm_credit: student.has_spm_bm_credit !== undefined ? student.has_spm_bm_credit : true // 新增
+  });
+  setEditingStudentId(student.student_id);
+  setModalMode('edit');
+  setIsModalOpen(true);
+};
 
   const closeModal = () => {
     if (!isSubmitting) {
