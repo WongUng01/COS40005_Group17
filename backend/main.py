@@ -26,7 +26,7 @@ planners_db: Dict[str, List[dict]] = {}
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -2077,6 +2077,9 @@ def get_student_progress(student_id: int):
             if str(u.get("unit_code")).lower() in ["0", "nan", "", "none", "—"]
         ]
 
+        # Keep a separate list of student codes that have been used to fill electives (for summary only)
+        used_for_elective = set()
+
         for unit in filtered_units:
             code = str(unit.get("unit_code"))
             unit["completed"] = False
@@ -2087,23 +2090,23 @@ def get_student_progress(student_id: int):
                 unit["completed"] = True
             # ✅ If this unit is an elective placeholder, try to fill it
             elif unit in elective_placeholders:
-                # Find an unmatched student unit that isn't already in planner
                 unmatched = next(
-                    (su for su in student_units if su["unit_code"] not in [p.get("unit_code") for p in filtered_units]),
+                    (su for su in student_units
+                     if su["unit_code"] not in [p.get("unit_code") for p in filtered_units]
+                     and su["unit_code"] not in used_for_elective),
                     None
                 )
                 if unmatched:
                     unit["completed"] = True
                     unit["replacement"] = unmatched["unit_code"]
                     unit["unit_name"] = f"{unit['unit_name']} (filled with {unmatched['unit_code']})"
-                    # Remove matched student unit to avoid reuse
-                    student_units.remove(unmatched)
+                    used_for_elective.add(unmatched["unit_code"])
 
         # 6️⃣ Split into completed and remaining
         completed_units = [u for u in filtered_units if u["completed"]]
         remaining_units = [u for u in filtered_units if not u["completed"]]
 
-        # 7️⃣ Summary
+        # 7️⃣ Summary (based on planner only)
         summary = {
             "completed_count": len(completed_units),
             "total_required": len(filtered_units)
