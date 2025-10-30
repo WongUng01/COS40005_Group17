@@ -463,7 +463,7 @@ export default function StudentsInformationPage() {
 
   // Apply sorting and filtering to display students
   const getDisplayStudents = () => {
-    let result = searchResults.length > 0 ? [...searchResults] : [...students];
+    const result = searchResults.length > 0 ? [...searchResults] : [...students];
 
     // Apply sorting
     if (sortField) {
