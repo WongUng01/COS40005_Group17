@@ -28,7 +28,9 @@ ChartJS.register(
   PointElement
 );
 
-const API = "http://127.0.0.1:8000";
+//const API = "http://127.0.0.1:8000";
+const API = "http://localhost:8000";
+
 
 export default function AnalyticsDashboard() {
   const [overview, setOverview] = useState<any>(null);
