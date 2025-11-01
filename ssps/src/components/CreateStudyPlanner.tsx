@@ -6,7 +6,9 @@ import { Plus, Save } from "lucide-react";
 import Select from "react-select";
 import toast from "react-hot-toast";
 
-const API = "http://127.0.0.1:8000";
+// const API = "http://127.0.0.1:8000";
+const API = "https://cos40005-group17.onrender.com";
+
 
 type Unit = {
   unit_code: string;
