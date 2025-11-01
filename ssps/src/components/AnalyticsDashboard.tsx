@@ -14,6 +14,8 @@ import {
   ArcElement,
   LineElement,
   PointElement,
+  LineController,
+  BarController,
 } from "chart.js";
 
 ChartJS.register(
@@ -25,7 +27,9 @@ ChartJS.register(
   Tooltip,
   Legend,
   LineElement,
-  PointElement
+  PointElement,
+  LineController,
+  BarController 
 );
 
 //const API = "http://127.0.0.1:8000";
