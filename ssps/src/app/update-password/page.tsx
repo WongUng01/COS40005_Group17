@@ -13,13 +13,17 @@ export default function UpdatePasswordPage() {
   const [message, setMessage] = useState('');
 
   useEffect(() => {
-    // 👇 This processes the access token in the URL hash
     const handleRecovery = async () => {
-      const { data, error } = await supabase.auth.exchangeCodeForSession(window.location.href);
+      const hash = window.location.hash;
+      if (!hash) return;
+
+      const { data, error } = await supabase.auth.exchangeCodeForSession(hash);
       if (error) {
-        console.error('Error exchanging recovery code:', error);
+        console.error('Error exchanging recovery code:', error.message);
+        setError('Invalid or expired recovery link.');
       }
     };
+
     handleRecovery();
   }, []);
 
