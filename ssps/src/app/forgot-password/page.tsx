@@ -89,7 +89,7 @@ const ForgotPasswordPage = () => {
         {/* Footer */}
         <p className="text-center text-sm text-gray-600 mt-6">
           <Link
-            href="/login"
+            href="/"
             className="text-[#e60028] hover:underline font-semibold"
           >
             Back to Login
