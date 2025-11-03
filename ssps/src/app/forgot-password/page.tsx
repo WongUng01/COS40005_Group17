@@ -17,7 +17,7 @@ const ForgotPasswordPage = () => {
     setError('');
 
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${window.location.origin}/update-password`,
+      redirectTo: `https://cos-40005-group17.vercel.app/update-password`
     });
 
     if (error) {
