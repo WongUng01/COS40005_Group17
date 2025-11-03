@@ -14,9 +14,14 @@ const UpdatePasswordPage = () => {
 
   useEffect(() => {
     const handleSession = async () => {
+      setLoading(true);
       const { data, error } = await supabase.auth.exchangeCodeForSession(window.location.href);
+
       if (error) {
+        console.error("Session exchange failed:", error.message);
         setError(error.message);
+      } else {
+        console.log("Session restored:", data);
       }
 
       setLoading(false);
