@@ -60,35 +60,6 @@ export default function StudentsMainPage() {
         </Link>
       </div>
 
-      {/* Quick Stats */}
-      <div className="bg-white p-6 rounded-lg shadow-md">
-        <h3 className="text-lg font-semibold text-gray-800 mb-4">Quick Access</h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <Link 
-            href="/students/information?action=add"
-            className="p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors flex items-center gap-3"
-          >
-            <span className="bg-blue-100 p-2 rounded-full">
-              <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-              </svg>
-            </span>
-            <span className="text-[#E31C25] font-medium">Add New Student</span>
-          </Link>
-          <Link 
-            href="/students/bulk-upload?type=students"
-            className="p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors flex items-center gap-3"
-          >
-            <span className="bg-green-100 p-2 rounded-full">
-              <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10" />
-              </svg>
-            </span>
-            <span className="text-[#E31C25] font-medium">Bulk Upload Students</span>
-          </Link>
-        </div>
-      </div>
-
       {/* Recent Activity or System Status */}
       <div className="mt-6 grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="bg-white p-6 rounded-lg shadow-md">
