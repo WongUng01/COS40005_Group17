@@ -12,6 +12,19 @@ const UpdatePasswordPage = () => {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
 
+  useEffect(() => {
+    const handleSession = async () => {
+      const { data, error } = await supabase.auth.exchangeCodeForSession(window.location.href);
+      if (error) {
+        setError(error.message);
+      }
+
+      setLoading(false);
+    };
+
+    handleSession();
+  }, []);
+
   const handleUpdatePassword = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
