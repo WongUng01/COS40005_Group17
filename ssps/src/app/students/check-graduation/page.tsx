@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import axios from 'axios';
 import toast from 'react-hot-toast';
+import { useRouter } from 'next/navigation';
 
 type Student = {
   id: number;
@@ -22,12 +23,23 @@ type Student = {
 type SortField = 'student_name' | 'student_id';
 type SortDirection = 'asc' | 'desc';
 
+type GraduationResult = {
+  can_graduate: boolean;
+  total_credits: number;
+  messages: string[];
+  missing_core_units: string[];
+  missing_major_units: string[];
+  student_id: number;
+};
+
 export default function CheckGraduationPage() {
   const [students, setStudents] = useState<Student[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [searchResults, setSearchResults] = useState<Student[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [checkingGraduation, setCheckingGraduation] = useState<number | null>(null);
+  const [showResultModal, setShowResultModal] = useState(false);
+  const [graduationResult, setGraduationResult] = useState<GraduationResult | null>(null);
   
   // Sorting state
   const [sortField, setSortField] = useState<SortField | null>(null);
@@ -129,82 +141,84 @@ export default function CheckGraduationPage() {
   };
 
   const checkGraduation = async (studentId: number) => {
-  try {
-    setCheckingGraduation(studentId);
-    
-    const response = await axios.put(`${API_URL}/students/${studentId}/graduate`, null, {
-      headers: { Accept: "application/json" },
-      timeout: 30000
-    });
-
-    const data = response.data;
-    console.log("DEBUG: Full graduation response:", data);
-
-    // Use the updated_student from backend if available
-    const updatedStudent = data.updated_student;
-    
-    if (updatedStudent) {
-      // Update both students and searchResults states
-      setStudents(prev =>
-        prev.map(s =>
-          s.student_id === studentId
-            ? { 
-                ...s, 
-                credit_point: updatedStudent.credit_point, 
-                graduation_status: updatedStudent.graduation_status 
-              }
-            : s
-        )
-      );
+    try {
+      setCheckingGraduation(studentId);
       
-      setSearchResults(prev =>
-        prev.map(s =>
-          s.student_id === studentId
-            ? { 
-                ...s, 
-                credit_point: updatedStudent.credit_point, 
-                graduation_status: updatedStudent.graduation_status 
-              }
-            : s
-        )
-      );
-    }
+      const response = await axios.put(`${API_URL}/students/${studentId}/graduate`, null, {
+        headers: { Accept: "application/json" },
+        timeout: 30000
+      });
 
-    // Show success message
-    if (data.can_graduate) {
-      toast.success("Graduation Approved - Database Updated");
-      alert(`✅ Graduation Approved!\nTotal Credits: ${data.total_credits}/300\n\nStatus has been saved to database.`);
-    } else {
-      let message = `❌ Not Eligible for Graduation\n\n`;
-      message += `Total Credits: ${data.total_credits}/300\n`;
+      const data = response.data;
+      console.log("DEBUG: Full graduation response:", data);
+
+      // Use the updated_student from backend if available
+      const updatedStudent = data.updated_student;
       
-      // Show messages from backend if available
-      if (data.messages && data.messages.length > 0) {
-        message += `\nReasons:\n`;
-        data.messages.forEach((msg: string) => {
-          message += `• ${msg}\n`;
-        });
-      } else {
-        // Fallback to old message format
-        message += `Missing Core: ${data.missing_core_units.join(", ") || "None"}\n`;
-        message += `Missing Major: ${data.missing_major_units.join(", ") || "None"}\n`;
-        message += `MPU Requirement: ${data.mpu_requirements_met ? "Met" : "Not Met"}\n`;
-        if (data.mpu_types_completed) {
-          message += `MPU Types Completed: ${data.mpu_types_completed.length}/3\n`;
-        }
+      if (updatedStudent) {
+        // Update both students and searchResults states
+        setStudents(prev =>
+          prev.map(s =>
+            s.student_id === studentId
+              ? { 
+                  ...s, 
+                  credit_point: updatedStudent.credit_point, 
+                  graduation_status: updatedStudent.graduation_status 
+                }
+              : s
+          )
+        );
+        
+        setSearchResults(prev =>
+          prev.map(s =>
+            s.student_id === studentId
+              ? { 
+                  ...s, 
+                  credit_point: updatedStudent.credit_point, 
+                  graduation_status: updatedStudent.graduation_status 
+                }
+              : s
+          )
+        );
       }
-      
-      message += `\nStatus has been updated in the database.`;
-      alert(message);
-    }
 
-  } catch (err) {
-    console.error("Graduation check error:", err);
-    toast.error("Graduation check failed");
-  } finally {
-    setCheckingGraduation(null);
-  }
-};
+      // Store the graduation result and show modal instead of alert
+      const result: GraduationResult = {
+        can_graduate: data.can_graduate,
+        total_credits: data.total_credits,
+        messages: data.messages || [],
+        missing_core_units: data.missing_core_units || [],
+        missing_major_units: data.missing_major_units || [],
+        student_id: studentId
+      };
+
+      setGraduationResult(result);
+      setShowResultModal(true);
+
+      // Show toast for database update
+      toast.success("Graduation check completed - Database Updated");
+
+    } catch (err) {
+      console.error("Graduation check error:", err);
+      toast.error("Graduation check failed");
+    } finally {
+      setCheckingGraduation(null);
+    }
+  };
+
+  const handleViewDetails = () => {
+    if (graduationResult) {
+      // Navigate to student details page
+      router.push(`/student-units/${graduationResult.student_id}`);
+    }
+    setShowResultModal(false);
+  };
+
+  const handleCloseModal = () => {
+    setShowResultModal(false);
+    setGraduationResult(null);
+  };
+
   // Sort indicator component
   const SortIndicator = ({ field }: { field: SortField }) => {
     if (sortField !== field) return null;
@@ -213,6 +227,105 @@ export default function CheckGraduationPage() {
       <span className="ml-1">
         {sortDirection === 'asc' ? '↑' : '↓'}
       </span>
+    );
+  };
+
+  // Graduation Result Modal Component
+  const GraduationResultModal = () => {
+    if (!showResultModal || !graduationResult) return null;
+
+    return (
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+        <div className="bg-white rounded-lg shadow-xl max-w-md w-full max-h-[90vh] overflow-y-auto">
+          {/* Modal Header */}
+          <div className="flex justify-between items-center p-6 border-b border-gray-200">
+            <h2 className="text-xl font-semibold text-[#E31C25]">
+              Graduation Check Result
+            </h2>
+            <button
+              onClick={handleCloseModal}
+              className="text-gray-400 hover:text-gray-600 text-2xl font-bold"
+            >
+              ×
+            </button>
+          </div>
+
+          {/* Modal Body */}
+          <div className="p-6">
+            {graduationResult.can_graduate ? (
+              <div className="text-center">
+                <div className="text-4xl mb-4">🎓</div>
+                <h3 className="text-2xl font-bold text-green-600 mb-2">Graduation Approved!</h3>
+                <p className="text-gray-600 mb-4">
+                  Congratulations! The student is eligible to graduate.
+                </p>
+                <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-4">
+                  <p className="text-green-800 font-semibold">
+                    Total Credits: {graduationResult.total_credits}/300
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <div className="text-center">
+                <div className="text-4xl mb-4">❌</div>
+                <h3 className="text-2xl font-bold text-red-600 mb-2">Not Eligible for Graduation</h3>
+                <p className="text-gray-600 mb-4">
+                  The student does not meet all graduation requirements.
+                </p>
+                <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-4">
+                  <p className="text-red-800 font-semibold mb-2">
+                    Total Credits: {graduationResult.total_credits}/300
+                  </p>
+                  
+                  {graduationResult.messages.length > 0 ? (
+                    <div className="text-left">
+                      <p className="font-semibold text-red-700 mb-2">Reasons:</p>
+                      <ul className="list-disc list-inside space-y-1">
+                        {graduationResult.messages.map((message, index) => (
+                          <li key={index} className="text-red-700 text-sm">{message}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  ) : (
+                    <div className="text-left">
+                      {graduationResult.missing_core_units.length > 0 && (
+                        <p className="text-red-700 text-sm">
+                          Missing Core: {graduationResult.missing_core_units.join(", ") || "None"}
+                        </p>
+                      )}
+                      {graduationResult.missing_major_units.length > 0 && (
+                        <p className="text-red-700 text-sm">
+                          Missing Major: {graduationResult.missing_major_units.join(", ") || "None"}
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+            
+            <p className="text-sm text-gray-500 text-center mb-4">
+              Status has been updated in the database.
+            </p>
+          </div>
+
+          {/* Modal Footer */}
+          <div className="flex gap-3 p-6 border-t border-gray-200">
+            <button
+              onClick={handleViewDetails}
+              className="flex-1 px-4 py-3 bg-[#E31C25] text-white rounded-lg hover:bg-[#B71C1C] font-medium"
+            >
+              View Student Details
+            </button>
+            <button
+              onClick={handleCloseModal}
+              className="flex-1 px-4 py-3 bg-gray-500 text-white rounded-lg hover:bg-gray-600 font-medium"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      </div>
     );
   };
 
@@ -401,6 +514,9 @@ export default function CheckGraduationPage() {
           </div>
         </div>
       </div>
+
+      {/* Graduation Result Modal */}
+      <GraduationResultModal />
     </div>
   );
 }

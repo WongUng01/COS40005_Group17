@@ -1,3 +1,4 @@
+// app/units/page.tsx
 'use client';
 
 import { useEffect, useState } from 'react';
@@ -16,7 +17,7 @@ type Unit = {
 type SortField = 'unit_code' | 'unit_name' | 'credit_point';
 type SortDirection = 'asc' | 'desc';
 
-// Unit Modal Component (unchanged)
+// Unit Modal Component
 function UnitModal({ 
   isOpen, 
   onClose, 
@@ -201,6 +202,8 @@ export default function Units() {
   const [modalMode, setModalMode] = useState<'add' | 'edit'>('add');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isDeleting, setIsDeleting] = useState<string | null>(null);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [unitToDelete, setUnitToDelete] = useState<Unit | null>(null);
   
   // Search and Sort states
   const [searchTerm, setSearchTerm] = useState('');
@@ -364,11 +367,19 @@ export default function Units() {
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this unit? This action cannot be undone.')) return;
+    const unit = units.find(u => u.id === id);
+    if (!unit) return;
 
-    setIsDeleting(id);
+    setUnitToDelete(unit);
+    setShowDeleteModal(true);
+  };
+
+  const confirmDelete = async () => {
+    if (!unitToDelete) return;
+
+    setIsDeleting(unitToDelete.id);
     try {
-      const response = await fetch(`${API}/units/${id}`, { 
+      const response = await fetch(`${API}/units/${unitToDelete.id}`, { 
         method: 'DELETE' 
       });
       
@@ -385,7 +396,14 @@ export default function Units() {
       toast.error(err.message || 'Failed to delete unit');
     } finally {
       setIsDeleting(null);
+      setShowDeleteModal(false);
+      setUnitToDelete(null);
     }
+  };
+
+  const cancelDelete = () => {
+    setShowDeleteModal(false);
+    setUnitToDelete(null);
   };
 
   const openAddModal = () => {
@@ -635,6 +653,46 @@ export default function Units() {
         mode={modalMode}
         isSubmitting={isSubmitting}
       />
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteModal && unitToDelete && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full">
+            <div className="flex justify-between items-center p-6 border-b border-gray-200">
+              <h2 className="text-xl font-semibold text-[#D6001C]">Confirm Delete</h2>
+              <button
+                onClick={cancelDelete}
+                className="text-gray-400 hover:text-gray-600 text-2xl font-bold"
+              >
+                ×
+              </button>
+            </div>
+            
+            <div className="p-6">
+              <p className="text-gray-700 mb-4">
+                Are you sure you want to delete unit <strong>{unitToDelete.unit_code} - {unitToDelete.unit_name}</strong>? 
+                This action cannot be undone.
+              </p>
+            </div>
+            
+            <div className="flex gap-3 p-6 border-t border-gray-200">
+              <button
+                onClick={confirmDelete}
+                disabled={isDeleting === unitToDelete.id}
+                className="flex-1 px-4 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 font-medium disabled:opacity-50"
+              >
+                {isDeleting === unitToDelete.id ? 'Deleting...' : 'Delete'}
+              </button>
+              <button
+                onClick={cancelDelete}
+                className="flex-1 px-4 py-3 bg-gray-500 text-white rounded-lg hover:bg-gray-600 font-medium"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
