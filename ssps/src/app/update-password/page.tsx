@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '../../lib/supabaseClient';
 
@@ -11,6 +11,21 @@ const UpdatePasswordPage = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
+
+  // 🧩 This ensures the recovery session is restored
+  useEffect(() => {
+    const handleRecovery = async () => {
+      const { data, error } = await supabase.auth.exchangeCodeForSession(window.location.hash);
+      if (error) {
+        console.error('Error exchanging code for session:', error);
+      } else {
+        console.log('Recovery session established:', data);
+      }
+    };
+
+    // Only run if the hash exists
+    if (window.location.hash) handleRecovery();
+  }, []);
 
   const handleUpdatePassword = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -29,7 +44,7 @@ const UpdatePasswordPage = () => {
       setError(error.message);
     } else {
       setSuccess(true);
-      setTimeout(() => router.push('/login'), 2000);
+      setTimeout(() => router.push('/'), 2000);
     }
 
     setLoading(false);
@@ -38,7 +53,6 @@ const UpdatePasswordPage = () => {
   return (
     <div className="flex flex-1 items-center justify-center min-h-screen bg-gray-100">
       <div className="bg-white shadow-xl rounded-2xl max-w-md w-full p-8 border-t-4 border-[#e60028]">
-        {/* Header */}
         <div className="mb-6 text-center">
           <h1 className="text-3xl font-extrabold text-[#e60028] tracking-tight">
             Set New Password
@@ -48,7 +62,6 @@ const UpdatePasswordPage = () => {
           </p>
         </div>
 
-        {/* Form */}
         <form onSubmit={handleUpdatePassword} className="space-y-5">
           {error && (
             <p className="text-red-600 bg-red-50 border border-red-200 p-2 rounded-md text-sm">
@@ -62,16 +75,12 @@ const UpdatePasswordPage = () => {
           )}
 
           <div>
-            <label
-              htmlFor="newPassword"
-              className="block text-sm font-semibold text-gray-700"
-            >
+            <label className="block text-sm font-semibold text-gray-700">
               New Password
             </label>
             <input
               type="password"
-              id="newPassword"
-              className="mt-1 w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#e60028] focus:border-[#e60028] transition"
+              className="mt-1 w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-[#e60028] focus:border-[#e60028] transition"
               value={newPassword}
               onChange={(e) => setNewPassword(e.target.value)}
               required
@@ -80,16 +89,12 @@ const UpdatePasswordPage = () => {
           </div>
 
           <div>
-            <label
-              htmlFor="confirmPassword"
-              className="block text-sm font-semibold text-gray-700"
-            >
+            <label className="block text-sm font-semibold text-gray-700">
               Confirm Password
             </label>
             <input
               type="password"
-              id="confirmPassword"
-              className="mt-1 w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#e60028] focus:border-[#e60028] transition"
+              className="mt-1 w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-[#e60028] focus:border-[#e60028] transition"
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
               required
