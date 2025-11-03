@@ -11,21 +11,26 @@ const UpdatePasswordPage = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
+  const [sessionReady, setSessionReady] = useState(false);
 
   useEffect(() => {
     const handleSession = async () => {
-      setLoading(true);
-      // ✅ Correct method for password reset links
-      const { data, error } = await (supabase.auth as any).setSessionFromUrl({ storeSession: true });
-
-      if (error) {
-        console.error('Session exchange failed:', error.message);
-        setError('Invalid or expired reset link. Please request a new one.');
-      } else {
-        console.log('Session restored:', data);
+      try {
+        setLoading(true);
+        const { data, error } = await (supabase.auth as any).setSessionFromUrl({ storeSession: true });
+        if (error) {
+          console.error('Session restoration failed:', error.message);
+          setError('Invalid or expired reset link. Please request a new one.');
+        } else {
+          console.log('Session restored successfully:', data);
+          setSessionReady(true);
+        }
+      } catch (err) {
+        console.error('Unexpected error:', err);
+        setError('Something went wrong while restoring your session.');
+      } finally {
+        setLoading(false);
       }
-
-      setLoading(false);
     };
 
     handleSession();
@@ -58,16 +63,39 @@ const UpdatePasswordPage = () => {
     <div className="flex flex-1 items-center justify-center min-h-screen bg-gray-100">
       <div className="bg-white shadow-xl rounded-2xl max-w-md w-full p-8 border-t-4 border-[#e60028]">
         <div className="mb-6 text-center">
-          <h1 className="text-3xl font-extrabold text-[#e60028] tracking-tight">Set New Password</h1>
-          <p className="text-gray-600 text-sm mt-1">Enter your new password below to continue.</p>
+          <h1 className="text-3xl font-extrabold text-[#e60028] tracking-tight">
+            Set New Password
+          </h1>
+          <p className="text-gray-600 text-sm mt-1">
+            Enter your new password below to continue.
+          </p>
         </div>
 
         <form onSubmit={handleUpdatePassword} className="space-y-5">
-          {error && <p className="text-red-600 bg-red-50 border border-red-200 p-2 rounded-md text-sm">{error}</p>}
-          {success && <p className="text-green-700 bg-green-50 border border-green-200 p-2 rounded-md text-sm">Password updated! Redirecting to login...</p>}
+          {error && (
+            <p className="text-red-600 bg-red-50 border border-red-200 p-2 rounded-md text-sm">
+              {error}
+            </p>
+          )}
+          {success && (
+            <p className="text-green-700 bg-green-50 border border-green-200 p-2 rounded-md text-sm">
+              Password updated! Redirecting to login...
+            </p>
+          )}
+
+          {!sessionReady && !error && (
+            <p className="text-gray-600 text-sm bg-gray-50 border border-gray-200 p-2 rounded-md text-center">
+              Verifying your password reset link...
+            </p>
+          )}
 
           <div>
-            <label htmlFor="newPassword" className="block text-sm font-semibold text-gray-700">New Password</label>
+            <label
+              htmlFor="newPassword"
+              className="block text-sm font-semibold text-gray-700"
+            >
+              New Password
+            </label>
             <input
               type="password"
               id="newPassword"
@@ -76,11 +104,17 @@ const UpdatePasswordPage = () => {
               onChange={(e) => setNewPassword(e.target.value)}
               required
               placeholder="••••••••"
+              disabled={!sessionReady || loading}
             />
           </div>
 
           <div>
-            <label htmlFor="confirmPassword" className="block text-sm font-semibold text-gray-700">Confirm Password</label>
+            <label
+              htmlFor="confirmPassword"
+              className="block text-sm font-semibold text-gray-700"
+            >
+              Confirm Password
+            </label>
             <input
               type="password"
               id="confirmPassword"
@@ -89,17 +123,18 @@ const UpdatePasswordPage = () => {
               onChange={(e) => setConfirmPassword(e.target.value)}
               required
               placeholder="••••••••"
+              disabled={!sessionReady || loading}
             />
           </div>
 
           <button
             type="submit"
             className={`w-full py-2 px-4 rounded-md font-semibold text-white transition-all duration-300 ${
-              loading
+              loading || !sessionReady
                 ? 'bg-gray-400 cursor-not-allowed'
                 : 'bg-[#e60028] hover:bg-[#c20024] shadow-md'
             }`}
-            disabled={loading}
+            disabled={loading || !sessionReady}
           >
             {loading ? 'Updating...' : 'Update Password'}
           </button>
