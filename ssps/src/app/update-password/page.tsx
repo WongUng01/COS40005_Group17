@@ -43,7 +43,7 @@ const UpdatePasswordPage = () => {
       setError(error.message);
     } else {
       setSuccess(true);
-      setTimeout(() => router.push('/login'), 2000);
+      setTimeout(() => router.push('/'), 2000);
     }
 
     setLoading(false);
