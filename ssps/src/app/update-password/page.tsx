@@ -13,7 +13,14 @@ export default function UpdatePasswordPage() {
   const [message, setMessage] = useState('');
 
   useEffect(() => {
-
+    // 👇 This processes the access token in the URL hash
+    const handleRecovery = async () => {
+      const { data, error } = await supabase.auth.exchangeCodeForSession(window.location.href);
+      if (error) {
+        console.error('Error exchanging recovery code:', error);
+      }
+    };
+    handleRecovery();
   }, []);
 
   const handleUpdatePassword = async (e: React.FormEvent) => {
