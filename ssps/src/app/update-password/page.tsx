@@ -13,15 +13,22 @@ const UpdatePasswordPage = () => {
   const [success, setSuccess] = useState(false);
 
   useEffect(() => {
-    const checkSession = async () => {
-      const { data } = await supabase.auth.getSession();
-      if (!data.session) {
-        // If the user is not logged in, just show the update password page
-        // Supabase automatically validates the recovery token when the page loads
-        console.log('No session, waiting for password update link flow...');
+    const handleRecovery = async () => {
+      const hash = window.location.hash;
+
+      // If the URL contains "type=recovery", exchange the code for a session
+      if (hash.includes('type=recovery')) {
+        const { data, error } = await supabase.auth.exchangeCodeForSession(hash);
+
+        if (error) {
+          console.error('Session exchange failed:', error.message);
+        } else {
+          console.log('Recovery session established:', data);
+        }
       }
     };
-    checkSession();
+
+    handleRecovery();
   }, []);
 
   const handleUpdatePassword = async (e: React.FormEvent) => {
