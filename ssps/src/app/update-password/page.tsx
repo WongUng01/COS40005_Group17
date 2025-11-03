@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '../../lib/supabaseClient';
 
@@ -11,25 +11,6 @@ const UpdatePasswordPage = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
-
-  useEffect(() => {
-    const handleRecovery = async () => {
-      const hash = window.location.hash;
-
-      // If the URL contains "type=recovery", exchange the code for a session
-      if (hash.includes('type=recovery')) {
-        const { data, error } = await supabase.auth.exchangeCodeForSession(hash);
-
-        if (error) {
-          console.error('Session exchange failed:', error.message);
-        } else {
-          console.log('Recovery session established:', data);
-        }
-      }
-    };
-
-    handleRecovery();
-  }, []);
 
   const handleUpdatePassword = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -42,12 +23,16 @@ const UpdatePasswordPage = () => {
     }
 
     setLoading(true);
-    const { error } = await supabase.auth.updateUser({ password: newPassword });
+
+    const { error } = await supabase.auth.updateUser({
+      password: newPassword,
+    });
 
     if (error) {
       setError(error.message);
     } else {
       setSuccess(true);
+      // Redirect after 2 seconds
       setTimeout(() => router.push('/'), 2000);
     }
 
@@ -84,7 +69,7 @@ const UpdatePasswordPage = () => {
             </label>
             <input
               type="password"
-              className="mt-1 w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-[#e60028] focus:border-[#e60028] transition"
+              className="mt-1 w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#e60028] focus:border-[#e60028] transition"
               value={newPassword}
               onChange={(e) => setNewPassword(e.target.value)}
               required
@@ -98,7 +83,7 @@ const UpdatePasswordPage = () => {
             </label>
             <input
               type="password"
-              className="mt-1 w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-[#e60028] focus:border-[#e60028] transition"
+              className="mt-1 w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#e60028] focus:border-[#e60028] transition"
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
               required

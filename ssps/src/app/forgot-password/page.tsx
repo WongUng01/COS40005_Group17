@@ -23,7 +23,9 @@ const ForgotPasswordPage = () => {
     if (error) {
       setError(error.message);
     } else {
-      setMessage('A password reset link has been sent to your email.');
+      setMessage(
+        'A password reset link has been sent to your email. Please check your inbox.'
+      );
     }
 
     setLoading(false);
@@ -32,7 +34,6 @@ const ForgotPasswordPage = () => {
   return (
     <div className="flex flex-1 items-center justify-center min-h-screen bg-gray-100">
       <div className="bg-white shadow-xl rounded-2xl max-w-md w-full p-8 border-t-4 border-[#e60028]">
-        {/* Header */}
         <div className="mb-6 text-center">
           <h1 className="text-3xl font-extrabold text-[#e60028] tracking-tight">
             Forgot Password
@@ -42,7 +43,6 @@ const ForgotPasswordPage = () => {
           </p>
         </div>
 
-        {/* Form */}
         <form onSubmit={handlePasswordReset} className="space-y-5">
           {error && (
             <p className="text-red-600 bg-red-50 border border-red-200 p-2 rounded-md text-sm">
@@ -56,15 +56,11 @@ const ForgotPasswordPage = () => {
           )}
 
           <div>
-            <label
-              htmlFor="email"
-              className="block text-sm font-semibold text-gray-700"
-            >
+            <label className="block text-sm font-semibold text-gray-700">
               Email address
             </label>
             <input
               type="email"
-              id="email"
               className="mt-1 w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#e60028] focus:border-[#e60028] transition"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
@@ -79,19 +75,15 @@ const ForgotPasswordPage = () => {
             className={`w-full py-2 px-4 rounded-md font-semibold text-white transition-all duration-300 ${
               loading
                 ? 'bg-gray-400 cursor-not-allowed'
-                : 'bg-[#e60028] hover:bg-[#e60028] shadow-md'
+                : 'bg-[#e60028] hover:bg-[#c20024] shadow-md'
             }`}
           >
             {loading ? 'Sending...' : 'Send Reset Link'}
           </button>
         </form>
 
-        {/* Footer */}
         <p className="text-center text-sm text-gray-600 mt-6">
-          <Link
-            href="/"
-            className="text-[#e60028] hover:underline font-semibold"
-          >
+          <Link href="/" className="text-[#e60028] hover:underline font-semibold">
             Back to Login
           </Link>
         </p>
