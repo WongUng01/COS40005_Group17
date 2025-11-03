@@ -12,20 +12,20 @@ const UpdatePasswordPage = () => {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
 
-  // 🧩 This ensures the recovery session is restored
   useEffect(() => {
     const handleRecovery = async () => {
-      const { data, error } = await supabase.auth.exchangeCodeForSession(window.location.hash);
+      const url = window.location.href;
+      const { data, error } = await supabase.auth.exchangeCodeForSession(url);
       if (error) {
-        console.error('Error exchanging code for session:', error);
+        console.error('Error exchanging recovery code:', error);
       } else {
-        console.log('Recovery session established:', data);
+        console.log('✅ Recovery session established:', data);
       }
     };
 
-    // Only run if the hash exists
-    if (window.location.hash) handleRecovery();
+    handleRecovery();
   }, []);
+
 
   const handleUpdatePassword = async (e: React.FormEvent) => {
     e.preventDefault();
