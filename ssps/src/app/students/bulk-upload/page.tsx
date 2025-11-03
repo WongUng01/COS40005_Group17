@@ -7,10 +7,18 @@ import toast from 'react-hot-toast';
 
 const MAX_FILE_SIZE_MB = 10;
 
+type UploadResult = {
+  type: 'students' | 'units';
+  data: any;
+};
+
 export default function BulkUploadPage() {
   const [uploadingStudents, setUploadingStudents] = useState(false);
   const [uploadingBulkUnits, setUploadingBulkUnits] = useState(false);
-  const API_URL = 'http://localhost:8000';
+  const [showResultModal, setShowResultModal] = useState(false);
+  const [uploadResult, setUploadResult] = useState<UploadResult | null>(null);
+  
+  const API_URL = "http://127.0.0.1:8000";
 
   // 批量上传学生
   const handleUploadStudents = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -45,20 +53,13 @@ export default function BulkUploadPage() {
       console.log('DEBUG: Bulk upload response:', response.data);
 
       const data = response.data;
-      let message = `Bulk Upload Completed!\n\n`;
-      message += `📊 Total Rows Processed: ${data.summary.total_rows}\n`;
-      message += `✅ Successfully Inserted: ${data.summary.inserted}\n`;
-      message += `⏭️ Skipped Existing: ${data.summary.skipped_existing}\n`;
-      message += `❌ Errors: ${data.summary.errors}\n\n`;
       
-      if (data.details.errors && data.details.errors.length > 0) {
-        message += `Errors (first 5):\n${data.details.errors.slice(0, 5).join('\n')}`;
-        if (data.details.errors.length > 5) {
-          message += `\n... and ${data.details.errors.length - 5} more errors`;
-        }
-      }
-
-      alert(message);
+      // Store result and show modal instead of alert
+      setUploadResult({
+        type: 'students',
+        data: data
+      });
+      setShowResultModal(true);
       
       if (data.summary.inserted > 0) {
         toast.success(`Successfully created ${data.summary.inserted} new students`);
@@ -113,35 +114,20 @@ export default function BulkUploadPage() {
       console.log('DEBUG: Bulk upload response:', response.data);
 
       const data = response.data;
-      let successCount = 0;
-      let errorCount = 0;
-
-      let message = `📊 Bulk Upload Completed!\n\n`;
-      message += `📁 Total Files: ${data.summary.total_files}\n`;
-      message += `✅ Successful: ${data.summary.successful_files}\n`;
-      message += `❌ Failed: ${data.summary.failed_files}\n\n`;
-
-      data.results.forEach((result: any) => {
-        if (result.status === 'success') {
-          successCount++;
-          message += `✅ ${result.filename}\n`;
-          message += `   Student ID: ${result.student_id}, Units: ${result.units_processed}\n\n`;
-        } else {
-          errorCount++;
-          message += `❌ ${result.filename}: ${result.message}\n\n`;
-        }
+      
+      // Store result and show modal instead of alert
+      setUploadResult({
+        type: 'units',
+        data: data
       });
+      setShowResultModal(true);
 
-      message += `Total Units Processed: ${data.summary.total_units_processed || 0}`;
-
-      alert(message);
-
-      if (successCount > 0) {
-        toast.success(`Successfully processed ${successCount} files`);
+      if (data.summary.successful_files > 0) {
+        toast.success(`Successfully processed ${data.summary.successful_files} files`);
       }
 
-      if (errorCount > 0) {
-        toast.error(`${errorCount} files failed to process`);
+      if (data.summary.failed_files > 0) {
+        toast.error(`${data.summary.failed_files} files failed to process`);
       }
 
     } catch (err: any) {
@@ -158,6 +144,166 @@ export default function BulkUploadPage() {
       setUploadingBulkUnits(false);
       if (e.target) e.target.value = '';
     }
+  };
+
+  const closeResultModal = () => {
+    setShowResultModal(false);
+    setUploadResult(null);
+  };
+
+  // Result Modal Component
+  const UploadResultModal = () => {
+    if (!showResultModal || !uploadResult) return null;
+
+    const renderStudentsResult = () => {
+      const data = uploadResult.data;
+      return (
+        <div className="space-y-4">
+          <div className="text-center">
+            <div className="text-4xl mb-4">📊</div>
+            <h3 className="text-2xl font-bold text-[#E31C25] mb-2">Bulk Upload Completed!</h3>
+          </div>
+          
+          <div className="grid grid-cols-2 gap-4 mb-4">
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-center">
+              <div className="text-2xl font-bold text-blue-600">{data.summary.total_rows}</div>
+              <div className="text-sm text-blue-700">Total Rows</div>
+            </div>
+            <div className="bg-green-50 border border-green-200 rounded-lg p-3 text-center">
+              <div className="text-2xl font-bold text-green-600">{data.summary.inserted}</div>
+              <div className="text-sm text-green-700">Inserted</div>
+            </div>
+            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 text-center">
+              <div className="text-2xl font-bold text-yellow-600">{data.summary.skipped_existing}</div>
+              <div className="text-sm text-yellow-700">Skipped</div>
+            </div>
+            <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-center">
+              <div className="text-2xl font-bold text-red-600">{data.summary.errors}</div>
+              <div className="text-sm text-red-700">Errors</div>
+            </div>
+          </div>
+
+          {data.details.errors && data.details.errors.length > 0 && (
+            <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+              <h4 className="font-semibold text-gray-800 mb-2">Errors (first 5):</h4>
+              <ul className="list-disc list-inside space-y-1 max-h-32 overflow-y-auto">
+                {data.details.errors.slice(0, 5).map((error: string, index: number) => (
+                  <li key={index} className="text-red-600 text-sm">{error}</li>
+                ))}
+              </ul>
+              {data.details.errors.length > 5 && (
+                <p className="text-gray-600 text-sm mt-2">
+                  ... and {data.details.errors.length - 5} more errors
+                </p>
+              )}
+            </div>
+          )}
+        </div>
+      );
+    };
+
+    const renderUnitsResult = () => {
+      const data = uploadResult.data;
+      let successCount = 0;
+      let errorCount = 0;
+
+      return (
+        <div className="space-y-4">
+          <div className="text-center">
+            <div className="text-4xl mb-4">📁</div>
+            <h3 className="text-2xl font-bold text-[#E31C25] mb-2">Bulk Upload Completed!</h3>
+          </div>
+          
+          <div className="grid grid-cols-3 gap-4 mb-4">
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-center">
+              <div className="text-2xl font-bold text-blue-600">{data.summary.total_files}</div>
+              <div className="text-sm text-blue-700">Total Files</div>
+            </div>
+            <div className="bg-green-50 border border-green-200 rounded-lg p-3 text-center">
+              <div className="text-2xl font-bold text-green-600">{data.summary.successful_files}</div>
+              <div className="text-sm text-green-700">Successful</div>
+            </div>
+            <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-center">
+              <div className="text-2xl font-bold text-red-600">{data.summary.failed_files}</div>
+              <div className="text-sm text-red-700">Failed</div>
+            </div>
+          </div>
+
+          <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 max-h-64 overflow-y-auto">
+            <h4 className="font-semibold text-gray-800 mb-3">Upload Details:</h4>
+            <div className="space-y-3">
+              {data.results.map((result: any, index: number) => {
+                if (result.status === 'success') {
+                  successCount++;
+                  return (
+                    <div key={index} className="flex items-center gap-3 p-2 bg-green-50 rounded">
+                      <span className="text-green-600">✅</span>
+                      <div className="flex-1">
+                        <p className="font-medium text-green-800">{result.filename}</p>
+                        <p className="text-sm text-green-600">
+                          Student ID: {result.student_id}, Units: {result.units_processed}
+                        </p>
+                      </div>
+                    </div>
+                  );
+                } else {
+                  errorCount++;
+                  return (
+                    <div key={index} className="flex items-center gap-3 p-2 bg-red-50 rounded">
+                      <span className="text-red-600">❌</span>
+                      <div className="flex-1">
+                        <p className="font-medium text-red-800">{result.filename}</p>
+                        <p className="text-sm text-red-600">{result.message}</p>
+                      </div>
+                    </div>
+                  );
+                }
+              })}
+            </div>
+          </div>
+
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-center">
+            <p className="font-semibold text-blue-800">
+              Total Units Processed: {data.summary.total_units_processed || 0}
+            </p>
+          </div>
+        </div>
+      );
+    };
+
+    return (
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+        <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+          {/* Modal Header */}
+          <div className="flex justify-between items-center p-6 border-b border-gray-200">
+            <h2 className="text-xl font-semibold text-[#E31C25]">
+              {uploadResult.type === 'students' ? 'Students Upload Result' : 'Units Upload Result'}
+            </h2>
+            <button
+              onClick={closeResultModal}
+              className="text-gray-400 hover:text-gray-600 text-2xl font-bold"
+            >
+              ×
+            </button>
+          </div>
+
+          {/* Modal Body */}
+          <div className="p-6">
+            {uploadResult.type === 'students' ? renderStudentsResult() : renderUnitsResult()}
+          </div>
+
+          {/* Modal Footer */}
+          <div className="flex gap-3 p-6 border-t border-gray-200">
+            <button
+              onClick={closeResultModal}
+              className="flex-1 px-4 py-3 bg-[#E31C25] text-white rounded-lg hover:bg-[#B71C1C] font-medium"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      </div>
+    );
   };
 
   return (
@@ -262,6 +408,9 @@ export default function BulkUploadPage() {
           </div>
         </div>
       </div>
+
+      {/* Upload Result Modal */}
+      <UploadResultModal />
     </div>
   );
 }

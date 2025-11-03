@@ -38,7 +38,6 @@ type SortField = 'student_name' | 'student_id';
 type SortDirection = 'asc' | 'desc';
 
 // Student Modal Component
-// Student Modal Component
 function StudentModal({ 
   isOpen, 
   onClose, 
@@ -437,12 +436,14 @@ export default function StudentsInformationPage() {
   const [modalMode, setModalMode] = useState<'add' | 'edit'>('add');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isDeleting, setIsDeleting] = useState<number | null>(null);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [studentToDelete, setStudentToDelete] = useState<Student | null>(null);
   
   // Sorting state
   const [sortField, setSortField] = useState<SortField | null>(null);
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
 
-  const API_URL = 'http://localhost:8000';
+  const API_URL = "http://127.0.0.1:8000";
 
   useEffect(() => {
     fetchStudents();
@@ -595,11 +596,19 @@ export default function StudentsInformationPage() {
   };
 
   const handleDelete = async (studentId: number) => {
-    if (!confirm('Are you sure you want to delete this student? This action cannot be undone.')) return;
+    const student = students.find(s => s.student_id === studentId);
+    if (!student) return;
 
-    setIsDeleting(studentId);
+    setStudentToDelete(student);
+    setShowDeleteModal(true);
+  };
+
+  const confirmDelete = async () => {
+    if (!studentToDelete) return;
+
+    setIsDeleting(studentToDelete.student_id);
     try {
-      const response = await axios.delete(`${API_URL}/students/${studentId}`);
+      const response = await axios.delete(`${API_URL}/students/${studentToDelete.student_id}`);
       console.log('Delete response:', response.data);
       
       toast.success('Student deleted successfully');
@@ -610,7 +619,14 @@ export default function StudentsInformationPage() {
       toast.error(`Failed to delete student: ${errorMessage}`);
     } finally {
       setIsDeleting(null);
+      setShowDeleteModal(false);
+      setStudentToDelete(null);
     }
+  };
+
+  const cancelDelete = () => {
+    setShowDeleteModal(false);
+    setStudentToDelete(null);
   };
 
   const handleSearch = async () => {
@@ -650,43 +666,43 @@ export default function StudentsInformationPage() {
   };
 
   const openAddModal = () => {
-  setFormData({
-    graduation_status: false,
-    student_name: '',
-    student_id: 0,
-    student_email: '',
-    student_course: '',
-    student_major: '',
-    intake_term: '',
-    intake_year: '',
-    credit_point: 0,
-    student_type: 'malaysian', 
-    has_spm_bm_credit: true 
-  });
-  setEditingStudentId(null);
-  setModalMode('add');
-  setIsModalOpen(true);
-};
+    setFormData({
+      graduation_status: false,
+      student_name: '',
+      student_id: 0,
+      student_email: '',
+      student_course: '',
+      student_major: '',
+      intake_term: '',
+      intake_year: '',
+      credit_point: 0,
+      student_type: 'malaysian', 
+      has_spm_bm_credit: true 
+    });
+    setEditingStudentId(null);
+    setModalMode('add');
+    setIsModalOpen(true);
+  };
 
-const openEditModal = (student: Student) => {
-  console.log('Editing student:', student);
-  setFormData({ 
-    graduation_status: student.graduation_status, 
-    student_name: student.student_name, 
-    student_id: student.student_id, 
-    student_email: student.student_email, 
-    student_course: student.student_course, 
-    student_major: student.student_major, 
-    intake_term: student.intake_term, 
-    intake_year: student.intake_year, 
-    credit_point: student.credit_point,
-    student_type: student.student_type || 'malaysian', // 新增
-    has_spm_bm_credit: student.has_spm_bm_credit !== undefined ? student.has_spm_bm_credit : true // 新增
-  });
-  setEditingStudentId(student.student_id);
-  setModalMode('edit');
-  setIsModalOpen(true);
-};
+  const openEditModal = (student: Student) => {
+    console.log('Editing student:', student);
+    setFormData({ 
+      graduation_status: student.graduation_status, 
+      student_name: student.student_name, 
+      student_id: student.student_id, 
+      student_email: student.student_email, 
+      student_course: student.student_course, 
+      student_major: student.student_major, 
+      intake_term: student.intake_term, 
+      intake_year: student.intake_year, 
+      credit_point: student.credit_point,
+      student_type: student.student_type || 'malaysian',
+      has_spm_bm_credit: student.has_spm_bm_credit !== undefined ? student.has_spm_bm_credit : true
+    });
+    setEditingStudentId(student.student_id);
+    setModalMode('edit');
+    setIsModalOpen(true);
+  };
 
   const closeModal = () => {
     if (!isSubmitting) {
@@ -876,6 +892,46 @@ const openEditModal = (student: Student) => {
         majors={majors}
         intakeYears={intakeYears}
       />
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteModal && studentToDelete && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full">
+            <div className="flex justify-between items-center p-6 border-b border-gray-200">
+              <h2 className="text-xl font-semibold text-[#E31C25]">Confirm Delete</h2>
+              <button
+                onClick={cancelDelete}
+                className="text-gray-400 hover:text-gray-600 text-2xl font-bold"
+              >
+                ×
+              </button>
+            </div>
+            
+            <div className="p-6">
+              <p className="text-gray-700 mb-4">
+                Are you sure you want to delete student <strong>{studentToDelete.student_name}</strong> (ID: {studentToDelete.student_id})? 
+                This action cannot be undone.
+              </p>
+            </div>
+            
+            <div className="flex gap-3 p-6 border-t border-gray-200">
+              <button
+                onClick={confirmDelete}
+                disabled={isDeleting === studentToDelete.student_id}
+                className="flex-1 px-4 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 font-medium disabled:opacity-50"
+              >
+                {isDeleting === studentToDelete.student_id ? 'Deleting...' : 'Delete'}
+              </button>
+              <button
+                onClick={cancelDelete}
+                className="flex-1 px-4 py-3 bg-gray-500 text-white rounded-lg hover:bg-gray-600 font-medium"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
