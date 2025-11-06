@@ -42,6 +42,13 @@ function UnitModal({
     await onSubmit(e);
   };
 
+  // Offered Terms options
+  const offeredTermsOptions = [
+    { value: '', label: 'Not specified' },
+    { value: 'Aug/Sep', label: 'Aug/Sep' },
+    { value: 'Feb/March', label: 'Feb/March' }
+  ];
+
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
@@ -113,14 +120,18 @@ function UnitModal({
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Offered Terms
               </label>
-              <input
-                type="text"
-                placeholder="e.g., Semester 1, Semester 2"
+              <select
                 value={formData.offered_terms || ''}
                 onChange={(e) => setFormData({ ...formData, offered_terms: e.target.value })}
-                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#D6001C] focus:border-transparent"
+                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#D6001C] focus:border-transparent bg-white"
                 disabled={isSubmitting}
-              />
+              >
+                {offeredTermsOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
             </div>
 
             <div className="md:col-span-2">
@@ -598,7 +609,11 @@ export default function Units() {
                   </td>
                   <td className="px-6 py-4 text-sm text-gray-700">
                     {unit.offered_terms ? (
-                      <span className="bg-purple-50 text-purple-700 px-2 py-1 rounded text-xs">
+                      <span className={`px-2 py-1 rounded text-xs ${
+                        unit.offered_terms === 'Aug/Sep' 
+                          ? 'bg-orange-50 text-orange-700' 
+                          : 'bg-purple-50 text-purple-700'
+                      }`}>
                         {unit.offered_terms}
                       </span>
                     ) : (
