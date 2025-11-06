@@ -96,10 +96,25 @@ function StudentModal({
         : "white",
       color: state.isSelected ? "white" : "#333",
       cursor: "pointer",
+      fontSize: "14px",
+      padding: "8px 12px",
     }),
     singleValue: (base: any) => ({ ...base, color: "#212121", fontWeight: 500 }),
     placeholder: (base: any) => ({ ...base, color: "#757575" }),
-    menu: (base: any) => ({ ...base, borderRadius: "8px", boxShadow: "0 4px 8px rgba(0,0,0,0.1)", zIndex: 9999 }),
+    menu: (base: any) => ({ 
+      ...base, 
+      borderRadius: "8px", 
+      boxShadow: "0 4px 8px rgba(0,0,0,0.1)", 
+      zIndex: 9999,
+      maxHeight: "100px",
+      overflow: "hidden",
+    }),
+    menuList: (base: any) => ({
+      ...base,
+      maxHeight: "100px",
+      padding: 0,
+      overflowY: "auto",
+    }),
     menuPortal: (base: any) => ({ ...base, zIndex: 9999 }),
   };
 
@@ -242,6 +257,7 @@ function StudentModal({
                 styles={swinburneStyles}
                 menuPortalTarget={document.body}
                 isDisabled={isSubmitting}
+                maxMenuHeight={200}
               />
             </div>
 
@@ -261,6 +277,7 @@ function StudentModal({
                 styles={swinburneStyles}
                 menuPortalTarget={document.body}
                 isDisabled={isSubmitting}
+                maxMenuHeight={200}
               />
             </div>
 
@@ -277,6 +294,7 @@ function StudentModal({
                 styles={swinburneStyles}
                 menuPortalTarget={document.body}
                 isDisabled={isSubmitting}
+                maxMenuHeight={200}
               />
             </div>
 
@@ -293,11 +311,12 @@ function StudentModal({
                 styles={swinburneStyles}
                 menuPortalTarget={document.body}
                 isDisabled={isSubmitting || !formData.student_course}
+                maxMenuHeight={200}
               />
             </div>
 
             <div className="grid grid-cols-2 gap-4">
-              {/* Intake Year Dropdown */}
+              {/* Intake Year Dropdown - 修复滚动问题 */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Intake Year *
@@ -310,6 +329,7 @@ function StudentModal({
                   styles={swinburneStyles}
                   menuPortalTarget={document.body}
                   isDisabled={isSubmitting}
+                  maxMenuHeight={200}
                 />
               </div>
 
@@ -326,6 +346,7 @@ function StudentModal({
                   styles={swinburneStyles}
                   menuPortalTarget={document.body}
                   isDisabled={isSubmitting}
+                  maxMenuHeight={200}
                 />
               </div>
             </div>

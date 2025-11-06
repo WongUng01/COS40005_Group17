@@ -1027,7 +1027,7 @@ async def process_graduation(student_id: int):
 
         print(f"=== DEBUG: Checking graduation for student {student_id} ===")
 
-        # 1. Load student info (包括 student_type 和 has_spm_bm_credit)
+        # 1. Load student info
         student_res = supabase_client.from_("students") \
             .select("student_course, student_major, intake_year, intake_term, credit_point, graduation_status, student_type, has_spm_bm_credit") \
             .eq("student_id", student_id) \
@@ -1042,10 +1042,9 @@ async def process_graduation(student_id: int):
         intake_year = student["intake_year"]
         intake_term = student["intake_term"]
         
-        # 提取和标准化学生类型和SPM BM学分信息
+        # Extract and normalize student type and SPM BM credit
         student_type = (student.get("student_type") or "malaysian").strip().lower()
         
-        # 标准化 SPM BM credit 为布尔值
         raw_credit = student.get("has_spm_bm_credit", True)
         if isinstance(raw_credit, str):
             has_spm_credit = raw_credit.lower() in ["true", "1", "yes", "y"]
@@ -1055,15 +1054,21 @@ async def process_graduation(student_id: int):
         print("✅ DEBUG: student_type =", student_type, "| has_spm_credit =", has_spm_credit)
 
         # 2. Completed units
-        completed_units_res = supabase_client.from_("student_units") \
-            .select("unit_code") \
+        student_units_res = supabase_client.from_("student_units") \
+            .select("unit_code, completed, grade") \
             .eq("student_id", student_id) \
-            .eq("completed", True) \
-            .neq("grade", "F") \
             .execute()
 
+        # Passed courses (completed=True and grade not F)
         passed_codes_norm = {
-            normalize_code(u["unit_code"]) for u in (completed_units_res.data or []) if u.get("unit_code")
+            normalize_code(u["unit_code"]) for u in (student_units_res.data or []) 
+            if u.get("unit_code") and u.get("completed") and u.get("grade") != "F"
+        }
+
+        # All student course codes (for elective matching)
+        all_student_codes_norm = {
+            normalize_code(u["unit_code"]) for u in (student_units_res.data or []) 
+            if u.get("unit_code")
         }
 
         # Check if student has no completed units
@@ -1087,12 +1092,13 @@ async def process_graduation(student_id: int):
 
         # Calculate total credits with special handling for ICT20016
         total_credits = 0
-        for unit in (completed_units_res.data or []):
-            unit_code = normalize_code(unit["unit_code"])
-            if unit_code == "ICT20016":
-                total_credits += 25
-            else:
-                total_credits += 12.5
+        for unit in (student_units_res.data or []):
+            if unit.get("completed") and unit.get("grade") != "F":
+                unit_code = normalize_code(unit["unit_code"])
+                if unit_code == "ICT20016":
+                    total_credits += 25
+                else:
+                    total_credits += 12.5
 
         # 3. All planners
         all_planners_res = supabase_client.from_("study_planners") \
@@ -1130,54 +1136,107 @@ async def process_graduation(student_id: int):
 
         planner_id = matched_planners[0]["id"]
 
-        # 5. Load required units and apply MPU filtering (与progress endpoint相同)
+        # 5. Load required units and apply MPU filtering
         required_units_res = supabase_client.from_("study_planner_units") \
-            .select("unit_code, unit_type") \
+            .select("unit_code, unit_type, unit_name") \
             .eq("planner_id", planner_id) \
             .execute()
 
         required_units = required_units_res.data or []
         
-        # 🧹 应用MPU过滤逻辑 (与progress endpoint相同)
+        # Apply MPU filtering
         filtered_units = []
         for unit in required_units:
             code = str(unit.get("unit_code", "")).upper()
 
             if "MPU" in code:
-                # 1️⃣ Bahasa Kebangsaan A — Malaysians without SPM BM credit only
                 if code.startswith("MPU321") and (student_type != "malaysian" or has_spm_credit):
                     continue
-                # 2️⃣ Penghayatan Etika dan Peradaban — Malaysians only
                 if code.startswith("MPU318") and student_type != "malaysian":
                     continue
-                # 3️⃣ Malay Language Communication 2 — Internationals only
                 if code.startswith("MPU314") and student_type == "malaysian":
                     continue
-                # ✅ Others like MPU3272, MPU3192, MPU3412 stay
 
             filtered_units.append(unit)
 
-        # 6. 检查学生是否完成了所有过滤后的必修科目
-        required_codes_norm = {normalize_code(unit["unit_code"]) for unit in filtered_units}
-        completed_required = required_codes_norm & passed_codes_norm
-        missing_required = required_codes_norm - passed_codes_norm
+        # 🆕 6. 改进的选修课处理逻辑
+        # 识别所有选修课占位符（包括NAN）
+        elective_placeholders = [
+            u for u in filtered_units
+            if normalize_code(u.get("unit_code")) in ["0", "NAN", "", "NONE", "—", "NULL"] or 
+            str(u.get("unit_code")).lower() in ["0", "nan", "", "none", "—", "null"]
+        ]
 
-        # 7. 毕业条件：完成所有过滤后的必修科目
+        # 非选修课的必修课程（core和major）
+        non_elective_units = [u for u in filtered_units if u not in elective_placeholders]
+
+        print(f"DEBUG: Found {len(elective_placeholders)} elective placeholders")
+        print(f"DEBUG: Found {len(non_elective_units)} non-elective units")
+
+        # 用于跟踪已经用于满足选修要求的课程
+        used_for_elective = set()
+        
+        # 创建一个集合来跟踪满足的必修课要求
+        satisfied_required = set()
+        
+        # 首先处理直接匹配的课程（非选修课）
+        required_codes_norm = {normalize_code(unit["unit_code"]) for unit in filtered_units}
+        directly_satisfied = required_codes_norm & passed_codes_norm
+        satisfied_required.update(directly_satisfied)
+
+        print(f"DEBUG: Directly satisfied courses: {len(directly_satisfied)}")
+
+        # 然后处理选修课占位符
+        elective_replacements = {}
+        missing_electives_count = 0
+        
+        for placeholder in elective_placeholders:
+            placeholder_code = normalize_code(placeholder["unit_code"])
+            
+            # 找到可以用于满足此选修要求的学生课程
+            # 这些课程不在必修课列表中，且尚未被其他选修课使用
+            available_electives = all_student_codes_norm - required_codes_norm - used_for_elective
+            
+            if available_electives:
+                # 取第一个可用的选修课
+                replacement_course = next(iter(available_electives))
+                satisfied_required.add(placeholder_code)
+                used_for_elective.add(replacement_course)
+                elective_replacements[placeholder_code] = replacement_course
+                print(f"✅ DEBUG: Elective placeholder {placeholder_code} filled with {replacement_course}")
+            else:
+                print(f"❌ DEBUG: No available elective for placeholder {placeholder_code}")
+                missing_electives_count += 1
+
+        # 7. 计算缺失的课程
+        missing_required = required_codes_norm - satisfied_required
+
+        print(f"DEBUG: Total required courses: {len(required_codes_norm)}")
+        print(f"DEBUG: Satisfied required courses: {len(satisfied_required)}")
+        print(f"DEBUG: Missing required courses: {len(missing_required)}")
+        print(f"DEBUG: Missing courses: {missing_required}")
+
+        # 8. 毕业条件：完成所有必修科目（包括选修占位符）
         can_graduate = len(missing_required) == 0
 
-        # 8. 计算各类别的学分和完成情况（用于显示）
+        # 9. 计算各类别的学分和完成情况
         core_units = [normalize_code(u["unit_code"]) for u in filtered_units if normalize_type(u["unit_type"]) == "core"]
         major_units = [normalize_code(u["unit_code"]) for u in filtered_units if normalize_type(u["unit_type"]) == "major"]
+        elective_units = [normalize_code(u["unit_code"]) for u in elective_placeholders]
         
         core_set = set(core_units)
         major_set = set(major_units)
+        elective_set = set(elective_units)
 
-        completed_core = core_set & passed_codes_norm
-        completed_major = major_set & passed_codes_norm
-        missing_core = core_set - passed_codes_norm
-        missing_major = major_set - passed_codes_norm
+        completed_core = core_set & satisfied_required
+        completed_major = major_set & satisfied_required
+        completed_elective = elective_set & satisfied_required
+        
+        missing_core = core_set - satisfied_required
+        missing_major = major_set - satisfied_required
+        missing_elective = elective_set - satisfied_required
 
-        # Calculate credits with special handling for ICT20016
+        # 计算各类别的学分
         core_credits = 0
         for unit_code in completed_core:
             if unit_code == "ICT20016":
@@ -1192,33 +1251,63 @@ async def process_graduation(student_id: int):
             else:
                 major_credits += 12.5
 
-        # 9. 生成消息
+        # 10. 生成优化的消息
         messages = []
         
-        # 总体完成情况
+        # 总体完成情况 - 包括选修课
+        total_completed = len(satisfied_required)
+        total_required = len(required_codes_norm)
+        
         if can_graduate:
             messages.append("All required units completed - Eligible for graduation")
         else:
-            messages.append(f"Not all required units completed: {len(completed_required)}/{len(required_codes_norm)}")
+            messages.append(f"Not all required units completed: {total_completed}/{total_required}")
         
-        # Core units message
+        # 选修替换信息
+        if elective_replacements:
+            replacement_msg = "Elective replacements: " + ", ".join([f"{k} → {v}" for k, v in elective_replacements.items()])
+            messages.append(replacement_msg)
+        
+        # Core units message - 显示具体课程名称
         if missing_core:
-            messages.append(f"Missing {len(missing_core)} core units: {', '.join(list(missing_core))}")
+            # 获取缺失核心课程的详细信息
+            missing_core_details = []
+            for unit_code in missing_core:
+                unit_info = next((u for u in filtered_units if normalize_code(u["unit_code"]) == unit_code and normalize_type(u["unit_type"]) == "core"), None)
+                if unit_info:
+                    missing_core_details.append(f"{unit_code} ({unit_info.get('unit_name', 'Unknown')})")
+                else:
+                    missing_core_details.append(unit_code)
+            messages.append(f"Missing {len(missing_core)} core units: {', '.join(missing_core_details)}")
         else:
-            messages.append("All core units completed")
+            messages.append(f"All core units completed ({len(completed_core)}/{len(core_set)})")
         
-        # Major units message
+        # Major units message - 显示具体课程名称
         if missing_major:
-            messages.append(f"Missing {len(missing_major)} major units: {', '.join(list(missing_major))}")
+            # 获取缺失专业课程的详细信息
+            missing_major_details = []
+            for unit_code in missing_major:
+                unit_info = next((u for u in filtered_units if normalize_code(u["unit_code"]) == unit_code and normalize_type(u["unit_type"]) == "major"), None)
+                if unit_info:
+                    missing_major_details.append(f"{unit_code} ({unit_info.get('unit_name', 'Unknown')})")
+                else:
+                    missing_major_details.append(unit_code)
+            messages.append(f"Missing {len(missing_major)} major units: {', '.join(missing_major_details)}")
         else:
-            messages.append("All major units completed")
+            messages.append(f"All major units completed ({len(completed_major)}/{len(major_set)})")
         
-        # 其他缺失科目（非core非major）
-        other_missing = missing_required - missing_core - missing_major
+        # Elective units message - 只显示数量
+        if missing_elective:
+            messages.append(f"Missing {len(missing_elective)} elective units")
+        else:
+            messages.append(f"All elective requirements completed ({len(completed_elective)}/{len(elective_set)})")
+        
+        # 其他缺失科目（非core非major非elective）
+        other_missing = missing_required - missing_core - missing_major - missing_elective
         if other_missing:
             messages.append(f"Missing {len(other_missing)} other required units: {', '.join(list(other_missing))}")
 
-        # FIX: Add await here
+        # 11. 更新学生数据
         updated_student = await supabase_update_student(student_id, {"credit_point": total_credits, "graduation_status": can_graduate})
         print(f"DEBUG: Updated student data: {updated_student}")
 
@@ -1229,13 +1318,12 @@ async def process_graduation(student_id: int):
             major_credits=major_credits,
             core_completed=len(completed_core),
             major_completed=len(completed_major),
-            mpu_requirements_met=True,  # 由于三种不同MPU要求已作废，设为True
-            mpu_types_completed=[],     # 清空MPU类型列表
+            mpu_requirements_met=True,
+            mpu_types_completed=[],
             missing_core_units=list(missing_core),
             missing_major_units=list(missing_major),
             messages=messages,
-            planner_info=f"Planner {planner_id} for {student_course} - {student_major} (Filtered MPU based on student type)",
-            # Include the updated student data in the response
+            planner_info=f"Planner {planner_id} for {student_course} - {student_major} (Electives handled)",
             updated_student=updated_student
         )
 
@@ -1245,7 +1333,7 @@ async def process_graduation(student_id: int):
         print("❌ CRITICAL ERROR:", e)
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
-    
+  
 async def supabase_update_student(student_id: int, payload: dict):
     try:
         print(f"DEBUG: Updating student {student_id} with {payload}")
