@@ -6,8 +6,8 @@ import axios, { AxiosError } from "axios";
 import { UploadCloud } from "lucide-react";
 import Select from "react-select";
 
-const API = "http://127.0.0.1:8000";
-// const API = "https://cos40005-group17.onrender.com";
+// const API = "http://127.0.0.1:8000";
+const API = "https://cos40005-group17.onrender.com";
 
 
 const UploadStudyPlanner = () => {
