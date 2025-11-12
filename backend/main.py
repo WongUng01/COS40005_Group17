@@ -746,7 +746,7 @@ async def upload_units(
             raise HTTPException(400, "No valid course records found in Excel")
 
         # 4. Ensure student exists
-        resp = client.from_("students") \
+        resp = supabase_client.from_("students") \
             .select("student_id") \
             .eq("student_id", student_id) \
             .execute()
@@ -755,13 +755,13 @@ async def upload_units(
 
         # 5. Optionally overwrite existing data
         if overwrite:
-            client.from_("student_units") \
+            supabase_client.from_("student_units") \
                 .delete() \
                 .eq("student_id", student_id) \
                 .execute()
 
         # 6. Insert new records
-        ins = client.from_("student_units").insert(units).execute()
+        ins = supabase_client.from_("student_units").insert(units).execute()
         return {"message": f"Successfully uploaded {len(ins.data or [])} course records"}
 
     except HTTPException:
@@ -2093,10 +2093,9 @@ def get_student_progress(student_id: int):
             raise HTTPException(status_code=404, detail="Student not found")
         student = student_res.data[0]
 
-        # 🧩 Normalize student_type and has_spm_bm_credit
+        # Normalize student_type and has_spm_bm_credit
         student_type = (student.get("student_type") or "malaysian").strip().lower()
 
-        # Handle SPM BM credit safely
         raw_credit = student.get("has_spm_bm_credit")
         if raw_credit is None:
             has_spm_credit = True
@@ -2108,8 +2107,6 @@ def get_student_progress(student_id: int):
             has_spm_credit = raw_credit.strip().lower() in ["true", "1", "yes", "y"]
         else:
             has_spm_credit = True
-
-        print(f"✅ DEBUG: student_type={student_type}, has_spm_credit={has_spm_credit}")
 
         # 2️⃣ Fetch study planner
         program = student.get("student_course")
@@ -2140,32 +2137,35 @@ def get_student_progress(student_id: int):
         planner_units = supabase_client.table("study_planner_units").select("*").eq("planner_id", planner_id).execute().data or []
         student_units = supabase_client.table("student_units").select("*").eq("student_id", student_id).execute().data or []
 
-        # 🧹 4️⃣ Filter MPU units based on student type & SPM BM credit
+        # 4️⃣ Filter MPU units based on student type & SPM BM credit
         filtered_units = []
         for unit in planner_units:
             code = str(unit.get("unit_code", "")).upper()
 
             if "MPU" in code:
-                # Bahasa Kebangsaan A — Malaysians WITHOUT SPM BM credit only
                 if code.startswith("MPU321") and (student_type != "malaysian" or has_spm_credit):
                     continue
-                # Penghayatan Etika dan Peradaban — Malaysians only
                 if code.startswith("MPU318") and student_type != "malaysian":
                     continue
-                # Malay Language Communication 2 — Internationals only
                 if code.startswith("MPU314") and student_type == "malaysian":
                     continue
 
             filtered_units.append(unit)
 
         # 5️⃣ Determine completed and elective placeholders
-        completed_codes = {u["unit_code"] for u in student_units if u.get("unit_code")}
+        # Passed grades only
+        def is_passed(grade):
+            return str(grade or "").upper() not in ["N", "F", "FAIL", "", "NAN", " ", "N "]
+
+        completed_codes = {u["unit_code"] for u in student_units if u.get("unit_code") and is_passed(u.get("grade"))}
         elective_placeholders = [
             u for u in filtered_units
             if str(u.get("unit_code")).lower() in ["0", "nan", "", "none", "—"]
         ]
 
-        # Keep a separate list of student codes that have been used to fill electives (for summary only)
+        # Map student_units by code for easy lookup
+        student_units_map = {u["unit_code"]: u for u in student_units if u.get("unit_code")}
+
         used_for_elective = set()
 
         for unit in filtered_units:
@@ -2173,15 +2173,19 @@ def get_student_progress(student_id: int):
             unit["completed"] = False
             unit["replacement"] = None
 
-            # ✅ If this unit is directly completed
-            if code in completed_codes:
+            # ✅ Completed if student passed
+            if code in student_units_map and is_passed(student_units_map[code].get("grade")):
                 unit["completed"] = True
-            # ✅ If this unit is an elective placeholder, try to fill it
+
+            # ✅ Fill elective placeholder only with passed extra units
             elif unit in elective_placeholders:
                 unmatched = next(
-                    (su for su in student_units
-                     if su["unit_code"] not in [p.get("unit_code") for p in filtered_units]
-                     and su["unit_code"] not in used_for_elective),
+                    (
+                        su for su in student_units
+                        if su["unit_code"] not in [p.get("unit_code") for p in filtered_units]
+                        and su["unit_code"] not in used_for_elective
+                        and is_passed(su.get("grade"))
+                    ),
                     None
                 )
                 if unmatched:
@@ -2194,7 +2198,7 @@ def get_student_progress(student_id: int):
         completed_units = [u for u in filtered_units if u["completed"]]
         remaining_units = [u for u in filtered_units if not u["completed"]]
 
-        # 7️⃣ Summary (based on planner only)
+        # 7️⃣ Summary
         summary = {
             "completed_count": len(completed_units),
             "total_required": len(filtered_units)
@@ -2214,3 +2218,4 @@ def get_student_progress(student_id: int):
     except Exception as e:
         print("❌ Error in get_student_progress:", str(e))
         raise HTTPException(status_code=500, detail=str(e))
+
