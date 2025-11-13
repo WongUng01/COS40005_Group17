@@ -50,7 +50,10 @@ export default function CheckGraduationPage() {
   // const API_URL = 'http://localhost:8000';
   // const API_URL = "http://127.0.0.1:8000";
   const API_URL = "https://cos40005-group17.onrender.com";
+<<<<<<< HEAD:ssps/src/app/students/check-graduation/page.tsx
 
+=======
+>>>>>>> charles:ssps/src/components/CheckGraduation.tsx
 
   useEffect(() => {
     fetchStudents();
@@ -259,11 +262,14 @@ export default function CheckGraduationPage() {
                 <div className="text-4xl mb-4">🎓</div>
                 <h3 className="text-2xl font-bold text-green-600 mb-2">Graduation Approved!</h3>
                 <p className="text-gray-600 mb-4">
-                  Congratulations! The student is eligible to graduate.
+                  Congratulations! The student meets all graduation requirements.
                 </p>
                 <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-4">
                   <p className="text-green-800 font-semibold">
-                    Total Credits: {graduationResult.total_credits}/300
+                    Total Credits: {graduationResult.total_credits}/300 ✅
+                  </p>
+                  <p className="text-green-700 text-sm mt-1">
+                    All course requirements completed ✅
                   </p>
                 </div>
               </div>
@@ -277,6 +283,7 @@ export default function CheckGraduationPage() {
                 <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-4">
                   <p className="text-red-800 font-semibold mb-2">
                     Total Credits: {graduationResult.total_credits}/300
+                    {graduationResult.total_credits >= 300 ? ' ✅' : ' ❌'}
                   </p>
                   
                   {graduationResult.messages.length > 0 ? (
@@ -504,7 +511,7 @@ export default function CheckGraduationPage() {
         <div className="flex flex-wrap gap-4 text-sm">
           <div className="flex items-center gap-2">
             <div className="w-3 h-3 bg-green-600 rounded-full"></div>
-            <span>Eligible to Graduate</span>
+            <span>Eligible to Graduate (All requirements met + 300+ credits)</span>
           </div>
           <div className="flex items-center gap-2">
             <div className="w-3 h-3 bg-yellow-500 rounded-full"></div>
@@ -514,6 +521,9 @@ export default function CheckGraduationPage() {
             <div className="w-3 h-3 bg-red-500 rounded-full"></div>
             <span>Need More Credits</span>
           </div>
+        </div>
+        <div className="mt-3 text-xs text-gray-600">
+          <p><strong>Graduation Requirements:</strong> Complete all required courses AND achieve minimum 300 credits</p>
         </div>
       </div>
 

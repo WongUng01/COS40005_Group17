@@ -46,7 +46,8 @@ function UnitModal({
   const offeredTermsOptions = [
     { value: '', label: 'Not specified' },
     { value: 'Aug/Sep', label: 'Aug/Sep' },
-    { value: 'Feb/March', label: 'Feb/March' }
+    { value: 'Feb/March', label: 'Feb/March' },
+    { value: 'Every term', label: 'Every term' }
   ];
 
   return (
@@ -475,6 +476,20 @@ export default function Units() {
     );
   };
 
+  // Helper function to get badge color for offered terms
+  const getOfferedTermsBadgeColor = (offeredTerms: string) => {
+    switch (offeredTerms) {
+      case 'Aug/Sep':
+        return 'bg-orange-50 text-orange-700';
+      case 'Feb/March':
+        return 'bg-purple-50 text-purple-700';
+      case 'Every term':
+        return 'bg-green-50 text-green-700';
+      default:
+        return 'bg-gray-50 text-gray-700';
+    }
+  };
+
   return (
     <div className="max-w-7xl mx-auto p-6 bg-gray-50 min-h-screen">
       {/* Header */}
@@ -609,11 +624,7 @@ export default function Units() {
                   </td>
                   <td className="px-6 py-4 text-sm text-gray-700">
                     {unit.offered_terms ? (
-                      <span className={`px-2 py-1 rounded text-xs ${
-                        unit.offered_terms === 'Aug/Sep' 
-                          ? 'bg-orange-50 text-orange-700' 
-                          : 'bg-purple-50 text-purple-700'
-                      }`}>
+                      <span className={`px-2 py-1 rounded text-xs ${getOfferedTermsBadgeColor(unit.offered_terms)}`}>
                         {unit.offered_terms}
                       </span>
                     ) : (
