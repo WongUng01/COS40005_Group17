@@ -36,9 +36,9 @@ const navItems = [
     icon: <FaUserGraduate />,
     children: [
       { label: 'Students Dashboard', href: '/students', icon: <FaUsers /> },
-      { label: 'Students Information', href: '/students/information', icon: <FaUserGraduate /> },
-      { label: 'Bulk Upload', href: '/students/bulk-upload', icon: <FaFileExcel /> },
-      { label: 'Check Graduation', href: '/students/check-graduation', icon: <FaGraduationCap /> },
+      { label: 'Students Information', href: '/information', icon: <FaUserGraduate /> },
+      { label: 'Bulk Upload', href: '/bulk-upload', icon: <FaFileExcel /> },
+      { label: 'Check Graduation', href: '/check-graduation', icon: <FaGraduationCap /> },
     ],
   },
   { label: 'Analytics', href: '/analytics-dashboard', icon: <FaChartBar /> },

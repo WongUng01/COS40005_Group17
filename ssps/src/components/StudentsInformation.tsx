@@ -122,6 +122,13 @@ function StudentModal({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Validate required fields
+    if (!formData.has_spm_bm_credit) {
+      toast.error('Please select SPM BM Credit status');
+      return;
+    }
+
     await onSubmit(e);
   };
 
@@ -258,10 +265,11 @@ function StudentModal({
                 menuPortalTarget={document.body}
                 isDisabled={isSubmitting}
                 maxMenuHeight={200}
+                required
               />
             </div>
 
-            {/* SPM BM Credit Dropdown */}
+            {/* SPM BM Credit Dropdown - Now Compulsory */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Has SPM BM Credit *
@@ -269,7 +277,7 @@ function StudentModal({
               <Select
                 value={formData.has_spm_bm_credit !== undefined ? 
                   { value: formData.has_spm_bm_credit.toString(), label: formData.has_spm_bm_credit ? 'TRUE' : 'FALSE' } : 
-                  { value: 'true', label: 'TRUE' }
+                  null
                 }
                 onChange={handleSpmCreditSelect}
                 options={spmCreditOptions}
@@ -278,6 +286,7 @@ function StudentModal({
                 menuPortalTarget={document.body}
                 isDisabled={isSubmitting}
                 maxMenuHeight={200}
+                required
               />
             </div>
 
@@ -295,6 +304,7 @@ function StudentModal({
                 menuPortalTarget={document.body}
                 isDisabled={isSubmitting}
                 maxMenuHeight={200}
+                required
               />
             </div>
 
@@ -312,11 +322,12 @@ function StudentModal({
                 menuPortalTarget={document.body}
                 isDisabled={isSubmitting || !formData.student_course}
                 maxMenuHeight={200}
+                required
               />
             </div>
 
             <div className="grid grid-cols-2 gap-4">
-              {/* Intake Year Dropdown - 修复滚动问题 */}
+              {/* Intake Year Dropdown */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Intake Year *
@@ -330,6 +341,7 @@ function StudentModal({
                   menuPortalTarget={document.body}
                   isDisabled={isSubmitting}
                   maxMenuHeight={200}
+                  required
                 />
               </div>
 
@@ -347,6 +359,7 @@ function StudentModal({
                   menuPortalTarget={document.body}
                   isDisabled={isSubmitting}
                   maxMenuHeight={200}
+                  required
                 />
               </div>
             </div>
@@ -447,7 +460,9 @@ export default function StudentsInformationPage() {
     student_major: '',
     intake_term: '',
     intake_year: '',
-    credit_point: 0
+    credit_point: 0,
+    student_type: 'malaysian',
+    has_spm_bm_credit: undefined // Changed from true to undefined to force selection
   });
   const [editingStudentId, setEditingStudentId] = useState<number | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -600,7 +615,9 @@ export default function StudentsInformationPage() {
         student_major: '',
         intake_term: '',
         intake_year: '',
-        credit_point: 0
+        credit_point: 0,
+        student_type: 'malaysian',
+        has_spm_bm_credit: undefined
       });
       setEditingStudentId(null);
       setIsModalOpen(false);
@@ -697,8 +714,8 @@ export default function StudentsInformationPage() {
       intake_term: '',
       intake_year: '',
       credit_point: 0,
-      student_type: 'malaysian', 
-      has_spm_bm_credit: true 
+      student_type: 'malaysian',
+      has_spm_bm_credit: undefined // Changed from true to undefined to force selection
     });
     setEditingStudentId(null);
     setModalMode('add');
@@ -718,7 +735,7 @@ export default function StudentsInformationPage() {
       intake_year: student.intake_year, 
       credit_point: student.credit_point,
       student_type: student.student_type || 'malaysian',
-      has_spm_bm_credit: student.has_spm_bm_credit !== undefined ? student.has_spm_bm_credit : true
+      has_spm_bm_credit: student.has_spm_bm_credit
     });
     setEditingStudentId(student.student_id);
     setModalMode('edit');

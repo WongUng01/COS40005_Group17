@@ -1217,7 +1217,7 @@ async def process_graduation(student_id: int):
         print(f"DEBUG: Missing courses: {missing_required}")
 
         # 8. 毕业条件：完成所有必修科目（包括选修占位符）
-        can_graduate = len(missing_required) == 0
+        can_graduate = len(missing_required) == 0 and total_credits >= 300
 
         # 9. 计算各类别的学分和完成情况
         core_units = [normalize_code(u["unit_code"]) for u in filtered_units if normalize_type(u["unit_type"]) == "core"]
@@ -1251,17 +1251,25 @@ async def process_graduation(student_id: int):
             else:
                 major_credits += 12.5
 
-        # 10. 生成优化的消息
+        # 10. Generate optimized messages
         messages = []
-        
-        # 总体完成情况 - 包括选修课
+
+        # Overall completion status - including electives
         total_completed = len(satisfied_required)
         total_required = len(required_codes_norm)
-        
+
         if can_graduate:
-            messages.append("All required units completed - Eligible for graduation")
+            messages.append("All required units completed and minimum 300 credits achieved - Eligible for graduation")
         else:
-            messages.append(f"Not all required units completed: {total_completed}/{total_required}")
+            messages.append(f"Not all graduation requirements met: {total_completed}/{total_required} units completed, {total_credits}/300 credits")
+            
+        # Add specific messages for unmet requirements
+        if len(missing_required) > 0:
+            messages.append(f"Missing {len(missing_required)} required units")
+            
+        if total_credits < 300:
+            messages.append(f"Insufficient credits: {total_credits}/300")
+        
         
         # 选修替换信息
         if elective_replacements:
