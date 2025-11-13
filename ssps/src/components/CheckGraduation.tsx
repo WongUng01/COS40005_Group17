@@ -347,7 +347,7 @@ export default function CheckGraduationPage() {
             Back to Main
           </Link>
           <Link 
-            href="/students/information" 
+            href="/information" 
             className="px-4 py-2 bg-[#E31C25] text-white rounded hover:bg-[#B71C1C]"
           >
             View All Students
