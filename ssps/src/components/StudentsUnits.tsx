@@ -158,7 +158,7 @@ export default function StudentUnitsPage() {
           />
 
           <Link
-            href="/students/information"
+            href="/information"
             className="px-5 py-2.5 rounded-lg bg-gray-800 text-white font-medium hover:bg-gray-900 transition"
           >
             ← Back
