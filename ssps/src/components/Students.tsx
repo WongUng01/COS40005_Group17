@@ -13,7 +13,7 @@ export default function StudentsMainPage() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
         {/* Students Information Card */}
         <Link 
-          href="/students/information"
+          href="/information"
           className="bg-white p-6 rounded-lg shadow-md border border-[#E31C25]/20 hover:shadow-lg transition-shadow group"
         >
           <div className="text-center">
@@ -29,7 +29,7 @@ export default function StudentsMainPage() {
 
         {/* Bulk Upload Card */}
         <Link 
-          href="/students/bulk-upload"
+          href="/bulk-upload"
           className="bg-white p-6 rounded-lg shadow-md border border-[#E31C25]/20 hover:shadow-lg transition-shadow group"
         >
           <div className="text-center">
@@ -45,7 +45,7 @@ export default function StudentsMainPage() {
 
         {/* Check Graduation Card */}
         <Link 
-          href="/students/check-graduation"
+          href="/check-graduation"
           className="bg-white p-6 rounded-lg shadow-md border border-[#E31C25]/20 hover:shadow-lg transition-shadow group"
         >
           <div className="text-center">
