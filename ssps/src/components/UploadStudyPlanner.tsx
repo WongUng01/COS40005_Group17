@@ -6,8 +6,8 @@ import axios, { AxiosError } from "axios";
 import { UploadCloud } from "lucide-react";
 import Select from "react-select";
 
-// const API = "http://127.0.0.1:8000";
-const API = "https://cos40005-group17.onrender.com";
+const API = "http://127.0.0.1:8000";
+// const API = "https://cos40005-group17.onrender.com";
 
 
 const UploadStudyPlanner = () => {
@@ -37,6 +37,8 @@ const UploadStudyPlanner = () => {
   const semesters = ["Feb/Mar", "Aug/Sep"];
 
   const isFormValid = file && program && major && intakeYear && intakeSemester;
+
+  const [isDragging, setIsDragging] = useState(false);
 
   const swinburneStyles = {
     control: (base: any, state: any) => ({
@@ -148,8 +150,16 @@ const UploadStudyPlanner = () => {
   // Add new intake year
   const handleAddYear = async () => {
     if (!newYear) return toast.error("Enter a year.");
+
     const yearNumber = Number(newYear);
+
+    // Validation: must be a positive integer
+    if (!Number.isInteger(yearNumber) || yearNumber <= 0) {
+      return toast.error("Enter a valid positive year.");
+    }
+
     if (intakeYears.includes(yearNumber)) return toast.error("Year already exists.");
+
     try {
       await axios.post(`${API}/api/intake-years`, { intake_year: yearNumber });
       await fetchIntakeYears();
@@ -231,25 +241,50 @@ const UploadStudyPlanner = () => {
         {/* Body */}
         <div className="p-8 space-y-6">
           {/* File Upload */}
-          <div>
-            <label className="block text-gray-700 font-semibold mb-2">Excel File (.xlsx)</label>
-            <div
-              className="flex flex-col items-center justify-center w-full p-6 border-2 border-dashed border-gray-300 rounded-lg hover:border-[#e60028] hover:bg-red-50 transition cursor-pointer"
-              onClick={() => fileInputRef.current?.click()}
-            >
-              <UploadCloud className="w-10 h-10 text-[#e60028] mb-2" />
-              <p className="text-gray-700 text-sm">
-                {file ? <span className="font-medium">{file.name}</span> : "Click or drag to upload your file"}
-              </p>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept=".xlsx"
-                className="hidden"
-                onChange={(e) => setFile(e.target.files?.[0] || null)}
-              />
-            </div>
+          <div
+            className={`flex flex-col items-center justify-center w-full p-6 border-2 border-dashed rounded-lg transition cursor-pointer 
+              ${isDragging ? "border-[#e60028] bg-red-50" : "border-gray-300 hover:border-[#e60028] hover:bg-red-50"}
+            `}
+            onClick={() => fileInputRef.current?.click()}
+            onDragOver={(e) => {
+              e.preventDefault();
+              setIsDragging(true);
+            }}
+            onDragLeave={(e) => {
+              e.preventDefault();
+              setIsDragging(false);
+            }}
+            onDrop={(e) => {
+              e.preventDefault();
+              setIsDragging(false);
+              if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+                const droppedFile = e.dataTransfer.files[0];
+                if (droppedFile.name.endsWith(".xlsx")) {
+                  setFile(droppedFile);
+                } else {
+                  toast.error("Please upload an .xlsx file.");
+                }
+              }
+            }}
+          >
+            <UploadCloud className="w-10 h-10 text-[#e60028] mb-2" />
+            <p className="text-gray-700 text-sm">
+              {file ? <span className="font-medium">{file.name}</span> : "Click or drag to upload your file"}
+            </p>
+
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".xlsx"
+              className="hidden"
+              onChange={(e) => {
+                if (!e.target.files || e.target.files.length === 0) return; // ← Do NOT reset file on cancel
+                const f = e.target.files[0];
+                setFile(f);
+              }}
+            />
           </div>
+
 
           {/* Dropdown Grid */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
@@ -321,12 +356,24 @@ const UploadStudyPlanner = () => {
                       onChange={(option) => setMajor(option?.value || "")}
                       options={[...majors]
                         .sort((a, b) => a.major_name.localeCompare(b.major_name))
-                        .map((m) => ({ value: m.major_name, label: m.major_name }))}
+                        .map((m) => ({ value: m.major_name, label: m.major_name }))
+                      }
                       placeholder="Select Major"
                       isDisabled={!majors.length}
-                      styles={swinburneStyles}
+                      styles={{
+                        ...swinburneStyles,
+                        control: (base, state) => ({
+                          ...swinburneStyles.control(base, state),
+                          ...( !majors.length && {
+                            backgroundColor: "#f3f3f3",
+                            cursor: "not-allowed",
+                            opacity: 0.6,
+                          })
+                        })
+                      }}
                       menuPortalTarget={document.body}
                     />
+
                   </div>
                   <button
                     className="text-[#e60028] font-medium hover:underline text-sm whitespace-nowrap"

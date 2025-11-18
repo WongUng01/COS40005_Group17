@@ -314,7 +314,28 @@ def view_study_planner(
     except Exception as e:
         print("❌ Error in view-study-planner:", str(e))
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+    
+@app.get("/api/study-planners")
+def list_study_planners():
+    try:
+        # Fetch all planners
+        res = (
+            supabase_client.table("study_planners")
+            .select("id, program, major, intake_year, intake_semester, program_code")
+            .order("program")
+            .order("major")
+            .order("intake_year")
+            .order("intake_semester")
+            .execute()
+        )
 
+        planners = res.data or []
+
+        return {"planners": planners}
+
+    except Exception as e:
+        print("❌ Error in list-study-planners:", str(e))
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
 @app.get("/api/study-planner-tabs")
 def get_study_planner_tabs():

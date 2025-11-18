@@ -37,6 +37,7 @@ const ViewStudyPlannerTabs: React.FC = () => {
   const [selectedSemester, setSelectedSemester] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [loadingPlannerId, setLoadingPlannerId] = useState<number | null>(null);
+  const [savingPlannerId, setSavingPlannerId] = useState<number | null>(null);
 
   const unitTypeColors: Record<string, string> = {
     Core: "bg-blue-100",
@@ -47,8 +48,25 @@ const ViewStudyPlannerTabs: React.FC = () => {
     Special: "bg-sky-50",
   };
 
-  // const API = "http://127.0.0.1:8000";
-  const API = "https://cos40005-group17.onrender.com";
+  const Spinner: React.FC<{ size?: number; color?: string }> = ({ size = 16, color = "white" }) => (
+    <svg
+      className="animate-spin"
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke={color}
+      strokeWidth="3"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <circle cx="12" cy="12" r="10" strokeOpacity="0.25" />
+      <path d="M22 12a10 10 0 0 1-10 10" />
+    </svg>
+  );
+
+  const API = "http://127.0.0.1:8000";
+  // const API = "https://cos40005-group17.onrender.com";
 
 
   useEffect(() => {
@@ -269,33 +287,47 @@ const ViewStudyPlannerTabs: React.FC = () => {
   };
 
   const handleSavePlanner = async (plannerId: number) => {
+    setSavingPlannerId(plannerId); // 🔹 start saving
     try {
       const draftUnits = draftUnitsMap[plannerId] || [];
+
+      // Validate required units
       const missingUnits = draftUnits.filter(
         (u: any) =>
           (!u.unit_code || u.unit_code.trim() === "") &&
           u.unit_type?.toLowerCase() !== "elective"
       );
-
       if (missingUnits.length > 0) {
-        toast.error(`Please select a unit for all non-elective rows. Missing in ${missingUnits.length} row(s).`);
+        toast.error(
+          `Please select a unit for all non-elective rows. Missing in ${missingUnits.length} row(s).`
+        );
         return;
       }
 
+      // Delete pending units
       const pendingDeletes = deletedUnits[plannerId] || [];
       if (pendingDeletes.length > 0) {
-        await Promise.all(pendingDeletes.map((id) => axios.delete(`${API}/api/delete-study-planner-unit/${id}`)));
+        await Promise.all(
+          pendingDeletes.map((id) =>
+            axios.delete(`${API}/api/delete-study-planner-unit/${id}`)
+          )
+        );
         setDeletedUnits((prev) => ({ ...prev, [plannerId]: [] }));
       }
 
+      // Update existing units' order
       const existingUnits = draftUnits.filter((u: any) => !!u.id);
       if (existingUnits.length > 0) {
         await axios.put(`${API}/api/update-study-planner-order`, {
           planner_id: plannerId,
-          units: existingUnits.map((u: any) => ({ id: u.id, row_index: u.row_index })),
+          units: existingUnits.map((u: any) => ({
+            id: u.id,
+            row_index: u.row_index,
+          })),
         });
       }
 
+      // Add new units and update existing units
       await Promise.all(
         draftUnits.map(async (unit: any, index: number) => {
           if (!unit.id && unit.tempId) {
@@ -310,14 +342,19 @@ const ViewStudyPlannerTabs: React.FC = () => {
             const newUnit = res.data.unit;
             setDraftUnitsMap((prev) => ({
               ...prev,
-              [plannerId]: prev[plannerId].map((u: any) => (u.tempId === unit.tempId ? { ...newUnit } : u)),
+              [plannerId]: prev[plannerId].map((u: any) =>
+                u.tempId === unit.tempId ? { ...newUnit } : u
+              ),
             }));
           } else if (unit.id) {
             await axios.put(`${API}/api/update-study-planner-unit`, {
               unit_id: unit.id,
               year: String(unit.year),
               semester: String(unit.semester),
-              unit_code: !unit.unit_code || unit.unit_code === "nan" ? null : unit.unit_code,
+              unit_code:
+                !unit.unit_code || unit.unit_code === "nan"
+                  ? null
+                  : unit.unit_code,
               unit_type: unit.unit_type,
               prerequisites: unit.prerequisites,
               unit_name: unit.unit_name,
@@ -326,12 +363,15 @@ const ViewStudyPlannerTabs: React.FC = () => {
         })
       );
 
+      // Update main units map and exit edit mode
       setUnitsMap((prev) => ({ ...prev, [plannerId]: draftUnitsMap[plannerId] }));
       setEditPlannerId(null);
       toast.success("Study planner saved successfully!");
     } catch (err) {
       console.error(err);
       toast.error("Failed to save study planner. Please try again.");
+    } finally {
+      setSavingPlannerId(null); // 🔹 clear saving indicator
     }
   };
 
@@ -573,16 +613,41 @@ const ViewStudyPlannerTabs: React.FC = () => {
                 <div className="mb-3 flex items-center gap-3">
                   {editPlannerId === planner.id ? (
                     <div className="flex gap-2 ml-auto">
-                      <button onClick={() => handleSavePlanner(planner.id)} className="flex items-center gap-2 px-3 py-1 bg-green-600 text-white rounded text-sm">
-                        <Save size={14} /> Save
+                      <button
+                        onClick={() => handleSavePlanner(planner.id)}
+                        disabled={savingPlannerId !== null}
+                        className={classNames(
+                          "flex items-center gap-2 px-3 py-1 rounded text-sm",
+                          savingPlannerId === planner.id
+                            ? "bg-gray-400 text-gray-200 cursor-not-allowed"
+                            : "bg-green-600 text-white"
+                        )}
+                      >
+                        {savingPlannerId === planner.id ? (
+                          <>
+                            <Spinner size={14} color="white" /> Saving...
+                          </>
+                        ) : (
+                          <>
+                            <Save size={14} /> Save
+                          </>
+                        )}
                       </button>
+
                       <button onClick={() => handleCancelEdit(planner.id)} className="flex items-center gap-2 px-3 py-1 bg-gray-300 text-gray-700 rounded text-sm">
                         <X size={14} /> Cancel
                       </button>
                     </div>
                   ) : (
                     <div className="ml-auto">
-                      <button onClick={() => handleEditPlanner(planner.id)} className="flex items-center gap-2 px-3 py-1 bg-blue-600 text-white rounded text-sm">
+                      <button
+                        onClick={() => handleEditPlanner(planner.id)}
+                        disabled={savingPlannerId !== null}
+                        className={classNames(
+                          "flex items-center gap-2 px-3 py-1 rounded text-sm",
+                          savingPlannerId !== null ? "bg-gray-300 text-gray-500 cursor-not-allowed" : "bg-blue-600 text-white"
+                        )}
+                      >
                         <Edit2 size={14} /> Edit Planner
                       </button>
                     </div>
@@ -621,7 +686,12 @@ const ViewStudyPlannerTabs: React.FC = () => {
                             {((editPlannerId === planner.id ? draftUnitsMap[planner.id] : unitsMap[planner.id]) || [])
                               .sort((a: any, b: any) => (a.row_index ?? 0) - (b.row_index ?? 0))
                               .map((unit: any, index: number) => (
-                                <Draggable key={unit.id ?? unit.tempId ?? `row-${index}`} draggableId={(unit.id ?? unit.tempId ?? `row-${index}`).toString()} index={index} isDragDisabled={editPlannerId !== planner.id}>
+                                <Draggable
+                                  key={unit.id ?? unit.tempId ?? `row-${index}`}
+                                  draggableId={(unit.id ?? unit.tempId ?? `row-${index}`).toString()}
+                                  index={index}
+                                  isDragDisabled={editPlannerId !== planner.id || savingPlannerId === planner.id} // ⬅️ added saving check
+                                >
                                   {(provided, snapshot) => (
                                     <tr
                                       ref={provided.innerRef}
@@ -635,7 +705,7 @@ const ViewStudyPlannerTabs: React.FC = () => {
                                     >
                                       <td className="px-3 py-2 text-sm align-top">
                                         {editPlannerId === planner.id ? (
-                                          <select value={unit.year} onChange={(e) => {
+                                          <select value={unit.year} disabled={savingPlannerId === planner.id} onChange={(e) => {
                                             const newValue = e.target.value;
                                             setDraftUnitsMap((prev) => {
                                               const newUnits = [...(prev[planner.id] || [])];
@@ -652,7 +722,7 @@ const ViewStudyPlannerTabs: React.FC = () => {
 
                                       <td className="px-3 py-2 align-top text-sm">
                                         {editPlannerId === planner.id ? (
-                                          <select value={unit.semester} onChange={(e) => {
+                                          <select value={unit.semester} disabled={savingPlannerId === planner.id} onChange={(e) => {
                                             const newValue = e.target.value;
                                             setDraftUnitsMap((prev) => {
                                               const newUnits = [...(prev[planner.id] || [])];
@@ -670,6 +740,7 @@ const ViewStudyPlannerTabs: React.FC = () => {
                                       <td className="px-3 py-2 align-top text-sm w-48">
                                         {editPlannerId === planner.id ? (
                                           <Select
+                                          isDisabled={savingPlannerId === planner.id}
                                           menuPortalTarget={document.body} // ⬅️ makes dropdown render outside scroll container
                                           styles={{
                                             menuPortal: (base) => ({ ...base, zIndex: 9999 }), // ⬅️ ensures it's visible above everything
@@ -721,7 +792,7 @@ const ViewStudyPlannerTabs: React.FC = () => {
                                       {editPlannerId === planner.id && (
                                         <td className="px-3 py-2 align-top text-sm">
                                           <div className="flex gap-2 items-center">
-                                            <button onClick={() => handleRemoveRow(planner.id, unit)} className="text-red-600 hover:underline flex items-center gap-1 text-sm">
+                                            <button onClick={() => handleRemoveRow(planner.id, unit)} disabled={savingPlannerId === planner.id} className="text-red-600 hover:underline flex items-center gap-1 text-sm">
                                               <Trash2 size={14}/> Remove
                                             </button>
                                           </div>

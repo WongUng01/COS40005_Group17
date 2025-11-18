@@ -6,8 +6,8 @@ import { Plus, Save } from "lucide-react";
 import Select from "react-select";
 import toast from "react-hot-toast";
 
-// const API = "http://127.0.0.1:8000";
-const API = "https://cos40005-group17.onrender.com";
+const API = "http://127.0.0.1:8000";
+// const API = "https://cos40005-group17.onrender.com";
 
 
 type Unit = {
@@ -75,7 +75,7 @@ const CreateStudyPlanner: React.FC = () => {
 
   const [loading, setLoading] = useState(false);
 
-  const studyYears = ["1", "2", "3", "4"];
+  const studyYears = ["1", "2", "3", "4", "5"];
   const studyPlannerSemesters = [
     "1", "2", "3", "4", "Summer", "Winter", "Term 1", "Term 2", "Term 3", "Term 4",
   ];
@@ -91,6 +91,21 @@ const CreateStudyPlanner: React.FC = () => {
   };
 
   const unitOptions = units.map((u) => ({ value: u.unit_code, code: u.unit_code, name: u.unit_name }));
+
+  const [existingPlanners, setExistingPlanners] = useState<any[]>([]);
+
+  useEffect(() => {
+    const fetchExistingPlanners = async () => {
+      try {
+        const res = await axios.get(`${API}/api/study-planners`);
+        setExistingPlanners(res.data.planners || []);
+      } catch (err) {
+        console.error("Failed to fetch existing planners", err);
+      }
+    };
+
+    fetchExistingPlanners();
+  }, []);
 
   // Fetch data
   useEffect(() => {
@@ -329,13 +344,17 @@ const CreateStudyPlanner: React.FC = () => {
               onChange={(e) => {
                 const val = e.target.value;
                 setCopyProgram(val);
-                const selected = programs.find((p) => p.program_name === val);
-                if (selected) fetchCopyMajors(selected.id);
+
+                const majors = existingPlanners
+                  .filter(p => p.program === val)
+                  .map(p => p.major)
+                  .filter((v, i, a) => a.indexOf(v) === i); // unique
+                setCopyMajors(majors.map(m => ({ major_name: m })));
               }}
             >
               <option value="">Select Program</option>
-              {programs.map((p) => (
-                <option key={p.id} value={p.program_name}>{p.program_name}</option>
+              {Array.from(new Set(existingPlanners.map(p => p.program))).map((p) => (
+                <option key={p} value={p}>{p}</option>
               ))}
             </select>
           </div>
@@ -344,7 +363,9 @@ const CreateStudyPlanner: React.FC = () => {
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Major</label>
             <select
-              className="border border-gray-300 rounded-lg p-2 w-full focus:ring-2 focus:ring-[#b71c1c]"
+              className={`border border-gray-300 rounded-lg p-2 w-full focus:ring-2 focus:ring-[#b71c1c] ${
+                !copyProgram ? "bg-gray-100 cursor-not-allowed" : "bg-white"
+              }`}
               value={copyMajor}
               onChange={(e) => setCopyMajor(e.target.value)}
               disabled={!copyProgram}
@@ -365,7 +386,12 @@ const CreateStudyPlanner: React.FC = () => {
               onChange={(e) => setCopyYear(Number(e.target.value))}
             >
               <option value="">Select Year</option>
-              {intakeYears.map((y) => (
+              {Array.from(
+                new Set(existingPlanners
+                  .filter(p => p.program === copyProgram && p.major === copyMajor)
+                  .map(p => p.intake_year)
+                )
+              ).map(y => (
                 <option key={y} value={y}>{y}</option>
               ))}
             </select>
@@ -380,8 +406,13 @@ const CreateStudyPlanner: React.FC = () => {
                 value={copySemester}
                 onChange={(e) => setCopySemester(e.target.value)}
               >
-                <option value="">Select</option>
-                {semesters.map((s) => (
+                <option value="">Select Semester</option>
+                {Array.from(
+                  new Set(existingPlanners
+                    .filter(p => p.program === copyProgram && p.major === copyMajor && p.intake_year === copyYear)
+                    .map(p => p.intake_semester)
+                  )
+                ).map(s => (
                   <option key={s} value={s}>{s}</option>
                 ))}
               </select>
@@ -445,16 +476,22 @@ const CreateStudyPlanner: React.FC = () => {
             <label className="block font-medium text-gray-700 mb-1">Major</label>
             <div className="flex gap-2">
               <select
-                className="border border-gray-300 rounded-lg p-2 flex-1 focus:ring-2 focus:ring-[#b71c1c]"
+                className={`border border-gray-300 rounded-lg p-2 flex-1 focus:ring-2 focus:ring-[#b71c1c] ${
+                  !programId ? "bg-gray-100 cursor-not-allowed" : "bg-white"
+                }`}
                 value={major}
                 onChange={(e) => setMajor(e.target.value)}
                 disabled={!programId}
               >
                 <option value="">Select Major</option>
-                {majors.map((m, idx) => <option key={idx} value={m.major_name}>{m.major_name}</option>)}
+                {majors.map((m, idx) => (
+                  <option key={idx} value={m.major_name}>{m.major_name}</option>
+                ))}
               </select>
               <button
-                className="text-[#b71c1c] hover:underline font-medium text-sm"
+                className={`text-[#b71c1c] hover:underline font-medium text-sm ${
+                  !programId ? "cursor-not-allowed opacity-50" : ""
+                }`}
                 onClick={() => setAddingMajor(!addingMajor)}
                 disabled={!programId}
               >
@@ -464,12 +501,28 @@ const CreateStudyPlanner: React.FC = () => {
 
             {addingMajor && (
               <div className="flex gap-2 mt-2">
-                <input className="border p-2 rounded flex-1" placeholder="Major Name" value={major} onChange={(e) => setMajor(e.target.value)} />
-                <button className="bg-[#b71c1c] text-white px-3 py-1 rounded hover:bg-[#a00000]" onClick={handleAddMajor}>Add</button>
-                <button className="bg-gray-200 px-3 py-1 rounded" onClick={() => setAddingMajor(false)}>Cancel</button>
+                <input
+                  className="border p-2 rounded flex-1"
+                  placeholder="Major Name"
+                  value={major}
+                  onChange={(e) => setMajor(e.target.value)}
+                />
+                <button
+                  className="bg-[#b71c1c] text-white px-3 py-1 rounded hover:bg-[#a00000]"
+                  onClick={handleAddMajor}
+                >
+                  Add
+                </button>
+                <button
+                  className="bg-gray-200 px-3 py-1 rounded"
+                  onClick={() => setAddingMajor(false)}
+                >
+                  Cancel
+                </button>
               </div>
             )}
           </div>
+
         </div>
       </div>
 
@@ -510,9 +563,17 @@ const CreateStudyPlanner: React.FC = () => {
                   className="bg-[#b71c1c] text-white px-3 py-1 rounded hover:bg-[#a00000]"
                   onClick={async () => {
                     if (!newYear) return toast.error("Please enter a year.");
+
                     const yearNumber = Number(newYear);
-                    if (intakeYears.includes(yearNumber))
+
+                    // Validate positive integer
+                    if (!Number.isInteger(yearNumber) || yearNumber <= 0) {
+                      return toast.error("Please enter a valid positive year.");
+                    }
+
+                    if (intakeYears.includes(yearNumber)) {
                       return toast.error("Year already exists.");
+                    }
 
                     try {
                       await axios.post(`${API}/api/intake-years`, { intake_year: yearNumber });
