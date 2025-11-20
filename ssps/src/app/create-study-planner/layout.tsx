@@ -23,7 +23,7 @@ export default function AuthenticatedLayout({
       </div>
 
       {/* ✅ Add toaster here so all pages under this layout can show toasts */}
-      <Toaster position="top-right" toastOptions={{ duration: 4000 }} />
+      <Toaster position="top-center" toastOptions={{ duration: 4000 }} />
     </div>
   );
 }

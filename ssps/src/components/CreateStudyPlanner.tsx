@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import axios from "axios";
+import axios, { AxiosError } from "axios";
 import { Plus, Save } from "lucide-react";
 import Select from "react-select";
 import toast from "react-hot-toast";
@@ -46,6 +46,68 @@ const swinburneStyles = {
   menuPortal: (base: any) => ({ ...base, zIndex: 9999 }),
 };
 
+const studyYears = ["1", "2", "3", "4", "5"];
+const studyPlannerSemesters = ["1", "2", "3", "4", "Summer", "Winter", "Term 1", "Term 2", "Term 3", "Term 4"];
+const unitTypes = ["Major", "Core", "Elective", "MPU", "WIL", "Special"];
+const unitTypeColors: Record<string, string> = {
+  Core: "bg-blue-100 text-blue-800",
+  Major: "bg-red-100 text-red-800",
+  Elective: "bg-green-100 text-green-800",
+  MPU: "bg-yellow-100 text-yellow-800",
+  WIL: "bg-purple-100 text-purple-800",
+  Special: "bg-sky-100 text-sky-800",
+};
+
+const generateDefaultPlannerRows = () => {
+  const yearSemesterPattern = [
+    { year: "1", semester: "1" }, 
+    { year: "1", semester: "1" },
+    { year: "1", semester: "1" },
+    { year: "1", semester: "1" },
+    { year: "1", semester: "1" },
+
+    { year: "1", semester: "2" }, 
+    { year: "1", semester: "2" },
+    { year: "1", semester: "2" },
+    { year: "1", semester: "2" },
+    { year: "1", semester: "2" },
+    { year: "1", semester: "2" }, 
+    
+    { year: "2", semester: "1" }, 
+    { year: "2", semester: "1" },
+    { year: "2", semester: "1" },
+    { year: "2", semester: "1" },
+    { year: "2", semester: "1" },
+    { year: "2", semester: "1" },
+
+    { year: "2", semester: "2" }, 
+    { year: "2", semester: "2" },
+    { year: "2", semester: "2" },
+    { year: "2", semester: "2" },
+    { year: "2", semester: "2" },
+    { year: "2", semester: "2" },
+
+    { year: "3", semester: "1" }, 
+    { year: "3", semester: "1" },
+    { year: "3", semester: "1" },
+
+    { year: "3", semester: "2" }, 
+    { year: "3", semester: "2" },
+    { year: "3", semester: "2" },
+  ];
+
+  // Fill each row with default structure
+  return yearSemesterPattern.map((ys) => ({
+    year: ys.year,
+    semester: ys.semester,
+    unit_code: "",
+    unit_name: "",
+    prerequisites: "",
+    unit_type: "",
+  }));
+};
+
+
 const CreateStudyPlanner: React.FC = () => {
   const [copyProgram, setCopyProgram] = useState("");
   const [copyMajor, setCopyMajor] = useState("");
@@ -66,13 +128,10 @@ const CreateStudyPlanner: React.FC = () => {
   const [addingProgram, setAddingProgram] = useState(false);
   const [addingMajor, setAddingMajor] = useState(false);
   const [addingYear, setAddingYear] = useState(false);
-  const [intakeYears, setIntakeYears] = useState<number[]>([]); // <-- array of numbers
-  const [newYear, setNewYear] = useState(""); // string input
-  const [intakeYear, setIntakeYear] = useState<number | "">(""); // selected year
-  const [plannerRows, setPlannerRows] = useState<any[]>([
-    { year: "", semester: "", unit_code: "", unit_name: "", prerequisites: "", unit_type: "" },
-  ]);
-
+  const [intakeYears, setIntakeYears] = useState<number[]>([]); 
+  const [newYear, setNewYear] = useState(""); 
+  const [intakeYear, setIntakeYear] = useState<number | "">(""); 
+  const [plannerRows, setPlannerRows] = useState<any[]>(generateDefaultPlannerRows());
   const [loading, setLoading] = useState(false);
 
   const studyYears = ["1", "2", "3", "4", "5"];
@@ -165,17 +224,17 @@ const CreateStudyPlanner: React.FC = () => {
       return toast.error("Please enter program name and code.");
 
     try {
-      // 1️⃣ Add the program
+      // Add the program
       await axios.post(`${API}/api/programs`, {
         program_name: program,
         program_code: programCode,
       });
 
-      // 2️⃣ Fetch updated program list
+      // Fetch updated program list
       const res = await axios.get(`${API}/api/programs`);
       setPrograms(res.data || []);
 
-      // 3️⃣ Automatically select the newly added program
+      // Automatically select the newly added program
       const newProgram = res.data.find((p: any) => p.program_name === program);
       if (newProgram) {
         setProgram(newProgram.program_name);
@@ -185,7 +244,7 @@ const CreateStudyPlanner: React.FC = () => {
         fetchIntakeYears();
       }
 
-      // 4️⃣ Hide the add program form
+      // Hide the add program form
       setAddingProgram(false);
       toast.success("Program added!");
     } catch (err: any) {
@@ -213,7 +272,16 @@ const CreateStudyPlanner: React.FC = () => {
   };
 
   const handleAddRow = () => {
-    setPlannerRows([...plannerRows, { year: "", semester: "", unit_code: "", unit_name: "", prerequisites: "", unit_type: "" }]);
+    const newRow = { year: "1", semester: "1", unit_code: "", unit_name: "", prerequisites: "", unit_type: "" };
+    setPlannerRows((prev) => {
+      const updated = [...prev, newRow];
+      setTimeout(() => {
+        const rowElements = document.querySelectorAll("tbody tr");
+        const lastRow = rowElements[rowElements.length - 1] as HTMLElement;
+        lastRow?.scrollIntoView({ behavior: "smooth", block: "center" });
+      }, 50);
+      return updated;
+    });
   };
 
   const handleRemoveRow = (index: number) => {
@@ -222,20 +290,53 @@ const CreateStudyPlanner: React.FC = () => {
     setPlannerRows(updated);
   };
 
+  // Returns available units for a given row index
+  const getAvailableUnits = (currentIndex: number) => {
+    return unitOptions.filter(u => {
+      if (u.value === "") return true; 
+      // Exclude units already selected in other rows
+      return !plannerRows.some((r, i) => r.unit_code === u.value && i !== currentIndex);
+    });
+  };
+
+  // Updated handleChange
   const handleChange = (index: number, field: string, value: string) => {
     const updated = [...plannerRows];
+
+    if (field === "unit_code" && value !== "") {
+      const isDuplicate = updated.some((r, i) => r.unit_code === value && i !== index);
+      if (isDuplicate) {
+        toast.error("This unit is already selected in another row.");
+        return;
+      }
+    }
+
     updated[index][field] = value;
+
+    // Auto-fill name and prerequisites if unit_code changed
     if (field === "unit_code") {
       const unit = units.find((u) => u.unit_code === value);
       updated[index].unit_name = unit?.unit_name || "";
       updated[index].prerequisites = unit?.prerequisites || "Nil";
     }
+
     setPlannerRows(updated);
   };
 
-  const handleSave = async () => {
-    if (!program || !major || !intakeYear || !intakeSemester)
+  const handleSave = async (overwrite = false) => {
+    // Basic required fields
+    if (!program || !major || !intakeYear || !intakeSemester) {
       return toast.error("Please fill all required fields before saving.");
+    }
+
+    // Validate planner rows
+    const invalidRow = plannerRows.find(
+      (row) => !row.unit_code || !row.unit_type // require both unit_code and unit_type
+    );
+
+    if (invalidRow) {
+      return toast.error("Please fill in all units and unit types in the planner table before saving.");
+    }
 
     const payload = {
       program,
@@ -244,14 +345,40 @@ const CreateStudyPlanner: React.FC = () => {
       intake_year: intakeYear,
       intake_semester: intakeSemester,
       planner: plannerRows,
+      overwrite, // send overwrite flag to backend
     };
 
     setLoading(true);
     try {
       await axios.post(`${API}/api/create-study-planner`, payload);
       toast.success("Study planner created!");
-    } catch {
-      toast.error("Failed to create study planner.");
+    } catch (err: unknown) {
+      const axiosError = err as AxiosError<any>;
+      const data = axiosError.response?.data;
+
+      // Planner already exists
+      if (axiosError.response?.status === 409 && data?.detail?.existing) {
+        toast(
+          (t) => (
+            <div className="flex flex-col gap-2">
+              <span>Planner already exists.</span>
+              <button
+                onClick={async () => {
+                  toast.dismiss(t.id);
+                  await handleSave(true); // overwrite
+                }}
+                className="bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded"
+              >
+                Overwrite
+              </button>
+            </div>
+          ),
+          { duration: 8000 }
+        );
+        return;
+      }
+
+      toast.error("Failed to create study planner: " + (data?.detail?.message || axiosError.message));
     } finally {
       setLoading(false);
     }
@@ -280,10 +407,10 @@ const CreateStudyPlanner: React.FC = () => {
           intake_year: copyYear,
           intake_semester: copySemester,
         },
-        validateStatus: () => true, // ✅ Prevent axios from throwing automatically
+        validateStatus: () => true, // Prevent axios from throwing automatically
       });
 
-      // 🟥 Handle missing planner (404)
+      // Handle missing planner (404)
       if (res.status === 404) {
         toast((t) => (
           <div className="p-3">
@@ -302,14 +429,14 @@ const CreateStudyPlanner: React.FC = () => {
         return;
       }
 
-      // 🟩 Handle success
+      // Handle success
       if (res.status === 200 && res.data?.units?.length) {
         setPlannerRows(res.data.units);
         toast.success("✅ Study planner copied! You can now edit it.");
         return;
       }
 
-      // 🟨 Handle any other unexpected case
+      // Handle any other unexpected case
       toast.error("Unexpected response. Please check if the planner data is valid.");
     } catch (err) {
       toast.error("Failed to copy planner. Please check your connection.");
@@ -318,14 +445,14 @@ const CreateStudyPlanner: React.FC = () => {
 
   return (
     <div className="p-8 max-w-7xl mx-auto">
-      {/* 🟥 Swinburne Header */}
+      {/* Swinburne Header */}
       <div className="flex items-center justify-between mb-8">
         <div>
           <h1 className="text-3xl font-bold text-[#b71c1c]">Create Study Planner</h1>
         </div>
       </div>
 
-      {/* 📋 Copy Existing Planner */}
+      {/* Copy Existing Planner */}
       <div className="p-5 rounded-xl border border-red-200 bg-red-50/70 shadow-sm mb-6">
         <h2 className="text-lg font-semibold text-[#b71c1c] flex items-center gap-2">
           📋 Copy From Existing Planner
@@ -427,7 +554,7 @@ const CreateStudyPlanner: React.FC = () => {
         </div>
       </div>
 
-      {/* 🎓 Program Details Section */}
+      {/* Program Details Section */}
       <div className="bg-white rounded-xl shadow-md border border-gray-100 p-6 space-y-6 mb-6">
         <h2 className="text-lg font-semibold text-gray-800">Program Details</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -526,7 +653,7 @@ const CreateStudyPlanner: React.FC = () => {
         </div>
       </div>
 
-      {/* 📅 Intake Details */}
+      {/* Intake Details */}
       <div className="bg-white rounded-xl shadow-md border border-gray-100 p-6 space-y-6 mb-6">
         <h2 className="text-lg font-semibold text-gray-800">Intake Details</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -611,7 +738,7 @@ const CreateStudyPlanner: React.FC = () => {
         </div>
       </div>
 
-      {/* 📘 Planner Table */}
+      {/* Planner Table */}
       <div className="bg-white rounded-xl shadow-md border border-gray-100 p-4">
         <div className="flex justify-between items-center mb-3">
           <h2 className="text-lg font-semibold text-gray-800">Study Planner</h2>
@@ -652,13 +779,15 @@ const CreateStudyPlanner: React.FC = () => {
                     </td>
                     <td className="p-2 border w-48">
                       <Select
-                        options={unitOptions}
+                        options={getAvailableUnits(i)}
                         value={row.unit_code ? { value: row.unit_code, code: row.unit_code, name: row.unit_name } : null}
                         onChange={(selected) => handleChange(i, "unit_code", selected?.value || "")}
                         menuPortalTarget={document.body}
                         styles={swinburneStyles}
                         getOptionLabel={(option) => `${option.code} - ${option.name}`}
-                        formatOptionLabel={(option, { context }) => context === "menu" ? `${option.code} - ${option.name}` : option.code}
+                        formatOptionLabel={(option, { context }) =>
+                          context === "menu" ? `${option.code} - ${option.name}` : option.code
+                        }
                       />
                     </td>
                     <td className="p-2 border">{row.unit_name}</td>
@@ -686,14 +815,14 @@ const CreateStudyPlanner: React.FC = () => {
         </div>
       </div>
 
-      {/* 💾 Save Button */}
+      {/* Save Button */}
       <div className="flex justify-end mt-6">
         <button
           className={`flex items-center gap-2 px-6 py-2 rounded-lg text-white font-medium shadow-md ${
             loading ? "bg-gray-400 cursor-not-allowed" : "bg-green-700 hover:bg-green-800"
           }`}
-          onClick={handleSave}
-          disabled={loading}
+          onClick={() => handleSave()} // call handleSave normally
+          disabled={loading} // disable while saving
         >
           <Save size={18} /> {loading ? "Saving..." : "Save Planner"}
         </button>

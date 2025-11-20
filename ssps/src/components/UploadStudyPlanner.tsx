@@ -106,10 +106,10 @@ const UploadStudyPlanner = () => {
     setMajor("");
     const selected = programs.find((p) => p.program_name === option?.value);
     if (selected) {
-      setProgramCode(selected.program_code || ""); // 👈 store the code
+      setProgramCode(selected.program_code || "");
       fetchMajors(selected.id);
     } else {
-      setProgramCode(""); // fallback
+      setProgramCode(""); 
     }
   };
 

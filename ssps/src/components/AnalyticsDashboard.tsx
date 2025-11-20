@@ -32,9 +32,9 @@ ChartJS.register(
   BarController 
 );
 
-//const API = "http://127.0.0.1:8000";
+const API = "http://127.0.0.1:8000";
 // const API = "http://localhost:8000";
-const API = "https://cos40005-group17.onrender.com";
+// const API = "https://cos40005-group17.onrender.com";
 
 
 export default function AnalyticsDashboard() {
@@ -125,14 +125,14 @@ export default function AnalyticsDashboard() {
 
   return (
     <div className="p-8 space-y-12 bg-[#F9FAFB] min-h-screen">
-      {/* 🔴 Header */}
+      {/* Header */}
       <div className="flex items-center justify-between">
         <h1 className="text-3xl font-extrabold text-[#D32F2F] tracking-tight">
           Swinburne Analytics Dashboard
         </h1>
       </div>
 
-      {/* 🎯 Summary Cards */}
+      {/* Summary Cards */}
       <section className="grid grid-cols-1 sm:grid-cols-3 gap-6">
         {[
           {
@@ -180,7 +180,7 @@ export default function AnalyticsDashboard() {
         ))}
       </section>
 
-      {/* 🧱 Overview Section */}
+      {/* Overview Section */}
       <section className="bg-white rounded-2xl shadow p-6 border border-gray-100">
         <h2 className="text-xl font-semibold mb-4 text-[#1A1A1A]">
           Student Overview
@@ -241,13 +241,13 @@ export default function AnalyticsDashboard() {
         </div>
       </section>
 
-      {/* 🎓 Graduation & Students Summary (Side-by-Side Charts) */}
+      {/* Graduation & Students Summary (Side-by-Side Charts) */}
       <section className="bg-white rounded-2xl shadow p-6">
         <h2 className="text-xl font-semibold mb-6 text-gray-700">
           Student Distribution & Graduation
         </h2>
         <div className="grid md:grid-cols-2 gap-8">
-          {/* 🧭 Students by Program & Major */}
+          {/* Students by Program & Major */}
           <div>
             <h3 className="font-semibold text-gray-700 mb-3">Students by Program & Major</h3>
 
@@ -282,6 +282,12 @@ export default function AnalyticsDashboard() {
                     acc[curr.program] = (acc[curr.program] || 0) + curr.total_students;
                     return acc;
                   }, {});
+
+              if (Object.keys(data).length === 0) {
+                return (
+                  <p className="text-center text-gray-500 mt-6">No active students in this program.</p>
+                );
+              }
 
               return (
                 <div className="flex justify-center">
@@ -322,7 +328,7 @@ export default function AnalyticsDashboard() {
             })()}
           </div>
 
-          {/* 🎓 Graduation Summary */}
+          {/* Graduation Summary */}
           <div>
             <h3 className="font-semibold text-gray-700 mb-3">Graduation Summary</h3>
 
@@ -356,6 +362,12 @@ export default function AnalyticsDashboard() {
                     acc[curr.program] = (acc[curr.program] || 0) + curr.graduates;
                     return acc;
                   }, {});
+
+              if (Object.keys(data).length === 0) {
+                return (
+                  <p className="text-center text-gray-500 mt-6">No graduates yet in this program.</p>
+                );
+              }
 
               return (
                 <div className="flex justify-center">
@@ -398,7 +410,8 @@ export default function AnalyticsDashboard() {
         </div>
       </section>
 
-      {/* 📈 Graduation Trends */}
+
+      {/* Graduation Trends */}
       <section className="bg-white rounded-2xl shadow p-6 border border-gray-100">
         <h2 className="text-xl font-semibold mb-4 text-[#1A1A1A]">
           Graduation Trends
@@ -460,7 +473,7 @@ export default function AnalyticsDashboard() {
         </div>
       </section>
 
-      {/* 🧩 Unit Performance */}
+      {/* Unit Performance */}
       <section className="bg-white rounded-2xl p-6 shadow border border-gray-100">
         <h2 className="text-lg font-semibold text-[#1A1A1A] mb-4">
           Unit Performance Overview
@@ -489,7 +502,7 @@ export default function AnalyticsDashboard() {
         />
       </section>
 
-      {/* 🧠 Grade Distribution */}
+      {/* Grade Distribution */}
       <section className="bg-white rounded-2xl p-6 shadow border border-gray-100">
         <h2 className="text-lg font-semibold text-[#1A1A1A] mb-4">
           Unit Grades Distribution
