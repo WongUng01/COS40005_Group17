@@ -68,8 +68,8 @@ const ViewStudyPlannerTabs: React.FC = () => {
     </svg>
   );
 
-  // const API = "http://127.0.0.1:8000";
-  const API = "https://cos40005-group17.onrender.com";
+  const API = "http://127.0.0.1:8000";
+  // const API = "https://cos40005-group17.onrender.com";
 
 
   useEffect(() => {

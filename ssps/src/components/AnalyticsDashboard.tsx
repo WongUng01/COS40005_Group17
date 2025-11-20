@@ -32,9 +32,9 @@ ChartJS.register(
   BarController 
 );
 
-const API = "http://127.0.0.1:8000";
+// const API = "http://127.0.0.1:8000";
 // const API = "http://localhost:8000";
-// const API = "https://cos40005-group17.onrender.com";
+const API = "https://cos40005-group17.onrender.com";
 
 
 export default function AnalyticsDashboard() {
