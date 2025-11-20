@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import { useParams } from "next/navigation";
 import axios from "axios";
 import toast from "react-hot-toast";
@@ -34,7 +34,8 @@ type PlannerUnit = {
   prerequisites: string | null;
   unit_type: string;
   completed?: boolean;
-  replaced_by_code?: string | null;
+  // backend uses `replacement` to store the code used to fill electives
+  replacement?: string | null;
   replaced_by_name?: string | null;
 };
 
@@ -48,9 +49,8 @@ export default function StudentUnitsPage() {
   const [uploading, setUploading] = useState(false);
   const abortControllerRef = useRef<AbortController | null>(null);
 
-  // const API_URL = "http://127.0.0.1:8000";
-  const API_URL = "https://cos40005-group17.onrender.com";
-
+  const API_URL = "http://127.0.0.1:8000";
+  // const API_URL = "https://cos40005-group17.onrender.com";
 
   const fetchProgress = useCallback(async () => {
     try {
@@ -103,6 +103,93 @@ export default function StudentUnitsPage() {
     }
   };
 
+  // Build aligned view: align student units to planner order, handle electives and extras
+  const alignedUnits = useMemo(() => {
+    // Helper to normalize codes
+    const norm = (c: any) => (c ? String(c).trim().toUpperCase() : "");
+
+    // Map student units by code for quick lookup
+    const studentMap = new Map<string, StudentUnit>();
+    for (const su of studentUnits) {
+      if (su.unit_code) studentMap.set(norm(su.unit_code), su);
+    }
+
+    const usedCodes = new Set<string>();
+    const plannerOrderRows: Array<{
+      planner: PlannerUnit;
+      student?: StudentUnit | null;
+      matched: boolean;
+      extra?: boolean;
+    }> = [];
+
+    // Build a set of planner codes for quick exclusion test when selecting unmatched extras
+    const plannerCodes = new Set<string>();
+    for (const pu of defaultPlanner) {
+      if (pu.unit_code) plannerCodes.add(norm(pu.unit_code));
+      if ((pu as any).replacement) plannerCodes.add(norm((pu as any).replacement));
+    }
+
+    const extractReplacementFromName = (name: string | undefined) => {
+      if (!name) return null;
+      const m = name.match(/\(filled with\s*([A-Z0-9]+)\)/i);
+      return m ? m[1].toUpperCase() : null;
+    };
+
+    for (const pu of defaultPlanner) {
+      const plannerCode = norm(pu.unit_code);
+      const replacementCode = norm((pu as any).replacement) || extractReplacementFromName(pu.unit_name || "") || null;
+
+      let matchedStudent: StudentUnit | undefined | null = null;
+
+      if (plannerCode) {
+        const s = studentMap.get(plannerCode);
+        if (s) {
+          matchedStudent = s;
+          usedCodes.add(norm(s.unit_code));
+        }
+      }
+
+      if (!matchedStudent && replacementCode) {
+        const s = studentMap.get(replacementCode);
+        if (s) {
+          matchedStudent = s;
+          usedCodes.add(norm(s.unit_code));
+        }
+      }
+
+      const matched = Boolean(matchedStudent);
+
+      plannerOrderRows.push({
+        planner: pu,
+        student: matchedStudent ?? null,
+        matched,
+      });
+    }
+
+    // Extra student units (not used to match planner)
+    const extras = studentUnits.filter((su) => {
+      const code = norm(su.unit_code);
+      if (!code) return true; 
+      if (usedCodes.has(code)) return false;
+      if (plannerCodes.has(code)) {
+        usedCodes.add(code);
+        return false;
+      }
+      return true;
+    });
+
+    for (const ex of extras) {
+      plannerOrderRows.push({
+        planner: null as any,
+        student: ex,
+        matched: false,
+        extra: true,
+      });
+    }
+
+    return plannerOrderRows;
+  }, [defaultPlanner, studentUnits]);
+
   if (loading) {
     return (
       <div className="flex justify-center items-center h-64">
@@ -132,9 +219,7 @@ export default function StudentUnitsPage() {
             {student.student_course} — {student.student_major}
           </p>
           <p className="text-xs text-gray-500 mt-1">
-            {student.student_type
-              ? `Student Type: ${student.student_type.toUpperCase()}`
-              : ""}
+            {student.student_type ? `Student Type: ${student.student_type.toUpperCase()}` : ""}
           </p>
         </div>
 
@@ -142,20 +227,12 @@ export default function StudentUnitsPage() {
           <label
             htmlFor="unitUpload"
             className={`inline-flex items-center justify-center px-5 py-2.5 rounded-lg font-semibold text-white transition ${
-              uploading
-                ? "bg-gray-400 cursor-not-allowed"
-                : "bg-red-700 hover:bg-red-800"
+              uploading ? "bg-gray-400 cursor-not-allowed" : "bg-red-700 hover:bg-red-800"
             }`}
           >
             {uploading ? "Uploading..." : "Upload Excel"}
           </label>
-          <input
-            type="file"
-            accept=".xlsx,.xls"
-            onChange={handleFileUpload}
-            className="hidden"
-            id="unitUpload"
-          />
+          <input type="file" accept=".xlsx,.xls" onChange={handleFileUpload} className="hidden" id="unitUpload" />
 
           <Link
             href="/information"
@@ -171,9 +248,7 @@ export default function StudentUnitsPage() {
         <div className="flex justify-between items-center mb-2">
           <h2 className="text-lg font-semibold text-gray-800">Study Progress Overview</h2>
           <span
-            className={`text-sm font-semibold ${
-              completionRate === 100 ? "text-green-700" : "text-red-700"
-            }`}
+            className={`text-sm font-semibold ${completionRate === 100 ? "text-green-700" : "text-red-700"}`}
           >
             {completionRate}% Complete
           </span>
@@ -193,18 +268,12 @@ export default function StudentUnitsPage() {
       <div className="grid md:grid-cols-2 gap-8">
         {/* Default Study Planner */}
         <div className="bg-white rounded-xl shadow-md border border-gray-200">
-          <div className="bg-red-700 text-white px-5 py-3 font-semibold text-lg rounded-t-xl">
-            Default Study Planner
-          </div>
+          <div className="bg-red-700 text-white px-5 py-3 font-semibold text-lg rounded-t-xl">Default Study Planner</div>
 
           {defaultPlanner.length === 0 ? (
             <div className="p-6 text-center text-gray-500">
-              <p>
-                ⚠️ No applicable planner units found for this student.
-              </p>
-              <p className="text-xs mt-1">
-                (e.g., International students may not have Malaysian MPU units.)
-              </p>
+              <p>⚠️ No applicable planner units found for this student.</p>
+              <p className="text-xs mt-1">(e.g., International students may not have Malaysian MPU units.)</p>
             </div>
           ) : (
             <>
@@ -223,24 +292,17 @@ export default function StudentUnitsPage() {
                     <tr
                       key={unit.id}
                       className={`border transition ${
-                        unit.completed
-                          ? "bg-green-50 text-green-700 font-medium"
-                          : "bg-white hover:bg-gray-50 text-gray-800"
+                        unit.completed ? "bg-green-50 text-green-700 font-medium" : "bg-white hover:bg-gray-50 text-gray-800"
                       }`}
                     >
                       <td className="p-2 border text-center">{unit.year}</td>
                       <td className="p-2 border text-center">{unit.semester}</td>
-                      <td className="p-2 border font-mono text-center">
-                        {unit.unit_code || "-"}
-                      </td>
+                      <td className="p-2 border font-mono text-center">{unit.unit_code || "-"}</td>
                       <td className="p-2 border">
                         <div className="flex items-center flex-wrap">
                           {/\(filled with .*?\)/i.test(unit.unit_name) ? (
                             <>
-                              {/* Part before "(filled with ...)" */}
                               {unit.unit_name.split(/\(filled with .*?\)/i)[0]}
-
-                              {/* Extract "(filled with ...)" part */}
                               <span className="ml-2 inline-block rounded-full px-2 py-0.5 text-xs font-semibold bg-green-100 text-green-800 border border-green-200 shadow-sm">
                                 {unit.unit_name.match(/\(filled with .*?\)/i)?.[0]}
                               </span>
@@ -286,11 +348,10 @@ export default function StudentUnitsPage() {
           )}
         </div>
 
-        {/* Student Completed Units */}
+        {/* Student Completed Units (aligned) */}
         <div className="bg-white rounded-xl shadow-md border border-gray-200">
-          <div className="bg-red-700 text-white px-5 py-3 font-semibold text-lg rounded-t-xl">
-            Student Completed Units
-          </div>
+          <div className="bg-red-700 text-white px-5 py-3 font-semibold text-lg rounded-t-xl">Student Completed Units</div>
+
           <table className="w-full text-sm border-collapse">
             <thead className="bg-gray-100 text-gray-700">
               <tr>
@@ -301,22 +362,58 @@ export default function StudentUnitsPage() {
               </tr>
             </thead>
             <tbody>
-              {studentUnits.map((unit) => (
-                <tr key={unit.id} className="border hover:bg-gray-50 transition">
-                  <td className="p-2 border font-mono text-center">{unit.unit_code || "-"}</td>
-                  <td className="p-2 border">{unit.unit_name}</td>
-                  <td className="p-2 border text-center font-semibold text-gray-700">
-                    {unit.grade || "-"}
-                  </td>
-                  <td className="p-2 border text-center">
-                    {unit.completed ? (
-                      <span className="text-green-700 font-medium">✅ Completed</span>
-                    ) : (
-                      <span className="text-red-600 font-medium">❌ Incomplete</span>
-                    )}
-                  </td>
-                </tr>
-              ))}
+              {alignedUnits.map((row, idx) => {
+                const rowIsMatched = row.matched;
+                const plannerUnit = row.planner;
+                const studentUnit = row.student ?? null;
+
+                const trClass = `border transition ${rowIsMatched ? "bg-green-50 text-green-700 font-medium" : "bg-white hover:bg-gray-50 text-gray-800"}`;
+
+                const displayCode = studentUnit?.unit_code ?? (plannerUnit?.unit_code ?? "-");
+                const displayName =
+                  studentUnit?.unit_name ??
+                  plannerUnit?.unit_name ??
+                  "-";
+
+                const displayGrade = studentUnit?.grade ?? "-";
+
+                return (
+                  <tr key={idx} className={trClass}>
+                    <td className="p-2 border font-mono text-center">{displayCode || "-"}</td>
+                    <td className="p-2 border">
+                      <div className="flex items-center flex-wrap">
+                        {studentUnit ? (
+                          <span>{displayName}</span>
+                        ) : plannerUnit && /\(filled with .*?\)/i.test(plannerUnit.unit_name) ? (
+                          <>
+                            <span>{plannerUnit.unit_name.split(/\(filled with .*?\)/i)[0]}</span>
+                            <span className="ml-2 inline-block rounded-full px-2 py-0.5 text-xs font-semibold bg-gray-100 text-gray-700 border border-gray-200 shadow-sm">
+                              {plannerUnit.unit_name.match(/\(filled with .*?\)/i)?.[0]}
+                            </span>
+                          </>
+                        ) : (
+                          <span>{plannerUnit?.unit_name ?? "-"}</span>
+                        )}
+                      </div>
+                    </td>
+                    <td className="p-2 border text-center font-semibold text-gray-700">{displayGrade}</td>
+                    <td className="p-2 border text-center">
+                      {studentUnit ? (
+                        studentUnit.completed ? (
+                          <span className="text-green-700 font-medium">✅ Completed</span>
+                        ) : (
+                          <span className="text-red-600 font-medium">❌ Incomplete</span>
+                        )
+                      ) : plannerUnit ? (
+                        // planner row with no student match
+                        <span className="text-red-600 font-medium">❌ Not Taken</span>
+                      ) : (
+                        <span className="text-gray-600">—</span>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>

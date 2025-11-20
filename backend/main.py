@@ -161,7 +161,7 @@ client = get_supabase_client()
 async def upload_study_planner(
     file: UploadFile = File(...),
     program: str = Form(...),
-    program_code: str = Form(...),  # ✅ new field
+    program_code: str = Form(...),  #  new field
     major: str = Form(...),
     intake_year: int = Form(...),
     intake_semester: str = Form(...),
@@ -225,7 +225,7 @@ async def upload_study_planner(
         planner_data = {
             "id": planner_id,
             "program": program,
-            "program_code": program_code,  # ✅ use value from frontend
+            "program_code": program_code,  # use value from frontend
             "major": major,
             "intake_year": intake_year,
             "intake_semester": intake_semester,
@@ -286,7 +286,7 @@ def view_study_planner(
             .execute()
         )
 
-        # ✅ If no data, return 404 instead of crashing
+        # If no data, return 404 instead of crashing
         if not planner_res.data or len(planner_res.data) == 0:
             return JSONResponse(
                 status_code=404,
@@ -536,7 +536,7 @@ def create_study_planner(data: PlannerPayload = Body(...)):
                 # Delete existing planner
                 supabase_client.table("study_planners").delete().eq("id", existing_id).execute()
 
-        # ✅ Determine program_code
+        # Determine program_code
         program_code = None
         if getattr(data, "program_code", None):
             program_code = data.program_code
@@ -552,7 +552,7 @@ def create_study_planner(data: PlannerPayload = Body(...)):
         planner_data = {
             "id": planner_id,
             "program": data.program,
-            "program_code": program_code,  # ✅ may be null
+            "program_code": program_code,  # may be null
             "major": data.major,
             "intake_year": data.intake_year,
             "intake_semester": data.intake_semester
@@ -564,7 +564,7 @@ def create_study_planner(data: PlannerPayload = Body(...)):
             unit = {
                 "id": str(uuid.uuid4()),
                 "planner_id": planner_id,
-                "row_index": idx,   # ✅ add row index
+                "row_index": idx,   # add row index
                 "year": row.year,
                 "semester": row.semester,
                 "unit_code": row.unit_code,
@@ -677,7 +677,7 @@ def add_study_planner_unit(payload: dict):
         unit_name = None
         prerequisites = None
 
-        # 🧩 Auto-fetch unit name + prerequisites if unit_code provided
+        # Auto-fetch unit name + prerequisites if unit_code provided
         if unit_code:
             unit_res = supabase_client.table("units") \
                 .select("unit_name, prerequisites") \
@@ -696,8 +696,8 @@ def add_study_planner_unit(payload: dict):
             "row_index": payload["row_index"],
             "unit_code": unit_code,
             "unit_type": payload.get("unit_type"),
-            "unit_name": unit_name,              # ✅ now safe
-            "prerequisites": prerequisites,      # ✅ optional
+            "unit_name": unit_name,              
+            "prerequisites": prerequisites,      
         }
 
         print("🧾 Inserting:", insert_data)
@@ -1936,7 +1936,7 @@ async def bulk_upload_units_adapted(
     
 @app.get("/api/analytics/overview")
 def analytics_overview():
-    # 🧮 Students by intake year
+    # Students by intake year
     rows = supabase_client.table("students").select("intake_year").execute().data or []
     by_year: Dict[str, int] = {}
     for r in rows:
@@ -1944,7 +1944,7 @@ def analytics_overview():
         by_year[y] = by_year.get(y, 0) + 1
     students_by_year = [{"intake_year": k, "total_students": v} for k, v in sorted(by_year.items())]
 
-    # 🎓 Students by program + major + intake year (excluding graduated)
+    # Students by program + major + intake year (excluding graduated)
     rows2 = (
         supabase_client.table("students")
         .select("student_course, student_major, intake_year, graduation_status")
@@ -1965,7 +1965,7 @@ def analytics_overview():
         for k, v in pm_map.items()
     ]
 
-    # 🏅 Graduation by intake year
+    # Graduation by intake year
     rows3 = (
         supabase_client.table("students")
         .select("intake_year, graduation_status")
@@ -2002,14 +2002,14 @@ def graduation_summary():
 @app.get("/api/analytics/grade-distribution")
 def grade_distribution(request: Request):
     try:
-        # ✅ Read query parameter correctly
+        # Read query parameter correctly
         unit_code = request.query_params.get("unit_code")
 
-        # ✅ Fetch all unit codes (for dropdown)
+        # Fetch all unit codes (for dropdown)
         all_rows = supabase_client.table("student_units").select("unit_code").execute().data or []
         available_units = sorted(list({(r["unit_code"] or "").strip() for r in all_rows if r.get("unit_code")}))
 
-        # ✅ Prepare query for grade distribution
+        # Prepare query for grade distribution
         query = supabase_client.table("student_units").select("unit_code, grade")
 
         if unit_code:
@@ -2017,7 +2017,7 @@ def grade_distribution(request: Request):
 
         rows = query.execute().data or []
 
-        # ✅ Count grades only for relevant rows
+        # Count grades only for relevant rows
         grade_counts = {}
         for r in rows:
             grade = (r.get("grade") or "Unknown").strip()
@@ -2082,7 +2082,7 @@ def graduation_trends():
         else:
             trends[year]["not_graduated"] += 1
 
-    # ✅ Proper numeric sorting by year, Unknown goes last
+    # Proper numeric sorting by year, Unknown goes last
     sorted_trends = sorted(
         trends.items(),
         key=lambda x: int(x[0]) if x[0].isdigit() else 9999
@@ -2116,7 +2116,7 @@ def program_breakdown():
 @app.get("/api/students/{student_id}/progress")
 def get_student_progress(student_id: int):
     try:
-        # 1️⃣ Fetch student info
+        # Fetch student info
         student_res = supabase_client.table("students").select("*").eq("student_id", student_id).execute()
         if not student_res.data:
             raise HTTPException(status_code=404, detail="Student not found")
@@ -2137,7 +2137,7 @@ def get_student_progress(student_id: int):
         else:
             has_spm_credit = True
 
-        # 2️⃣ Fetch study planner
+        # Fetch study planner
         program = student.get("student_course")
         major = student.get("student_major")
         intake_year = student.get("intake_year")
@@ -2162,11 +2162,11 @@ def get_student_progress(student_id: int):
 
         planner_id = planner_res.data[0]["id"]
 
-        # 3️⃣ Fetch planner and student units
+        # Fetch planner and student units
         planner_units = supabase_client.table("study_planner_units").select("*").eq("planner_id", planner_id).execute().data or []
         student_units = supabase_client.table("student_units").select("*").eq("student_id", student_id).execute().data or []
 
-        # 4️⃣ Filter MPU units based on student type & SPM BM credit
+        # Filter MPU units based on student type & SPM BM credit
         filtered_units = []
         for unit in planner_units:
             code = str(unit.get("unit_code", "")).upper()
@@ -2181,7 +2181,7 @@ def get_student_progress(student_id: int):
 
             filtered_units.append(unit)
 
-        # 5️⃣ Determine completed and elective placeholders
+        # Determine completed and elective placeholders
         # Passed grades only
         def is_passed(grade):
             return str(grade or "").upper() not in ["N", "F", "FAIL", "", "NAN", " ", "N "]
@@ -2202,17 +2202,18 @@ def get_student_progress(student_id: int):
             unit["completed"] = False
             unit["replacement"] = None
 
-            # ✅ Completed if student passed
+            # Completed if student passed
             if code in student_units_map and is_passed(student_units_map[code].get("grade")):
                 unit["completed"] = True
 
-            # ✅ Fill elective placeholder only with passed extra units
+            # Fill elective placeholder only with passed extra units
             elif unit in elective_placeholders:
                 unmatched = next(
                     (
                         su for su in student_units
                         if su["unit_code"] not in [p.get("unit_code") for p in filtered_units]
                         and su["unit_code"] not in used_for_elective
+                        and su["unit_code"] not in ["AIMFECS"]   # ⛔ exclude academic integrity module
                         and is_passed(su.get("grade"))
                     ),
                     None
@@ -2223,17 +2224,17 @@ def get_student_progress(student_id: int):
                     unit["unit_name"] = f"{unit['unit_name']} (filled with {unmatched['unit_code']})"
                     used_for_elective.add(unmatched["unit_code"])
 
-        # 6️⃣ Split into completed and remaining
+        # Split into completed and remaining
         completed_units = [u for u in filtered_units if u["completed"]]
         remaining_units = [u for u in filtered_units if not u["completed"]]
 
-        # 7️⃣ Summary
+        # Summary
         summary = {
             "completed_count": len(completed_units),
             "total_required": len(filtered_units)
         }
 
-        # ✅ Final Response
+        # Final Response
         return {
             "student": student,
             "default_planner_units": filtered_units,
