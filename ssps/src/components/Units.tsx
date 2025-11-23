@@ -3,6 +3,7 @@
 
 import { useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
+import Select from 'react-select';
 
 type Unit = {
   id: string;
@@ -25,7 +26,8 @@ function UnitModal({
   formData, 
   setFormData, 
   mode,
-  isSubmitting
+  isSubmitting,
+  existingUnits
 }: {
   isOpen: boolean;
   onClose: () => void;
@@ -34,6 +36,7 @@ function UnitModal({
   setFormData: (data: Partial<Unit>) => void;
   mode: 'add' | 'edit';
   isSubmitting: boolean;
+  existingUnits: Unit[];
 }) {
   if (!isOpen) return null;
 
@@ -49,6 +52,112 @@ function UnitModal({
     { value: 'Feb/March', label: 'Feb/March' },
     { value: 'Every term', label: 'Every term' }
   ];
+
+  // React Select styles
+  const selectStyles = {
+    control: (base: any, state: any) => ({
+      ...base,
+      backgroundColor: "white",
+      borderColor: state.isFocused ? "#D6001C" : "#ccc",
+      boxShadow: state.isFocused ? "0 0 0 2px rgba(214, 0, 28, 0.2)" : "none",
+      borderWidth: "1.5px",
+      borderRadius: "8px",
+      padding: "1px",
+      "&:hover": { borderColor: "#D6001C" },
+    }),
+    option: (base: any, state: any) => ({
+      ...base,
+      backgroundColor: state.isSelected
+        ? "#D6001C"
+        : state.isFocused
+        ? "#ffebee"
+        : "white",
+      color: state.isSelected ? "white" : "#333",
+      cursor: "pointer",
+      fontSize: "14px",
+      padding: "8px 12px",
+    }),
+    multiValue: (base: any) => ({
+      ...base,
+      backgroundColor: "#ffebee",
+      borderRadius: "6px",
+    }),
+    multiValueLabel: (base: any) => ({
+      ...base,
+      color: "#D6001C",
+      fontWeight: "500",
+    }),
+    multiValueRemove: (base: any) => ({
+      ...base,
+      color: "#D6001C",
+      ":hover": {
+        backgroundColor: "#D6001C",
+        color: "white",
+      },
+    }),
+    singleValue: (base: any) => ({ ...base, color: "#212121", fontWeight: 500 }),
+    placeholder: (base: any) => ({ ...base, color: "#757575" }),
+    menu: (base: any) => ({ 
+      ...base, 
+      borderRadius: "8px", 
+      boxShadow: "0 4px 8px rgba(0,0,0,0.1)", 
+      zIndex: 9999,
+    }),
+    menuPortal: (base: any) => ({ ...base, zIndex: 9999 }),
+  };
+
+  // Get available units for dropdown (exclude current unit in edit mode)
+  const getAvailableUnits = () => {
+    if (mode === 'add') {
+      return existingUnits;
+    } else {
+      // In edit mode, exclude the current unit being edited
+      return existingUnits.filter(unit => unit.id !== formData.id);
+    }
+  };
+
+  const availableUnits = getAvailableUnits();
+
+  // Create options for dropdowns
+  const unitOptions = availableUnits.map(unit => ({
+    value: unit.unit_code,
+    label: `${unit.unit_code} - ${unit.unit_name}`
+  }));
+
+  // Handle prerequisites selection (multiple units)
+  const handlePrerequisitesChange = (selectedOptions: any) => {
+    const prerequisitesString = selectedOptions 
+      ? selectedOptions.map((option: any) => option.value).join(', ') 
+      : '';
+    setFormData({ ...formData, prerequisites: prerequisitesString });
+  };
+
+  // Handle concurrent prerequisite selection (single unit)
+  const handleConcurrentPrerequisiteChange = (selectedOption: any) => {
+    const concurrentString = selectedOption ? selectedOption.value : '';
+    setFormData({ ...formData, concurrent_prerequisite: concurrentString });
+  };
+
+  // Convert prerequisites string to selected options
+  const getSelectedPrerequisites = () => {
+    if (!formData.prerequisites) return [];
+    return formData.prerequisites
+      .split(',')
+      .map(code => code.trim())
+      .filter(code => code)
+      .map(code => {
+        const unit = availableUnits.find(u => u.unit_code === code);
+        return unit ? { value: unit.unit_code, label: `${unit.unit_code} - ${unit.unit_name}` } : null;
+      })
+      .filter(Boolean);
+  };
+
+  // Convert concurrent prerequisite string to selected option
+  const getSelectedConcurrentPrerequisite = () => {
+    if (!formData.concurrent_prerequisite) return null;
+    const unit = availableUnits.find(u => u.unit_code === formData.concurrent_prerequisite);
+    return unit ? { value: unit.unit_code, label: `${unit.unit_code} - ${unit.unit_name}` } : null;
+  };
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
@@ -135,32 +244,46 @@ function UnitModal({
               </select>
             </div>
 
+            {/* Prerequisites Dropdown */}
             <div className="md:col-span-2">
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Prerequisites
               </label>
-              <input
-                type="text"
-                placeholder="e.g., ICT10001, ICT10002"
-                value={formData.prerequisites || ''}
-                onChange={(e) => setFormData({ ...formData, prerequisites: e.target.value })}
-                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#D6001C] focus:border-transparent"
-                disabled={isSubmitting}
+              <Select
+                value={getSelectedPrerequisites()}
+                onChange={handlePrerequisitesChange}
+                options={unitOptions}
+                isMulti
+                placeholder="Select prerequisite units..."
+                styles={selectStyles}
+                menuPortalTarget={document.body}
+                isDisabled={isSubmitting}
+                maxMenuHeight={200}
               />
+              <p className="text-xs text-gray-500 mt-1">
+                Select multiple units that must be completed before taking this unit
+              </p>
             </div>
 
+            {/* Concurrent Prerequisites Dropdown */}
             <div className="md:col-span-2">
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Concurrent Prerequisites
               </label>
-              <input
-                type="text"
-                placeholder="e.g., ICT10003"
-                value={formData.concurrent_prerequisite || ''}
-                onChange={(e) => setFormData({ ...formData, concurrent_prerequisite: e.target.value })}
-                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#D6001C] focus:border-transparent"
-                disabled={isSubmitting}
+              <Select
+                value={getSelectedConcurrentPrerequisite()}
+                onChange={handleConcurrentPrerequisiteChange}
+                options={unitOptions}
+                placeholder="Select concurrent prerequisite unit..."
+                styles={selectStyles}
+                menuPortalTarget={document.body}
+                isDisabled={isSubmitting}
+                maxMenuHeight={200}
+                isClearable
               />
+              <p className="text-xs text-gray-500 mt-1">
+                Select a unit that can be taken at the same time as this unit
+              </p>
             </div>
           </div>
 
@@ -226,8 +349,10 @@ export default function Units() {
     fetchUnits();
   }, []);
 
-  const API = "http://127.0.0.1:8000";
-  
+  // const API = "http://localhost:8000";
+  // const API = "http://127.0.0.1:8000";
+  const API = "https://cos40005-group17.onrender.com";
+
   // Filter and sort units whenever units, searchTerm, sortField, or sortDirection change
   useEffect(() => {
     let result = units;
@@ -432,6 +557,7 @@ export default function Units() {
 
   const openEditModal = (unit: Unit) => {
     setFormData({ 
+      id: unit.id,
       unit_code: unit.unit_code,
       unit_name: unit.unit_name,
       prerequisites: unit.prerequisites,
@@ -676,6 +802,7 @@ export default function Units() {
         setFormData={setFormData}
         mode={modalMode}
         isSubmitting={isSubmitting}
+        existingUnits={units}
       />
 
       {/* Delete Confirmation Modal */}
