@@ -367,7 +367,16 @@ export default function StudentUnitsPage() {
                 const plannerUnit = row.planner;
                 const studentUnit = row.student ?? null;
 
-                const trClass = `border transition ${rowIsMatched ? "bg-green-50 text-green-700 font-medium" : "bg-white hover:bg-gray-50 text-gray-800"}`;
+                const isPassed = (grade: string | null | undefined) => {
+                  const g = (grade ?? "").toString().trim().toUpperCase();
+                  return !["N", "F", "FAIL", "", "NAN", " ", "N "].includes(g);
+                };
+
+                const rowIsGreen = row.matched && studentUnit && isPassed(studentUnit.grade);
+
+                const trClass = `border transition ${
+                  rowIsGreen ? "bg-green-50 text-green-700 font-medium" : "bg-white hover:bg-gray-50 text-gray-800"
+                }`;
 
                 const displayCode = studentUnit?.unit_code ?? (plannerUnit?.unit_code ?? "-");
                 const displayName =

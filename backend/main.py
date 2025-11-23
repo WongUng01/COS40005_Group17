@@ -2213,7 +2213,7 @@ def get_student_progress(student_id: int):
                         su for su in student_units
                         if su["unit_code"] not in [p.get("unit_code") for p in filtered_units]
                         and su["unit_code"] not in used_for_elective
-                        and su["unit_code"] not in ["AIMFECS"]   # ⛔ exclude academic integrity module
+                        and su["unit_code"] not in ["AIMFECS"]   # exclude academic integrity module
                         and is_passed(su.get("grade"))
                     ),
                     None
